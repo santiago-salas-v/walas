@@ -149,6 +149,7 @@ def run_solution(b, b1, timer, plt, r, first_run=False, non_linear=True):
     timer.start(50)
 
 wind = QtGui.QWidget()
+area = pg.dockarea.DockArea()
 layout = QtGui.QGridLayout()
 wind.setWindowTitle('Walas P2.04.01 ALKYLATION OF ISOPROPYLBENZENE')
 wind.resize(app_width, app_height)
