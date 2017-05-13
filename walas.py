@@ -1,7 +1,7 @@
 import sys
 import string
 import numpy as np
-import colormaps
+import matplotlib.cm as colormaps
 # noinspection PyUnresolvedReferences
 import PySide
 import pyqtgraph as pg
@@ -153,7 +153,10 @@ wind = QtGui.QWidget()
 area = DockArea()
 tree = pg.TreeWidget()
 
-layout = QtGui.QGridLayout()
+vlayout_0 = QtGui.QVBoxLayout()
+splitter = QtGui.QSplitter()
+vlayout_1 = pg.LayoutWidget()
+vlayout_2 = pg.LayoutWidget()
 wind.setWindowTitle('Walas problems')
 wind.resize(app_width, app_height)
 p_2 = pg.PlotWidget(name='Plot_2')
@@ -161,8 +164,8 @@ p_1 = pg.PlotWidget(name='Plot_1')
 btn_1 = QtGui.QPushButton('Run Linear')
 btn_2 = QtGui.QPushButton('Run non-Linear')
 btn_3 = QtGui.QPushButton('STOP')
-d1 = Dock('Plot 1', size=(1, 1))
-d2 = Dock('Plot 2', size=(1, 1))
+d1 = Dock('Non-Linear', size=(1, 1))
+d2 = Dock('Linear', size=(1, 1))
 shared_timer = pg.QtCore.QTimer()
 ti2 = QtGui.QTreeWidgetItem([
     'CHAPTER 2.'
@@ -177,7 +180,7 @@ ti221 = QtGui.QTreeWidgetItem([
 ])
 lab_3 = QtGui.QLabel('DIFFUSION AND SOLID CATALYSIS')
 
-wind.setLayout(layout)
+wind.setLayout(vlayout_0)
 tree.setColumnCount(2)
 tree.addTopLevelItem(ti2)
 ti2.addChild(ti211)
@@ -186,16 +189,25 @@ tree.setItemWidget(ti2, 1 , lab_1)
 tree.setItemWidget(ti211, 1 , lab_2)
 tree.setItemWidget(ti221, 1 , lab_3)
 tree.setDragEnabled(False)
+tree.expandAll()
+tree.resizeColumnToContents(0)
+tree.resizeColumnToContents(1)
+tree.setHeaderHidden(True)
 # tree.setItemWidget(ti2, 0, ti211)
 # tree.setItemWidget(ti2, 1, ti221)
-layout.addWidget(tree, 0, 0)
-layout.addWidget(area, 0, 1)
+splitter.addWidget(tree)
+splitter.addWidget(area)
+splitter.setSizes([app_width*1/3.0, app_width*2/3.0])
 area.addDock(d1, 'left')
 area.addDock(d2, 'right')
-# layout.addWidget(p_2, 0, 0)
-# layout.addWidget(p_1, 0, 1)
-# layout.addWidget(btn_1, 1, 0)
-# layout.addWidget(btn_2, 1, 1)
+vlayout_0.addWidget(splitter)
+vlayout_0.addWidget(btn_3)
+vlayout_1.addWidget(p_1, row=0, col=0)
+vlayout_1.addWidget(btn_2, row=1, col=0)
+vlayout_2.addWidget(p_2, row=0, col=0)
+vlayout_2.addWidget(btn_1, row=1, col=0)
+d1.addWidget(vlayout_1)
+d2.addWidget(vlayout_2)
 # 3rd row, use 1 row and 2 columns of grid
 # layout.addWidget(btn_3, 2, 0, 1, 2)
 
