@@ -8,6 +8,7 @@ import pyqtgraph as pg
 from pyqtgraph.dockarea import DockArea, Dock
 from pyqtgraph.Qt import QtGui, QtCore
 from scipy.integrate import ode
+import warnings
 
 app = QtGui.QApplication([])
 dpi_res = 250
@@ -69,7 +70,7 @@ def g(t, y, linear=False):
 
 def plot_either_case(curves, ptr, r, y_t, t, dt, t1):
     pos = ptr[0]
-    if r.successful() and r.t < t1:
+    if r.t < t1: # and r.successful():
         pos += 1
         r.integrate(r.t + dt)
         y_t[pos] = r.y
@@ -115,7 +116,7 @@ def run_solution(b, b1, timer, plt, r, first_run=False, non_linear=True):
     y0, t0 = [100, 0, 0, 0, 0], 0
     if non_linear:
         t1 = 0.1
-        dt = 0.001
+        dt = 0.1
     else:
         t1 = 25
         dt = 0.1
@@ -138,8 +139,9 @@ def run_solution(b, b1, timer, plt, r, first_run=False, non_linear=True):
         r.f = lambda t, y: g(t, y, linear=False)
     else:
         r.f = lambda t, y: g(t, y, linear=True)
-    r.set_integrator('lsoda')
     r.set_initial_value(y0, t0)
+    r.set_integrator('dopri5', nsteps=1)
+    warnings.filterwarnings('ignore', category=UserWarning)
 
     # For updating, pass y_t and ptr by reference
     # y_t: Already a mutable object (numpy array)
