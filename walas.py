@@ -5,6 +5,7 @@ import colormaps
 # noinspection PyUnresolvedReferences
 import PySide
 import pyqtgraph as pg
+from pyqtgraph.dockarea import DockArea, Dock
 from pyqtgraph.Qt import QtGui, QtCore
 from scipy.integrate import ode
 
@@ -149,25 +150,54 @@ def run_solution(b, b1, timer, plt, r, first_run=False, non_linear=True):
     timer.start(50)
 
 wind = QtGui.QWidget()
-area = pg.dockarea.DockArea()
+area = DockArea()
+tree = pg.TreeWidget()
+
 layout = QtGui.QGridLayout()
-wind.setWindowTitle('Walas P2.04.01 ALKYLATION OF ISOPROPYLBENZENE')
+wind.setWindowTitle('Walas problems')
 wind.resize(app_width, app_height)
 p_2 = pg.PlotWidget(name='Plot_2')
 p_1 = pg.PlotWidget(name='Plot_1')
 btn_1 = QtGui.QPushButton('Run Linear')
 btn_2 = QtGui.QPushButton('Run non-Linear')
 btn_3 = QtGui.QPushButton('STOP')
-btn_4 = QtGui.QPushButton('STOP')
+d1 = Dock('Plot 1', size=(1, 1))
+d2 = Dock('Plot 2', size=(1, 1))
 shared_timer = pg.QtCore.QTimer()
+ti2 = QtGui.QTreeWidgetItem([
+    'CHAPTER 2.'
+])
+lab_1 = QtGui.QLabel('REACTION RATES AND OPERATING MODES')
+ti211 = QtGui.QTreeWidgetItem([
+    'P2.04.01'
+])
+lab_2 = QtGui.QLabel('ALKYLATION OF ISOPROPYLBENZENE')
+ti221 = QtGui.QTreeWidgetItem([
+    'P2.04.02'
+])
+lab_3 = QtGui.QLabel('DIFFUSION AND SOLID CATALYSIS')
 
 wind.setLayout(layout)
-layout.addWidget(p_2, 0, 0)
-layout.addWidget(p_1, 0, 1)
-layout.addWidget(btn_1, 1, 0)
-layout.addWidget(btn_2, 1, 1)
+tree.setColumnCount(2)
+tree.addTopLevelItem(ti2)
+ti2.addChild(ti211)
+ti2.addChild(ti221)
+tree.setItemWidget(ti2, 1 , lab_1)
+tree.setItemWidget(ti211, 1 , lab_2)
+tree.setItemWidget(ti221, 1 , lab_3)
+tree.setDragEnabled(False)
+# tree.setItemWidget(ti2, 0, ti211)
+# tree.setItemWidget(ti2, 1, ti221)
+layout.addWidget(tree, 0, 0)
+layout.addWidget(area, 0, 1)
+area.addDock(d1, 'left')
+area.addDock(d2, 'right')
+# layout.addWidget(p_2, 0, 0)
+# layout.addWidget(p_1, 0, 1)
+# layout.addWidget(btn_1, 1, 0)
+# layout.addWidget(btn_2, 1, 1)
 # 3rd row, use 1 row and 2 columns of grid
-layout.addWidget(btn_3, 2, 0, 1, 2)
+# layout.addWidget(btn_3, 2, 0, 1, 2)
 
 p_2.setYLink('Plot_1')
 # p.setYLink('Plot_2')
