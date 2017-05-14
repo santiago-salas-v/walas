@@ -91,7 +91,8 @@ def plot_successful_integration_step(t_int, y_int, curves, y_t, t, t1, timer):
         return -1  # Stop integration
 
 
-def run_solution(b, b1, timer, plt, r, first_run=False, non_linear=True):
+def solve_p2_04_01(b, b1, timer, plt,
+                   non_linear=True, timer_connected=True):
     if non_linear:
         b1.setEnabled(False)
         b.setEnabled(True)
@@ -99,7 +100,7 @@ def run_solution(b, b1, timer, plt, r, first_run=False, non_linear=True):
         b.setEnabled(False)
         b1.setEnabled(True)
     timer.stop()
-    if not first_run:
+    if timer_connected:
         # Qt objects can have several connected slots.
         # Not disconnecting them all causes previously
         # running processes to continue when restarted.
@@ -134,6 +135,10 @@ def run_solution(b, b1, timer, plt, r, first_run=False, non_linear=True):
     y_t = np.empty([20, len(y0)])
     time_series = [t0]
     y_t[0, :] = y0
+
+    r = ode(
+        lambda t, y: g(t, y, linear=False)
+    )
     if non_linear:
         r.f = lambda t, y: g(t, y, linear=False)
     else:
@@ -144,39 +149,100 @@ def run_solution(b, b1, timer, plt, r, first_run=False, non_linear=True):
     # For updating, pass y_t and time_series by reference
     # y_t: Already a mutable object (numpy array)
     # time_series: Mutable object also
-    r.set_solout(lambda t_l, y_l:
-                 plot_successful_integration_step(
-                     t_l,
-                     y_l,
-                     curves,
-                     y_t,
-                     time_series,
-                     t1,
-                     timer)
-                 )
+    r.set_solout(
+        lambda t_l, y_l:
+        plot_successful_integration_step(
+            t_l,
+            y_l,
+            curves,
+            y_t,
+            time_series,
+            t1,
+            timer)
+    )
     timer.timeout.connect(
         lambda: r.integrate(t1)
     )
     timer.start(50)
 
+
+def gui_docks_p2_04_01(wind, area, shared_timer):
+    vlayout_1 = pg.LayoutWidget()
+    vlayout_2 = pg.LayoutWidget()
+    p_2 = pg.PlotWidget(name='Plot_2')
+    p_1 = pg.PlotWidget(name='Plot_1')
+    btn_1 = QtGui.QPushButton('Run Linear')
+    btn_2 = QtGui.QPushButton('Run non-Linear')
+    d1 = Dock('Non-Linear', size=(1, 1))
+    d2 = Dock('Linear', size=(1, 1))
+
+    area.addDock(d1, 'left')
+    area.addDock(d2, 'right')
+
+    vlayout_1.addWidget(p_1, row=0, col=0)
+    vlayout_1.addWidget(btn_2, row=1, col=0)
+    vlayout_2.addWidget(p_2, row=0, col=0)
+    vlayout_2.addWidget(btn_1, row=1, col=0)
+    d1.addWidget(vlayout_1)
+    d2.addWidget(vlayout_2)
+    # 3rd row, use 1 row and 2 columns of grid
+    # layout.addWidget(btn_3, 2, 0, 1, 2)
+
+    p_2.setYLink('Plot_1')
+    # p.setYLink('Plot_2')
+    p_1.setTitle('Non-linear')
+    p_2.setTitle('Linear')
+    p_1.setLabel('left', text='n_i, mol')
+    p_1.setLabel('bottom', text='t, min')
+    p_2.setLabel('left', text='n_i, mol')
+    p_2.setLabel('bottom', text='t, min')
+    p_1.addLegend()
+    p_2.addLegend()
+    p_1.setDownsampling(mode='peak')
+    p_1.setClipToView(True)
+    p_1.setLimits(xMin=0, yMin=0, yMax=100)
+    p_2.setLimits(xMin=0, yMin=0, yMax=100)
+
+    # noinspection PyUnresolvedReferences
+    btn_1.clicked.connect(
+        lambda: solve_p2_04_01(
+            btn_1,
+            btn_2,
+            shared_timer,
+            p_2,
+            non_linear=False
+        ))
+    # noinspection PyUnresolvedReferences
+    btn_2.clicked.connect(
+        lambda: solve_p2_04_01(
+            btn_1,
+            btn_2,
+            shared_timer,
+            p_1,
+            non_linear=True
+        ))
+    # noinspection PyUnresolvedReferences
+    btn_3.clicked.connect(lambda: shared_timer.stop())
+
+    btn_2.setEnabled(False)
+    
+    solve_p2_04_01(
+        btn_1,
+        btn_2,
+        shared_timer,
+        p_1,
+        non_linear=True,
+        timer_connected=False
+    )
+
 wind = QtGui.QWidget()
 area = DockArea()
 tree = pg.TreeWidget()
-
+btn_3 = QtGui.QPushButton('STOP')
 vlayout_0 = QtGui.QVBoxLayout()
 splitter = QtGui.QSplitter()
-vlayout_1 = pg.LayoutWidget()
-vlayout_2 = pg.LayoutWidget()
-wind.setWindowTitle('Walas problems')
-wind.resize(app_width, app_height)
-p_2 = pg.PlotWidget(name='Plot_2')
-p_1 = pg.PlotWidget(name='Plot_1')
-btn_1 = QtGui.QPushButton('Run Linear')
-btn_2 = QtGui.QPushButton('Run non-Linear')
-btn_3 = QtGui.QPushButton('STOP')
-d1 = Dock('Non-Linear', size=(1, 1))
-d2 = Dock('Linear', size=(1, 1))
 shared_timer = pg.QtCore.QTimer()
+
 ti2 = QtGui.QTreeWidgetItem([
     'CHAPTER 2.'
 ])
@@ -191,6 +257,9 @@ ti221 = QtGui.QTreeWidgetItem([
 lab_3 = QtGui.QLabel('DIFFUSION AND SOLID CATALYSIS')
 
 wind.setLayout(vlayout_0)
+wind.setWindowTitle('Walas problems')
+wind.resize(app_width, app_height)
+
 tree.setColumnCount(2)
 tree.addTopLevelItem(ti2)
 ti2.addChild(ti211)
@@ -203,75 +272,17 @@ tree.expandAll()
 tree.resizeColumnToContents(0)
 tree.resizeColumnToContents(1)
 tree.setHeaderHidden(True)
-# tree.setItemWidget(ti2, 0, ti211)
-# tree.setItemWidget(ti2, 1, ti221)
+
 splitter.addWidget(tree)
 splitter.addWidget(area)
 splitter.setSizes([app_width * 1 / 3.0, app_width * 2 / 3.0])
-area.addDock(d1, 'left')
-area.addDock(d2, 'right')
+
 vlayout_0.addWidget(splitter)
 vlayout_0.addWidget(btn_3)
-vlayout_1.addWidget(p_1, row=0, col=0)
-vlayout_1.addWidget(btn_2, row=1, col=0)
-vlayout_2.addWidget(p_2, row=0, col=0)
-vlayout_2.addWidget(btn_1, row=1, col=0)
-d1.addWidget(vlayout_1)
-d2.addWidget(vlayout_2)
-# 3rd row, use 1 row and 2 columns of grid
-# layout.addWidget(btn_3, 2, 0, 1, 2)
 
-p_2.setYLink('Plot_1')
-# p.setYLink('Plot_2')
-p_1.setTitle('Non-linear')
-p_2.setTitle('Linear')
-p_1.setLabel('left', text='n_i, mol')
-p_1.setLabel('bottom', text='t, min')
-p_2.setLabel('left', text='n_i, mol')
-p_2.setLabel('bottom', text='t, min')
-p_1.addLegend()
-p_2.addLegend()
-p_1.setDownsampling(mode='peak')
-p_1.setClipToView(True)
-p_1.setLimits(xMin=0, yMin=0, yMax=100)
-p_2.setLimits(xMin=0, yMin=0, yMax=100)
-
-r_init = ode(
-    lambda t, y: g(t, y, linear=False)
-).set_integrator('lsoda')
+gui_docks_p2_04_01(wind, area, shared_timer)
 
 wind.show()
-
-# noinspection PyUnresolvedReferences
-btn_1.clicked.connect(
-    lambda: run_solution(
-        btn_1,
-        btn_2,
-        shared_timer,
-        p_2,
-        r_init,
-        non_linear=False))
-# noinspection PyUnresolvedReferences
-btn_2.clicked.connect(
-    lambda: run_solution(
-        btn_1,
-        btn_2,
-        shared_timer,
-        p_1,
-        r_init,
-        non_linear=True))
-# noinspection PyUnresolvedReferences
-btn_3.clicked.connect(lambda: shared_timer.stop())
-
-btn_2.setEnabled(False)
-run_solution(
-    btn_1,
-    btn_2,
-    shared_timer,
-    p_1,
-    r_init,
-    first_run=True,
-    non_linear=True)
 
 if __name__ == '__main__':
     if (sys.flags.interactive != 1) or \
