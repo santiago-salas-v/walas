@@ -7,7 +7,8 @@ import PySide
 import pyqtgraph as pg
 from pyqtgraph.dockarea import DockArea, Dock
 from pyqtgraph.Qt import QtGui, QtCore
-from scipy.integrate import ode
+from scipy.integrate import ode, quad
+from scipy.optimize import root
 
 app = QtGui.QApplication([])
 dpi_res = 250
@@ -235,9 +236,50 @@ def gui_docks_p2_04_01(d_area, timer):
     )
 
 
+def gui_docks_p2_04_02(d_area, _):
+    d1 = Dock('Table', size=(1, 1), closable=True)
+    tab_1 = pg.TableWidget()
+    d1.addWidget(tab_1)
+    d_area.addDock(d1, 'right')
+
+    c = np.arange(2.0, 0.0, -0.1)
+
+    def solve_for_r(conc, start_r):
+        return root(
+            lambda r:
+            -r + 1.5 * (conc - 0.8 * r) /
+            (1 + 0.3 * np.sqrt(conc - 0.8 * r) + 0.1 * (conc - 0.8 * r)) ** 2.0,
+            np.array([start_r])
+        ).x
+
+    r_calc = np.array(
+        map(lambda conc: solve_for_r(conc, 0.1), c)
+    ).flatten()
+    simple_t = -np.gradient(c) * 1 / r_calc
+    simple_t[0] = 0
+    simple_t = np.cumsum(simple_t)
+    quad_t = np.array(
+        map(
+            lambda c_min:
+            quad(
+                lambda conc:
+                1 / solve_for_r(conc, 0.1),
+                c_min, 2.0),
+            c)
+    )[:, 0]
+    data = np.array([c, 1 / r_calc, simple_t, quad_t]).T
+    tab_1.setData(data)
+    tab_1.setHorizontalHeaderLabels(
+        ['c', '1/r', 't_simple', 't_quadfunc']
+    )
+    tab_1.sortByColumn(2, QtCore.Qt.AscendingOrder)
+
+
 def add_which_dock(text, d_area, timer):
     if text == 'P2.04.01':
         gui_docks_p2_04_01(d_area, timer)
+    elif text == 'P2.04.02':
+        gui_docks_p2_04_02(d_area, timer)
 
 wind = QtGui.QWidget()
 area = DockArea()
