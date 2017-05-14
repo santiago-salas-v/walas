@@ -173,9 +173,8 @@ def gui_docks_p2_04_01(wind, area, shared_timer):
     p_1 = pg.PlotWidget(name='Plot_1')
     btn_1 = QtGui.QPushButton('Run Linear')
     btn_2 = QtGui.QPushButton('Run non-Linear')
-    d1 = Dock('Non-Linear', size=(1, 1))
-    d2 = Dock('Linear', size=(1, 1))
-
+    d1 = Dock('Non-Linear', size=(1, 1), closable=True)
+    d2 = Dock('Linear', size=(1, 1), closable=True)
     area.addDock(d1, 'left')
     area.addDock(d2, 'right')
 
@@ -225,7 +224,7 @@ def gui_docks_p2_04_01(wind, area, shared_timer):
     btn_3.clicked.connect(lambda: shared_timer.stop())
 
     btn_2.setEnabled(False)
-    
+
     solve_p2_04_01(
         btn_1,
         btn_2,
@@ -234,6 +233,10 @@ def gui_docks_p2_04_01(wind, area, shared_timer):
         non_linear=True,
         timer_connected=False
     )
+
+def add_which_dock(text, wind, area, shared_timer):
+    if text == 'P2.04.01':
+        gui_docks_p2_04_01(wind, area, shared_timer)
 
 wind = QtGui.QWidget()
 area = DockArea()
@@ -280,7 +283,10 @@ splitter.setSizes([app_width * 1 / 3.0, app_width * 2 / 3.0])
 vlayout_0.addWidget(splitter)
 vlayout_0.addWidget(btn_3)
 
-gui_docks_p2_04_01(wind, area, shared_timer)
+tree.itemClicked.connect(
+    lambda item, column:
+    add_which_dock(item.text(0), wind, area, shared_timer)
+)
 
 wind.show()
 
