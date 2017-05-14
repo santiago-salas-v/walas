@@ -8,7 +8,6 @@ import pyqtgraph as pg
 from pyqtgraph.dockarea import DockArea, Dock
 from pyqtgraph.Qt import QtGui, QtCore
 from scipy.integrate import ode
-import warnings
 
 app = QtGui.QApplication([])
 dpi_res = 250
@@ -68,25 +67,28 @@ def g(t, y, linear=False):
     ]
 
 
-def plot_either_case(curves, ptr, r, y_t, t, dt, t1):
-    pos = ptr[0]
-    if r.t < t1: # and r.successful():
-        pos += 1
-        r.integrate(r.t + dt)
-        y_t[pos] = r.y
-        t.append(r.t)
-        for j, curve in enumerate(curves):
-            curve.setData(x=t, y=y_t[:pos + 1, j])
-        if pos + 1 >= y_t.shape[0]:
-            tmp = y_t.shape[0]
-            y_t.resize(
-                [y_t.shape[0] * 2, y_t.shape[1]],
-                refcheck=False
-            )
-            y_t[tmp:, :] = np.empty(
-                [tmp, y_t.shape[1]]
-            )
-        ptr[0] = pos
+def plot_successful_integration_step(t_int, y_int, curves, y_t, t, t1, timer):
+    pos = len(t)
+    if pos >= y_t.shape[0]:
+        tmp = y_t.shape[0]
+        y_t.resize(
+            [y_t.shape[0] * 2, y_t.shape[1]],
+            refcheck=False
+        )
+        y_t[tmp:, :] = np.empty(
+            [tmp, y_t.shape[1]]
+        )
+    if t_int > t[0]:
+        t.append(t_int)
+        y_t[pos] = y_int
+        pos += 1  # Ensure plotting gets right vector length
+    for j, curve in enumerate(curves):
+        curve.setData(x=t, y=y_t[:pos, j])
+    if t1 is None:
+        return None
+    elif t_int >= t1:
+        timer.stop()
+        return -1  # Stop integration
 
 
 def run_solution(b, b1, timer, plt, r, first_run=False, non_linear=True):
@@ -112,14 +114,11 @@ def run_solution(b, b1, timer, plt, r, first_run=False, non_linear=True):
     # all the curves names and properties.
     plt.addLegend()
     # plt.getPlotItem().legend.setScale(2.0)
-    ptr = [0]
     y0, t0 = [100, 0, 0, 0, 0], 0
     if non_linear:
         t1 = 0.1
-        dt = 0.1
     else:
         t1 = 25
-        dt = 0.1
     curves = [None] * len(y0)
     for j, item_j in enumerate(y0):
         pen_color = random_color()
@@ -141,13 +140,22 @@ def run_solution(b, b1, timer, plt, r, first_run=False, non_linear=True):
         r.f = lambda t, y: g(t, y, linear=True)
     r.set_initial_value(y0, t0)
     r.set_integrator('dopri5', nsteps=1)
-    warnings.filterwarnings('ignore', category=UserWarning)
 
-    # For updating, pass y_t and ptr by reference
+    # For updating, pass y_t and time_series by reference
     # y_t: Already a mutable object (numpy array)
-    # ptr[0]: Inmutable int, need to pass ptr, as list is mutable
+    # time_series: Mutable object also
+    r.set_solout(lambda t_l, y_l:
+                 plot_successful_integration_step(
+                     t_l,
+                     y_l,
+                     curves,
+                     y_t,
+                     time_series,
+                     t1,
+                     timer)
+                 )
     timer.timeout.connect(
-        lambda: plot_either_case(curves, ptr, r, y_t, time_series, dt, t1)
+        lambda: r.integrate(t1)
     )
     timer.start(50)
 
@@ -187,9 +195,9 @@ tree.setColumnCount(2)
 tree.addTopLevelItem(ti2)
 ti2.addChild(ti211)
 ti2.addChild(ti221)
-tree.setItemWidget(ti2, 1 , lab_1)
-tree.setItemWidget(ti211, 1 , lab_2)
-tree.setItemWidget(ti221, 1 , lab_3)
+tree.setItemWidget(ti2, 1, lab_1)
+tree.setItemWidget(ti211, 1, lab_2)
+tree.setItemWidget(ti221, 1, lab_3)
 tree.setDragEnabled(False)
 tree.expandAll()
 tree.resizeColumnToContents(0)
@@ -199,7 +207,7 @@ tree.setHeaderHidden(True)
 # tree.setItemWidget(ti2, 1, ti221)
 splitter.addWidget(tree)
 splitter.addWidget(area)
-splitter.setSizes([app_width*1/3.0, app_width*2/3.0])
+splitter.setSizes([app_width * 1 / 3.0, app_width * 2 / 3.0])
 area.addDock(d1, 'left')
 area.addDock(d2, 'right')
 vlayout_0.addWidget(splitter)
