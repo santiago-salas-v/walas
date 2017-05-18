@@ -285,7 +285,7 @@ def gui_docks_p2_04_02(d_area, _):
 
 def gui_docks_p4_03_01(d_area, timer):
     d1 = Dock('Plot', size=(1, 1), closable=True)
-    p1 = pg.PlotWidget(name='Plot 1')
+    p1 = pg.PlotWidget(name='Y3, GLUCONIC ACID BY FERMENTATION')
     d1.addWidget(p1)
     d_area.addDock(d1, 'right')
     timer.stop()
@@ -361,6 +361,81 @@ def gui_docks_p4_03_01(d_area, timer):
     timer.start(50)
 
 
+def gui_docks_p4_03_04(d_area, timer):
+    d1 = Dock('Plot', size=(1, 1), closable=True)
+    p1 = pg.PlotWidget(name='A<<==>>B<<==>>C')
+    d1.addWidget(p1)
+    d_area.addDock(d1, 'right')
+    timer.stop()
+    if timer.connected:
+        # Qt objects can have several connected slots.
+        # Not disconnecting them all causes previously
+        # running processes to continue when restarted.
+        timer.timeout.disconnect()
+
+    time_interval = [0, 25000]
+
+    # noinspection PyUnusedLocal
+    def g(t, y):
+        k1, k2, kc1, kc2 = 0.001, 0.01, 0.8, 0.6
+        ca, cb, cc = y  # len(y) == 4
+        return [
+            -k1 * (ca - cb / kc1),
+            +k1 * (ca - cb / kc1) - k2 * (cb - cc / kc2),
+            +k2 * (cb - cc / kc2)
+        ]
+
+    p1.setLabel('bottom', text='t, h')
+
+    y0 = [1.0, 0, 0]
+    y_t = np.empty([20, len(y0)])
+    time_series = [time_interval[0]]
+    y_t[0, :] = y0
+
+    r = ode(
+        lambda t, y: g(t, y)
+    )
+    r.set_initial_value(y0, time_interval[0])
+    r.set_integrator('dopri5', nsteps=1)
+    # Add the legend before plotting, for it to pick up
+    # all the curves names and properties.
+    p1.setLimits(xMin=0, yMin=0, yMax=1)
+    p1.addLegend()
+
+    curves = [None] * len(y0)
+    for j, item_j in enumerate(y0):
+        pen_color = random_color()
+        symbol_color = random_color()
+        symbol = random_symbol()
+        curves[j] = p1.plot(
+            name=string.ascii_uppercase[j],
+            pen=pen_color,
+            symbolBrush=symbol_color,
+            symbol=symbol,
+            size=0.2
+        )
+
+    # For updating, pass y_t and time_series by reference
+    # y_t: Already a mutable object (numpy array)
+    # time_series: Mutable object also
+    r.set_solout(
+        lambda t_l, y_l:
+        plot_successful_integration_step(
+            t_l,
+            y_l,
+            curves,
+            y_t,
+            time_series,
+            time_interval[1],
+            timer)
+    )
+    timer.timeout.connect(
+        lambda: r.integrate(time_interval[1])
+    )
+    timer.connected = True
+    timer.start(50)
+
+
 def add_which_dock(text, d_area, timer):
     if text == 'P2.04.01':
         gui_docks_p2_04_01(d_area, timer)
@@ -368,6 +443,8 @@ def add_which_dock(text, d_area, timer):
         gui_docks_p2_04_02(d_area, timer)
     elif text == 'P4.03.01':
         gui_docks_p4_03_01(d_area, timer)
+    elif text == 'P4.03.04':
+        gui_docks_p4_03_04(d_area, timer)
 
 wind = QtGui.QWidget()
 area = DockArea()
@@ -402,7 +479,9 @@ chapter_problems = dict(zip(
         zip(['P2.04.01', 'P2.04.02'],
             ['ALKYLATION OF ISOPROPYLBENZENE',
              'DIFFUSION AND SOLID CATALYSIS']),
-        zip(['P4.03.01'], ['GLUCONIC ACID BY FERMENTATION'])
+        zip(['P4.03.01', 'P4.03.04'],
+            ['GLUCONIC ACID BY FERMENTATION',
+             'CONSECUTIVE REVERSIBLE REACTIONS'])
     ]
 ))
 problem_counter = 0
