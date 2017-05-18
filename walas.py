@@ -284,8 +284,9 @@ def gui_docks_p2_04_02(d_area, _):
 
 
 def gui_docks_p4_03_01(d_area, timer):
-    d1 = Dock('Plot', size=(1, 1), closable=True)
-    p1 = pg.PlotWidget(name='Y3, GLUCONIC ACID BY FERMENTATION')
+    d1 = Dock('Y3, GLUCONIC ACID BY FERMENTATION',
+              size=(1, 1), closable=True)
+    p1 = pg.PlotWidget(name='Plot 1')
     d1.addWidget(p1)
     d_area.addDock(d1, 'right')
     timer.stop()
@@ -362,8 +363,8 @@ def gui_docks_p4_03_01(d_area, timer):
 
 
 def gui_docks_p4_03_04(d_area, timer):
-    d1 = Dock('Plot', size=(1, 1), closable=True)
-    p1 = pg.PlotWidget(name='A<<==>>B<<==>>C')
+    d1 = Dock('A<<==>>B<<==>>C', size=(1, 1), closable=True)
+    p1 = pg.PlotWidget(name='Plot 1')
     d1.addWidget(p1)
     d_area.addDock(d1, 'right')
     timer.stop()
