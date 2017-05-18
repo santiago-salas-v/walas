@@ -315,8 +315,18 @@ vlayout_0 = QtGui.QVBoxLayout()
 splitter = QtGui.QSplitter()
 shared_timer = pg.QtCore.QTimer()
 
-covered_chapters = [2, 4]
+splitter.addWidget(tree)
+splitter.addWidget(area)
+splitter.setSizes([app_width * 1 / 3.0, app_width * 2 / 3.0])
 
+vlayout_0.addWidget(splitter)
+vlayout_0.addWidget(btn_3)
+
+wind.setLayout(vlayout_0)
+wind.setWindowTitle('Walas problems')
+wind.resize(app_width, app_height)
+
+covered_chapters = [2, 4]
 chapter_texts = dict(zip(
     covered_chapters,
     [
@@ -324,7 +334,6 @@ chapter_texts = dict(zip(
         'IDEAL REACTORS'
     ]
 ))
-
 chapter_problems = dict(zip(
     covered_chapters,
     [
@@ -334,9 +343,8 @@ chapter_problems = dict(zip(
         zip(['P4.03.01'], ['GLUCONIC ACID BY FERMENTATION'])
     ]
 ))
-
-tree.setColumnCount(len(covered_chapters))
 problem_counter = 0
+tree.setColumnCount(len(covered_chapters))
 for chapter in covered_chapters:
     locals()['ti' + str(chapter)] = QtGui.QTreeWidgetItem()
     tix = locals()['ti' + str(chapter)]
@@ -352,28 +360,17 @@ for chapter in covered_chapters:
         name_label = 'lab_' + str(chapter) + str(problem_counter) + str(1)
         locals()[name_item] = QtGui.QTreeWidgetItem([problem[0]])
         locals()[name_label] = QtGui.QLabel(problem[1])
+        tix.addChild(locals()[name_item])
         tree.setItemWidget(
             locals()[name_item],
             1,
             locals()[name_label])
-        tix.addChild(locals()[name_item])
 
 tree.setDragEnabled(False)
 tree.expandAll()
 tree.resizeColumnToContents(0)
 tree.resizeColumnToContents(1)
 tree.setHeaderHidden(True)
-
-splitter.addWidget(tree)
-splitter.addWidget(area)
-splitter.setSizes([app_width * 1 / 3.0, app_width * 2 / 3.0])
-
-vlayout_0.addWidget(splitter)
-vlayout_0.addWidget(btn_3)
-
-wind.setLayout(vlayout_0)
-wind.setWindowTitle('Walas problems')
-wind.resize(app_width, app_height)
 
 # noinspection PyUnresolvedReferences
 tree.itemClicked.connect(
