@@ -53,6 +53,13 @@ def random_symbol():
         ).item()]
 
 
+def stop_shared_timer(timer):
+    timer.stop()
+    if timer.connected:
+        timer.timeout.disconnect()
+        timer.connected = False
+
+
 def plot_successful_integration_step(t_int, y_int, curves, y_t, t, t1, timer):
     pos = len(t)
     if pos >= y_t.shape[0]:
@@ -78,7 +85,7 @@ def plot_successful_integration_step(t_int, y_int, curves, y_t, t, t1, timer):
 
 
 def solve_p2_04_01(b, b1, timer, plt,
-                   non_linear=True, timer_connected=True):
+                   non_linear=True):
     if non_linear:
         b1.setEnabled(False)
         b.setEnabled(True)
@@ -86,7 +93,7 @@ def solve_p2_04_01(b, b1, timer, plt,
         b.setEnabled(False)
         b1.setEnabled(True)
     timer.stop()
-    if timer_connected:
+    if timer.connected:
         # Qt objects can have several connected slots.
         # Not disconnecting them all causes previously
         # running processes to continue when restarted.
@@ -164,6 +171,7 @@ def solve_p2_04_01(b, b1, timer, plt,
     timer.timeout.connect(
         lambda: r.integrate(t1)
     )
+    timer.connected = True
     timer.start(50)
 
 
@@ -221,8 +229,6 @@ def gui_docks_p2_04_01(d_area, timer):
             p_1,
             non_linear=True
         ))
-    # noinspection PyUnresolvedReferences
-    btn_3.clicked.connect(lambda: timer.stop())
 
     btn_2.setEnabled(False)
 
@@ -231,8 +237,7 @@ def gui_docks_p2_04_01(d_area, timer):
         btn_2,
         timer,
         p_1,
-        non_linear=True,
-        timer_connected=False
+        non_linear=True
     )
 
 
@@ -278,11 +283,17 @@ def gui_docks_p2_04_02(d_area, _):
     )
 
 
-def gui_docks_p4_03_01(d_area, _):
+def gui_docks_p4_03_01(d_area, timer):
     d1 = Dock('Plot', size=(1, 1), closable=True)
     p1 = pg.PlotWidget(name='Plot 1')
     d1.addWidget(p1)
     d_area.addDock(d1, 'right')
+    timer.stop()
+    if timer.connected:
+        # Qt objects can have several connected slots.
+        # Not disconnecting them all causes previously
+        # running processes to continue when restarted.
+        timer.timeout.disconnect()
 
     time_interval = [0, 10]
 
@@ -292,11 +303,62 @@ def gui_docks_p4_03_01(d_area, _):
             0.949, 3.439, 18.72, 37.51, 1.169
         y1, y2, y3, y4 = y  # len(y) == 4
         return [
-            b1 * y1 * (1 - b1 / y1),
+            b1 * y1 * (1 - y1 / b2),
             b3 * y1 * y4 / (b4 + y4) - 0.9802 * b5 * y2,
             b5 * y2,
             -1.011 * b3 * y1 * y4 / (b4 + y4)
         ]
+
+    p1.setLabel('bottom', text='t, h')
+
+    y0 = [0.5, 0, 0, 50.0]
+    y_t = np.empty([20, len(y0)])
+    time_series = [time_interval[0]]
+    y_t[0, :] = y0
+
+    r = ode(
+        lambda t, y: g(t, y)
+    )
+    r.set_initial_value(y0, time_interval[0])
+    r.set_integrator('dopri5', nsteps=1)
+    # Add the legend before plotting, for it to pick up
+    # all the curves names and properties.
+    p1.setLimits(xMin=0, yMin=0, yMax=60)
+    p1.addLegend()
+
+    curves = [None] * len(y0)
+    curve_names = ['y' + str(it) for it in range(len(y0))]
+    for j, item_j in enumerate(y0):
+        pen_color = random_color()
+        symbol_color = random_color()
+        symbol = random_symbol()
+        curves[j] = p1.plot(
+            name=curve_names[j],
+            pen=pen_color,
+            symbolBrush=symbol_color,
+            symbol=symbol,
+            size=0.2
+        )
+
+    # For updating, pass y_t and time_series by reference
+    # y_t: Already a mutable object (numpy array)
+    # time_series: Mutable object also
+    r.set_solout(
+        lambda t_l, y_l:
+        plot_successful_integration_step(
+            t_l,
+            y_l,
+            curves,
+            y_t,
+            time_series,
+            time_interval[1],
+            timer)
+    )
+    timer.timeout.connect(
+        lambda: r.integrate(time_interval[1])
+    )
+    timer.connected = True
+    timer.start(50)
 
 
 def add_which_dock(text, d_area, timer):
@@ -377,6 +439,15 @@ tree.itemClicked.connect(
     lambda it, column:
     add_which_dock(it.text(0), area, shared_timer)
 )
+# noinspection PyUnresolvedReferences
+btn_3.clicked.connect(
+    lambda: stop_shared_timer(shared_timer))
+# Qt objects can have several connected slots.
+# Not disconnecting them all causes previously
+# running processes to continue when restarted.
+# Keep track in this shared timer via added
+# attribute.
+shared_timer.connected = False
 
 wind.show()
 
