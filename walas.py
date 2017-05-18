@@ -16,6 +16,7 @@ window_size = QtGui.QDesktopWidget().screenGeometry()
 app_width = window_size.width() * 2 / 5.0
 app_height = window_size.height() * 2 / 5.0
 
+# noinspection PyUnresolvedReferences
 colormap_colors = colormaps.viridis.colors + \
     colormaps.magma.colors + \
     colormaps.inferno.colors
@@ -50,22 +51,6 @@ def random_symbol():
         np.random.randint(
             0, len(symbols), 1
         ).item()]
-
-# noinspection PyUnusedLocal
-
-
-def g(t, y, linear=False):
-    if linear:
-        p = 1.0
-    else:
-        p = (400 - y[1] - 2 * y[2] - 3 * y[3] - 4 * y[4])
-    return [
-        -y[0] * p,
-        (y[0] - 0.5 * y[1]) * p,
-        (0.5 * y[1] - 0.3 * y[2]) * p,
-        (0.3 * y[2] - 0.2 * y[3]) * p,
-        0.2 * y[3] * p
-    ]
 
 
 def plot_successful_integration_step(t_int, y_int, curves, y_t, t, t1, timer):
@@ -133,6 +118,21 @@ def solve_p2_04_01(b, b1, timer, plt,
             symbol=symbol,
             size=0.2
         )
+
+    # noinspection PyUnusedLocal
+    def g(t, y, linear=False):
+        if linear:
+            p = 1.0
+        else:
+            p = (400 - y[1] - 2 * y[2] - 3 * y[3] - 4 * y[4])
+        return [
+            -y[0] * p,
+            (y[0] - 0.5 * y[1]) * p,
+            (0.5 * y[1] - 0.3 * y[2]) * p,
+            (0.3 * y[2] - 0.2 * y[3]) * p,
+            0.2 * y[3] * p
+        ]
+
     y_t = np.empty([20, len(y0)])
     time_series = [t0]
     y_t[0, :] = y0
@@ -273,6 +273,30 @@ def gui_docks_p2_04_02(d_area, _):
         ['c', '1/r', 't_simple', 't_quadfunc']
     )
     tab_1.sortByColumn(2, QtCore.Qt.AscendingOrder)
+    tab_1.horizontalHeader().setResizeMode(
+        QtGui.QHeaderView.ResizeToContents
+    )
+
+
+def gui_docks_p4_03_01(d_area, _):
+    d1 = Dock('Plot', size=(1, 1), closable=True)
+    p1 = pg.PlotWidget(name='Plot 1')
+    d1.addWidget(p1)
+    d_area.addDock(d1, 'right')
+
+    time_interval = [0, 10]
+
+    # noinspection PyUnusedLocal
+    def g(t, y):
+        b1, b2, b3, b4, b5 = \
+            0.949, 3.439, 18.72, 37.51, 1.169
+        y1, y2, y3, y4 = y  # len(y) == 4
+        return [
+            b1 * y1 * (1 - b1 / y1),
+            b3 * y1 * y4 / (b4 + y4) - 0.9802 * b5 * y2,
+            b5 * y2,
+            -1.011 * b3 * y1 * y4 / (b4 + y4)
+        ]
 
 
 def add_which_dock(text, d_area, timer):
@@ -280,6 +304,8 @@ def add_which_dock(text, d_area, timer):
         gui_docks_p2_04_01(d_area, timer)
     elif text == 'P2.04.02':
         gui_docks_p2_04_02(d_area, timer)
+    elif text == 'P4.03.01':
+        gui_docks_p4_03_01(d_area, timer)
 
 wind = QtGui.QWidget()
 area = DockArea()
@@ -289,30 +315,49 @@ vlayout_0 = QtGui.QVBoxLayout()
 splitter = QtGui.QSplitter()
 shared_timer = pg.QtCore.QTimer()
 
-ti2 = QtGui.QTreeWidgetItem([
-    'CHAPTER 2.'
-])
-lab_1 = QtGui.QLabel('REACTION RATES AND OPERATING MODES')
-ti211 = QtGui.QTreeWidgetItem([
-    'P2.04.01'
-])
-lab_2 = QtGui.QLabel('ALKYLATION OF ISOPROPYLBENZENE')
-ti221 = QtGui.QTreeWidgetItem([
-    'P2.04.02'
-])
-lab_3 = QtGui.QLabel('DIFFUSION AND SOLID CATALYSIS')
+covered_chapters = [2, 4]
 
-wind.setLayout(vlayout_0)
-wind.setWindowTitle('Walas problems')
-wind.resize(app_width, app_height)
+chapter_texts = dict(zip(
+    covered_chapters,
+    [
+        'REACTION RATES AND OPERATING MODES',
+        'IDEAL REACTORS'
+    ]
+))
 
-tree.setColumnCount(2)
-tree.addTopLevelItem(ti2)
-ti2.addChild(ti211)
-ti2.addChild(ti221)
-tree.setItemWidget(ti2, 1, lab_1)
-tree.setItemWidget(ti211, 1, lab_2)
-tree.setItemWidget(ti221, 1, lab_3)
+chapter_problems = dict(zip(
+    covered_chapters,
+    [
+        zip(['P2.04.01', 'P2.04.02'],
+            ['ALKYLATION OF ISOPROPYLBENZENE',
+             'DIFFUSION AND SOLID CATALYSIS']),
+        zip(['P4.03.01'], ['GLUCONIC ACID BY FERMENTATION'])
+    ]
+))
+
+tree.setColumnCount(len(covered_chapters))
+problem_counter = 0
+for chapter in covered_chapters:
+    locals()['ti' + str(chapter)] = QtGui.QTreeWidgetItem()
+    tix = locals()['ti' + str(chapter)]
+    tix.setText(
+        0, 'CHAPTER ' + str(chapter) + '.')
+    tix.setText(
+        1, chapter_texts[chapter]
+    )
+    tree.addTopLevelItem(tix)
+    for problem in chapter_problems[chapter]:
+        problem_counter += 1
+        name_item = 'ti' + str(chapter) + str(problem_counter) + str(1)
+        name_label = 'lab_' + str(chapter) + str(problem_counter) + str(1)
+        locals()[name_item] = QtGui.QTreeWidgetItem([problem[0]])
+        locals()[name_label] = QtGui.QLabel(problem[1])
+        tree.setItemWidget(
+            locals()[name_item],
+            1,
+            locals()[name_label])
+        tix.addChild(locals()[name_item])
+
 tree.setDragEnabled(False)
 tree.expandAll()
 tree.resizeColumnToContents(0)
@@ -325,6 +370,10 @@ splitter.setSizes([app_width * 1 / 3.0, app_width * 2 / 3.0])
 
 vlayout_0.addWidget(splitter)
 vlayout_0.addWidget(btn_3)
+
+wind.setLayout(vlayout_0)
+wind.setWindowTitle('Walas problems')
+wind.resize(app_width, app_height)
 
 # noinspection PyUnresolvedReferences
 tree.itemClicked.connect(
