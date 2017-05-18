@@ -379,7 +379,7 @@ def gui_docks_p4_03_04(d_area, timer):
     # noinspection PyUnusedLocal
     def g(t, y):
         k1, k2, kc1, kc2 = 0.001, 0.01, 0.8, 0.6
-        ca, cb, cc = y  # len(y) == 4
+        ca, cb, cc = y  # len(y) == 3
         return [
             -k1 * (ca - cb / kc1),
             +k1 * (ca - cb / kc1) - k2 * (cb - cc / kc2),
@@ -437,6 +437,100 @@ def gui_docks_p4_03_04(d_area, timer):
     timer.start(50)
 
 
+def gui_docks_p4_03_06(d_area, timer):
+    d1 = Dock('ADDITION POLYMERIZATION', size=(1, 1), closable=True)
+    p1 = pg.PlotWidget(name='Plot 1')
+    d1.addWidget(p1)
+    d_area.addDock(d1, 'right')
+    timer.stop()
+    if timer.connected:
+        # Qt objects can have several connected slots.
+        # Not disconnecting them all causes previously
+        # running processes to continue when restarted.
+        timer.timeout.disconnect()
+
+    time_interval = [0, 150]
+
+    # noinspection PyUnusedLocal
+    def g(t, y):
+        k0, k1, k2, k3, k4, k5 = 0.01, 0.1, 0.1, 0.1, 0.1, 0.1
+        cm, cp1, cp2, cp3, cp4, cp5 = y  # len(y) == 5
+        # Note, in book dM/dt=+k0M - kM sum(P_n)
+        # Monomer only reacts, it should be dM/dt=-k0M - kM sum(P_n)
+        return [
+            -k0 * cm - k1 * cm * cp1 - k2 * cm *
+            cp2 - k3 * cm * cp3 - k4 * cm * cp4 -
+            k5 * cm * cp5,
+            +k0 * cm - k1 * cm * cp1,
+            +k1 * cm * cp1 - k2 * cm * cp2,
+            +k2 * cm * cp2 - k3 * cm * cp3,
+            +k3 * cm * cp3 - k4 * cm * cp4,
+            +k4 * cm * cp4 - k5 * cm * cp5,
+        ]
+        # k = k1
+        # return [
+        #     - k0 * cm - k * cm * (cp1 + cp2 + cp3 + cp4 + cp5),
+        #     k * cm * (k0 / k - cp1),
+        #     k * cm * (cp1 - cp2),
+        #     k * cm * (cp2 - cp3),
+        #     k * cm * (cp3 - cp4),
+        #     k * cm * (cp4 - cp5)
+        # ]
+
+    p1.setLabel('bottom', text='t')
+
+    y0 = [1.0, 0, 0, 0, 0, 0]
+    y_t = np.empty([20, len(y0)])
+    time_series = [time_interval[0]]
+    y_t[0, :] = y0
+
+    r = ode(
+        lambda t, y: g(t, y)
+    )
+    r.set_initial_value(y0, time_interval[0])
+    r.set_integrator('dopri5', nsteps=1)
+    # Add the legend before plotting, for it to pick up
+    # all the curves names and properties.
+    p1.setLimits(xMin=0, yMin=0, yMax=1)
+    p1.addLegend()
+
+    curves = [None] * len(y0)
+    curve_names = ['M']
+    for it in range(1, 5 + 1):
+        curve_names.append('P' + str(it))
+    for j, item_j in enumerate(y0):
+        pen_color = random_color()
+        symbol_color = random_color()
+        symbol = random_symbol()
+        curves[j] = p1.plot(
+            name=curve_names[j],
+            pen=pen_color,
+            symbolBrush=symbol_color,
+            symbol=symbol,
+            size=0.2
+        )
+
+    # For updating, pass y_t and time_series by reference
+    # y_t: Already a mutable object (numpy array)
+    # time_series: Mutable object also
+    r.set_solout(
+        lambda t_l, y_l:
+        plot_successful_integration_step(
+            t_l,
+            y_l,
+            curves,
+            y_t,
+            time_series,
+            time_interval[1],
+            timer)
+    )
+    timer.timeout.connect(
+        lambda: r.integrate(time_interval[1])
+    )
+    timer.connected = True
+    timer.start(50)
+
+
 def add_which_dock(text, d_area, timer):
     if text == 'P2.04.01':
         gui_docks_p2_04_01(d_area, timer)
@@ -446,6 +540,8 @@ def add_which_dock(text, d_area, timer):
         gui_docks_p4_03_01(d_area, timer)
     elif text == 'P4.03.04':
         gui_docks_p4_03_04(d_area, timer)
+    elif text == 'P4.03.06':
+        gui_docks_p4_03_06(d_area, timer)
 
 wind = QtGui.QWidget()
 area = DockArea()
@@ -480,9 +576,10 @@ chapter_problems = dict(zip(
         zip(['P2.04.01', 'P2.04.02'],
             ['ALKYLATION OF ISOPROPYLBENZENE',
              'DIFFUSION AND SOLID CATALYSIS']),
-        zip(['P4.03.01', 'P4.03.04'],
+        zip(['P4.03.01', 'P4.03.04', 'P4.03.06'],
             ['GLUCONIC ACID BY FERMENTATION',
-             'CONSECUTIVE REVERSIBLE REACTIONS'])
+             'CONSECUTIVE REVERSIBLE REACTIONS',
+             'ADDITION POLYMERIZATION'])
     ]
 ))
 problem_counter = 0
