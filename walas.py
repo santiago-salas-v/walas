@@ -1,3 +1,4 @@
+# coding=utf-8
 import sys
 import string
 import numpy as np
@@ -467,15 +468,6 @@ def gui_docks_p4_03_06(d_area, timer):
             +k3 * cm * cp3 - k4 * cm * cp4,
             +k4 * cm * cp4 - k5 * cm * cp5,
         ]
-        # k = k1
-        # return [
-        #     - k0 * cm - k * cm * (cp1 + cp2 + cp3 + cp4 + cp5),
-        #     k * cm * (k0 / k - cp1),
-        #     k * cm * (cp1 - cp2),
-        #     k * cm * (cp2 - cp3),
-        #     k * cm * (cp3 - cp4),
-        #     k * cm * (cp4 - cp5)
-        # ]
 
     p1.setLabel('bottom', text='t')
 
@@ -530,6 +522,146 @@ def gui_docks_p4_03_06(d_area, timer):
     timer.connected = True
     timer.start(50)
 
+def gui_docks_p4_04_41(d_area, _):
+    d1 = Dock('CSTR WITH HEATED RECYCLE 2A ==>> 2B',
+              size=(1, 1), closable=True)
+    tab_1 = pg.TableWidget()
+    d1.addWidget(tab_1)
+    d_area.addDock(d1, 'bottom')
+
+    def k(temperature):
+        temperature = float(temperature)
+        # 1/2 , weil in den Stoffmengenbilanzen, die im Buch stehen
+        # die Stöchiometrie der Reaktion  nicht berücksichtigt
+        # wird.
+        result = 1/2.0*np.exp(
+            24.1 - 6500 / temperature
+        ) # 1/h (kgmol/L)^-1
+        return result
+
+    mw_00 = 500.0 # kg/h solvent
+    na_00 = 20.0 # kgmol/h
+    t_00 = 300.0 # K
+    v_flow_00 = 600.0 # L/h
+    mw_01 = 100.0 # kg/h solvent
+    na_01 = 4.0 # kgmol/h
+    t_01 = 350.0 # K
+    v_flow_01 = 120.0 # L/h
+    r = 1/6.0 # ratio
+
+    v_flow_0 = v_flow_00 + v_flow_01 # L/h
+    v_r = 25000.0 # L
+
+    # 2A<<==>>2B delta_Hr = -2000 cal/(gmolAconv)
+    delta_hr = +2000*2  # cal/2gmolA, exot.
+    cp_w_masse = 1.0  # kcal/(kg K)
+    cp_s_mol = 40.0  # kcal/(kgmol K), any solutes
+
+    # Adiabatische Wärmebilanz am Zulaufstrom
+    # 0 =  (cp_w_masse*mw_00 + cp_s_mol*na_00)*(300K-t_0)
+    #     +(cp_w_masse*mw_01 + cp_s_mol*na_01)*(350K-t_0)
+    #   =  (cp_w_masse*mw_00 + cp_s_mol*na_00)*(300K-t_0)
+    #     +1/6(cp_w_masse*mw_00 + cp_s_mol*na_00)*(350K-t_0)
+    mw_0 = mw_00 + mw_01
+    na_0 = na_00 + na_01
+    t_0 = 5 / 6.0 * t_00 + 1 / 6.0 * t_01
+    m_c_cp_0 = (cp_w_masse * mw_00 + cp_s_mol * na_00) + \
+               (cp_w_masse * mw_01 + cp_s_mol * na_01)
+
+    # Wärmebilanz 1. Am Reaktorkessel
+    # dT/dt = 0 = (mw_0*cp_w_masse+na_0*cp_s_mol)*(t_0-t_1) +
+    #             (-delta_hr)*r*Vr
+    # Wärmebilanz 2. Am Wärmetauscher
+    # Q = (mw_1*cp_w_masse+na_0*cp_s_mol)
+    # Stoffmengenbilanz 1. Am Reaktor
+    # dCa/dt = 0 = +na0 + 1/6 na1 - na1 - 2*r*Vr
+    # ==>>> r*Vr = 1/2(na0-5/6 na1)
+    def null_werte(y):
+        t1 = y[0]
+        na1 = y[1]
+        # [0 (Energie)
+        #  0 (Masse)]
+        return [
+            -t1 + t_0 +
+            (-delta_hr*(1/2.0)*(na_00-5/6.0*na1))/(m_c_cp_0),
+            na_00 - 5/6.0*na1 -
+            2.0*v_r*k(t1)*(na1/v_flow_0)**2
+        ]
+
+    sol = root(null_werte, np.array([300, 4]))
+
+    # q = root(
+    #     lambda q_load:
+    #     + q_load
+    #     + m0*cp*(temp0 - temp)
+    #     + m0*cp*(temp_r - temp)*x
+    #     + m0*cp*(temp - temp_r)
+    #     + (-delta_hr)*x*na0 # =0
+    # ).x # kcal/h
+
+
+
+    tab_1.set_data(sol.x)
+
+    tab_1.setHorizontalHeaderLabels(
+        ['n_a', 'T', 'k', 'K_e', 'Integrand', 'S']
+    )
+    tab_1.horizontalHeader().setResizeMode(
+        QtGui.QHeaderView.ResizeToContents
+    )
+
+def gui_docks_p4_04_53(d_area, _):
+    d1 = Dock('PUMPAROUND SYSTEM A<<==>>B',
+              size=(1, 1), closable=True)
+    tab_1 = pg.TableWidget()
+    d1.addWidget(tab_1)
+    d_area.addDock(d1, 'bottom')
+
+    def k(temperature):
+        temperature = float(temperature)
+        return np.exp(17.2 - 5800 / temperature) # 1/h
+    def ke(temperature):
+        temperature = float(temperature)
+        return np.exp(10000 / temperature - 24.7)  # [adim]
+    # cb0 = 0. T at which X = 90%   = (na0 - na)/na0
+    #                               = (nb - nb0)/na0 = nb/na0
+    #                               = Kc na/na0 = Kc (1-90%)
+    #          ==>>    Kc = nb / na = 90%/(1-90%)
+    temp = root(
+        lambda temp: ke(temp) - 0.9/(1-0.9), 300.0
+    ).x
+
+    # A<<==>>B delta_Hr = 19870.0 cal/gmolA
+    delta_hr = 19870.0  # cal/gmolA, exot.
+    cp = 0.50  # cal/(gm K)
+    k1 = k(temp) # 1/h
+    m0 = 10000 # kg/h
+    na0 = 50 # kgmol/h
+    vf0 = 5000 # L/h
+    temp0 = 300.0 # K
+    temp_r = 60.0 # K
+    x = 0.80 # actual conversion
+
+    q = root(
+        lambda q_load:
+        + q_load
+        + m0*cp*(temp0 - temp)
+        + m0*cp*(temp_r - temp)*x
+        + m0*cp*(temp - temp_r)
+        + (-delta_hr)*x*na0, # = 0
+        10000
+    ).x # kcal/h
+
+
+
+    tab_1.set_data
+
+    tab_1.setHorizontalHeaderLabels(
+        ['n_a', 'T', 'k', 'K_e', 'Integrand', 'S']
+    )
+    tab_1.horizontalHeader().setResizeMode(
+        QtGui.QHeaderView.ResizeToContents
+    )
 
 def add_which_dock(text, d_area, timer):
     if text == 'P2.04.01':
@@ -542,6 +674,10 @@ def add_which_dock(text, d_area, timer):
         gui_docks_p4_03_04(d_area, timer)
     elif text == 'P4.03.06':
         gui_docks_p4_03_06(d_area, timer)
+    elif text == 'P4.04.41':
+        gui_docks_p4_04_41(d_area, timer)
+    elif text == 'P4.04.53':
+        gui_docks_p4_04_53(d_area, timer)
 
 wind = QtGui.QWidget()
 area = DockArea()
@@ -576,10 +712,12 @@ chapter_problems = dict(zip(
         zip(['P2.04.01', 'P2.04.02'],
             ['ALKYLATION OF ISOPROPYLBENZENE',
              'DIFFUSION AND SOLID CATALYSIS']),
-        zip(['P4.03.01', 'P4.03.04', 'P4.03.06'],
+        zip(['P4.03.01', 'P4.03.04', 'P4.03.06',
+             'P4.04.41','P4.04.53'],
             ['GLUCONIC ACID BY FERMENTATION',
              'CONSECUTIVE REVERSIBLE REACTIONS',
-             'ADDITION POLYMERIZATION'])
+             'ADDITION POLYMERIZATION',
+             'PUMPAROUND SYSTEM'])
     ]
 ))
 problem_counter = 0
