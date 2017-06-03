@@ -54,6 +54,43 @@ def random_symbol():
         ).item()]
 
 
+class tab_1_model(QtCore.QAbstractTableModel):
+    # To populate tableview with right model and column formats
+
+    def __init__(self, data, column_names, column_formats, parent=None):
+        QtCore.QAbstractTableModel.__init__(self, parent)
+        self._data = data
+        self._column_formats = column_formats
+        width = data.shape[1]
+        if len(column_names) == width:
+            self._column_names = column_names
+        else:
+            self._column_names = [''] * width
+
+    def rowCount(self, *args, **kwargs):
+        return self._data.shape[0]
+
+    def columnCount(self, *args, **kwargs):
+        return self._data.shape[1]
+
+    def headerData(self, col, orientation, role):
+        if orientation == QtCore.Qt.Horizontal \
+                and role == QtCore.Qt.DisplayRole:
+            return self._column_names[col]
+
+    def data(self, index, role=QtCore.Qt.DisplayRole):
+        if index.isValid():
+            if role == QtCore.Qt.DisplayRole:
+                # Format of columns: '1.2f', '1.2e', etc.
+                column_format = \
+                    '{0:' + \
+                    self._column_formats[index.column()] + \
+                    '}'
+                return column_format.format(
+                    self._data[index.row(), index.column()]
+                )
+
+
 def stop_shared_timer(timer):
     timer.stop()
     if timer.connected:
@@ -522,10 +559,11 @@ def gui_docks_p4_03_06(d_area, timer):
     timer.connected = True
     timer.start(50)
 
+
 def gui_docks_p4_04_41(d_area, _):
     d1 = Dock('CSTR WITH HEATED RECYCLE 2A ==>> 2B',
               size=(1, 1), closable=True)
-    tab_1 = pg.TableWidget()
+    tab_1 = QtGui.QTableView()
     d1.addWidget(tab_1)
     d_area.addDock(d1, 'bottom')
 
@@ -534,26 +572,25 @@ def gui_docks_p4_04_41(d_area, _):
         # 1/2 , weil in den Stoffmengenbilanzen, die im Buch stehen
         # die Stöchiometrie der Reaktion  nicht berücksichtigt
         # wird.
-        result = 1/2.0*np.exp(
+        result = 1 / 2.0 * np.exp(
             24.1 - 6500 / temperature
-        ) # 1/h (kgmol/L)^-1
+        )  # 1/h (kgmol/L)^-1
         return result
 
-    mw_00 = 500.0 # kg/h solvent
-    na_00 = 20.0 # kgmol/h
-    t_00 = 300.0 # K
-    v_flow_00 = 600.0 # L/h
-    mw_01 = 100.0 # kg/h solvent
-    na_01 = 4.0 # kgmol/h
-    t_01 = 350.0 # K
-    v_flow_01 = 120.0 # L/h
-    r = 1/6.0 # ratio
-
-    v_flow_0 = v_flow_00 + v_flow_01 # L/h
-    v_r = 25000.0 # L
+    mw_00 = 500.0  # kg/h solvent
+    na_00 = 20.0  # kgmol/h
+    t_00 = 300.0  # K
+    v_flow_00 = 600.0  # L/h
+    mw_01 = 100.0  # kg/h solvent
+    nab_01 = 4.0  # kgmol/h
+    t_01 = 350.0  # K
+    v_flow_01 = 120.0  # L/h
+    r = 1 / 6.0  # ratio
+    v_flow_0 = v_flow_00 + v_flow_01  # L/h
+    v_r = 25000.0  # L
 
     # 2A<<==>>2B delta_Hr = -2000 cal/(gmolAconv)
-    delta_hr = +2000*2  # cal/2gmolA, exot.
+    delta_hr = +2000 * 2  # cal/2gmolA, exot.
     cp_w_masse = 1.0  # kcal/(kg K)
     cp_s_mol = 40.0  # kcal/(kgmol K), any solutes
 
@@ -563,10 +600,10 @@ def gui_docks_p4_04_41(d_area, _):
     #   =  (cp_w_masse*mw_00 + cp_s_mol*na_00)*(300K-t_0)
     #     +1/6(cp_w_masse*mw_00 + cp_s_mol*na_00)*(350K-t_0)
     mw_0 = mw_00 + mw_01
-    na_0 = na_00 + na_01
+    nab_0 = na_00 + nab_01
     t_0 = 5 / 6.0 * t_00 + 1 / 6.0 * t_01
     m_c_cp_0 = (cp_w_masse * mw_00 + cp_s_mol * na_00) + \
-               (cp_w_masse * mw_01 + cp_s_mol * na_01)
+               (cp_w_masse * mw_01 + cp_s_mol * nab_01)
 
     # Wärmebilanz 1. Am Reaktorkessel
     # dT/dt = 0 = (mw_0*cp_w_masse+na_0*cp_s_mol)*(t_0-t_1) +
@@ -576,19 +613,26 @@ def gui_docks_p4_04_41(d_area, _):
     # Stoffmengenbilanz 1. Am Reaktor
     # dCa/dt = 0 = +na0 + 1/6 na1 - na1 - 2*r*Vr
     # ==>>> r*Vr = 1/2(na0-5/6 na1)
-    def null_werte(y):
+    def null_werte(y, recycle):
         t1 = y[0]
         na1 = y[1]
+        t_0 = (1 - recycle * 25 / 30.0) * t_00 + (recycle * 25 / 30.0) * t_01
+        nab_01 = na_00 * recycle
+        mw_01 = mw_00 * recycle
+        nab_0 = na_00 + nab_01
+        v_flow_0 = v_flow_00 * (1 + recycle)  # L/h
+        m_c_cp_0 = (cp_w_masse * mw_00 + cp_s_mol * na_00) + \
+                   (cp_w_masse * mw_01 + cp_s_mol * nab_01)
         # [0 (Energie)
         #  0 (Masse)]
+        # 5/6 = 4/5*25/30 , ~effect of molar masses on recycle
         return [
             -t1 + t_0 +
-            (-delta_hr*(1/2.0)*(na_00-5/6.0*na1))/(m_c_cp_0),
-            na_00 - 5/6.0*na1 -
-            2.0*v_r*k(t1)*(na1/v_flow_0)**2
+            (-delta_hr * (1 / 2.0) *
+             (na_00 - (1 - recycle * 25 / 30.0) * na1)) / (m_c_cp_0),
+            na_00 - (1 - recycle * 25 / 30.0) * na1 -
+            2.0 * v_r * k(t1) * (na1 / v_flow_0)**2
         ]
-
-    sol = root(null_werte, np.array([300, 4]))
 
     # q = root(
     #     lambda q_load:
@@ -599,16 +643,29 @@ def gui_docks_p4_04_41(d_area, _):
     #     + (-delta_hr)*x*na0 # =0
     # ).x # kcal/h
 
+    soln_at_rec = []
+    for recycle in [float(x) / 5.0 for x in range(0, 5 + 1, 1)]:
+        sol = root(
+            lambda y: null_werte(y, recycle),
+            np.array([t_0, nab_0])
+        )
+        na_1 = sol.x[1]
+        t_1 = sol.x[0]
+        # ['R', 'na_1', 'T_1', 'k', 'x']
+        soln_at_rec.append([
+            recycle, na_1, t_1, k(t_1),
+            1 - (1 - recycle * 25 / 30.0) * na_1 / na_00
+        ])
 
-
-    tab_1.set_data(sol.x)
-
-    tab_1.setHorizontalHeaderLabels(
-        ['n_a', 'T', 'k', 'K_e', 'Integrand', 'S']
-    )
+    tab_1.setModel(tab_1_model(
+        data=np.array(soln_at_rec),
+        column_names=['R', 'na_1', 'T_1', 'k', 'x'],
+        column_formats=['.2%', '1.2f', '1.2f', '1.2f', '1.3f']
+    ))
     tab_1.horizontalHeader().setResizeMode(
         QtGui.QHeaderView.ResizeToContents
     )
+
 
 def gui_docks_p4_04_53(d_area, _):
     d1 = Dock('PUMPAROUND SYSTEM A<<==>>B',
@@ -619,7 +676,8 @@ def gui_docks_p4_04_53(d_area, _):
 
     def k(temperature):
         temperature = float(temperature)
-        return np.exp(17.2 - 5800 / temperature) # 1/h
+        return np.exp(17.2 - 5800 / temperature)  # 1/h
+
     def ke(temperature):
         temperature = float(temperature)
         return np.exp(10000 / temperature - 24.7)  # [adim]
@@ -628,31 +686,29 @@ def gui_docks_p4_04_53(d_area, _):
     #                               = Kc na/na0 = Kc (1-90%)
     #          ==>>    Kc = nb / na = 90%/(1-90%)
     temp = root(
-        lambda temp: ke(temp) - 0.9/(1-0.9), 300.0
+        lambda temp: ke(temp) - 0.9 / (1 - 0.9), 300.0
     ).x
 
     # A<<==>>B delta_Hr = 19870.0 cal/gmolA
     delta_hr = 19870.0  # cal/gmolA, exot.
     cp = 0.50  # cal/(gm K)
-    k1 = k(temp) # 1/h
-    m0 = 10000 # kg/h
-    na0 = 50 # kgmol/h
-    vf0 = 5000 # L/h
-    temp0 = 300.0 # K
-    temp_r = 60.0 # K
-    x = 0.80 # actual conversion
+    k1 = k(temp)  # 1/h
+    m0 = 10000  # kg/h
+    na0 = 50  # kgmol/h
+    vf0 = 5000  # L/h
+    temp0 = 300.0  # K
+    temp_r = 60.0  # K
+    x = 0.80  # actual conversion
 
     q = root(
         lambda q_load:
         + q_load
-        + m0*cp*(temp0 - temp)
-        + m0*cp*(temp_r - temp)*x
-        + m0*cp*(temp - temp_r)
-        + (-delta_hr)*x*na0, # = 0
+        + m0 * cp * (temp0 - temp)
+        + m0 * cp * (temp_r - temp) * x
+        + m0 * cp * (temp - temp_r)
+        + (-delta_hr) * x * na0,  # = 0
         10000
-    ).x # kcal/h
-
-
+    ).x  # kcal/h
 
     tab_1.set_data
 
@@ -662,6 +718,7 @@ def gui_docks_p4_04_53(d_area, _):
     tab_1.horizontalHeader().setResizeMode(
         QtGui.QHeaderView.ResizeToContents
     )
+
 
 def add_which_dock(text, d_area, timer):
     if text == 'P2.04.01':
@@ -713,7 +770,7 @@ chapter_problems = dict(zip(
             ['ALKYLATION OF ISOPROPYLBENZENE',
              'DIFFUSION AND SOLID CATALYSIS']),
         zip(['P4.03.01', 'P4.03.04', 'P4.03.06',
-             'P4.04.41','P4.04.53'],
+             'P4.04.41', 'P4.04.53'],
             ['GLUCONIC ACID BY FERMENTATION',
              'CONSECUTIVE REVERSIBLE REACTIONS',
              'ADDITION POLYMERIZATION',
