@@ -774,6 +774,7 @@ chapter_problems = dict(zip(
             ['GLUCONIC ACID BY FERMENTATION',
              'CONSECUTIVE REVERSIBLE REACTIONS',
              'ADDITION POLYMERIZATION',
+             'CSTR WITH HEATED RECYCLE',
              'PUMPAROUND SYSTEM'])
     ]
 ))
