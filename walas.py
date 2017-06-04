@@ -41,6 +41,7 @@ symbols = ['t', 't1', 't2', 't3', 's', 'p', 'h', 'star', '+', 'd']
 
 markers = matplotlib.markers.MarkerStyle.markers.keys()
 
+
 def random_color():
     return tuple(
         [
@@ -64,6 +65,7 @@ def random_marker():
         np.random.randint(
             0, len(markers), 1
         ).item()]
+
 
 class tab_1_model(QtCore.QAbstractTableModel):
     # To populate tableview with right model and column formats
@@ -132,7 +134,9 @@ def plot_successful_integration_step(t_int, y_int, curves, y_t, t, t1, timer):
         timer.stop()
         return -1  # Stop integration
 
-def plot_successful_integration_step_mpl(t_int, y_int, curves, y_t, t, t1, timer):
+
+def plot_successful_integration_step_mpl(
+        t_int, y_int, curves, y_t, t, t1, timer):
     pos = len(t)
     if pos >= y_t.shape[0]:
         tmp = y_t.shape[0]
@@ -174,6 +178,7 @@ def plot_successful_integration_step_mpl(t_int, y_int, curves, y_t, t, t1, timer
     elif t_int >= t1:
         timer.stop()
         return -1  # Stop integration
+
 
 def solve_p2_04_01(b, b1, timer, plt,
                    non_linear=True):
@@ -528,10 +533,79 @@ def gui_docks_p4_03_04(d_area, timer):
     timer.start(50)
 
 
-def gui_docks_p4_03_06(d_area, timer):
+def gui_docks_p4_03_06(d_area, timer, use_mpl):
     d1 = Dock('ADDITION POLYMERIZATION', size=(1, 1), closable=True)
-    p1 = pg.PlotWidget(name='Plot 1')
-    d1.addWidget(p1)
+    vlayout = pg.LayoutWidget()
+    b1 = QtGui.QPushButton()
+    # Establish initial conditions before curve numbers
+    time_interval = [0, 150]
+    y0 = [1.0, 0, 0, 0, 0, 0]
+    y_t = np.empty([20, len(y0)])
+    time_series = [time_interval[0]]
+    y_t[0, :] = y0
+    curves = [None] * len(y0)
+    curve_names = ['M']
+    for it in range(1, 5 + 1):
+        curve_names.append('P' + str(it))
+    if use_mpl:
+        matplotlib.pyplot.style.use('dark_background')
+        fig, ax = matplotlib.pyplot.subplots()
+        p1 = FigureCanvas(fig)
+        ax.set_xlabel('t')
+        ax.set_xlim(left=0)
+        ax.set_ylim(bottom=0, top=1)
+        ax.legend()
+        ax.autoscale(enable=True, axis='x')
+        for j, item_j in enumerate(y0):
+            pen_color = tuple(
+                [item / 255.0 for item in random_color()]
+            )
+            marker_color = tuple(
+                [item / 255.0 for item in random_color()]
+            )
+            marker = random_marker()
+            curves[j], = ax.plot(
+                [], [],
+                color=pen_color,
+                markeredgecolor=pen_color,
+                marker=marker,
+                markerfacecolor=marker_color,
+                label=curve_names[j]
+            )
+        ax.legend(handles=curves, loc='best', fancybox=True).draggable(True)
+        opt_function = plot_successful_integration_step_mpl
+        ax.set_title('C vs. t (using mpl)')
+        b1.setText('test pyqtgraph')
+        b1.clicked.connect(
+            lambda: gui_docks_p4_03_06(d_area, timer, use_mpl=False)
+        )
+    else:
+        p1 = pg.PlotWidget(name='Plot 1')
+        p1.setLabel('bottom', text='t')
+        # Add the legend before plotting, for it to pick up
+        # all the curves names and properties.
+        p1.setLimits(xMin=0, yMin=0, yMax=1)
+        p1.addLegend()
+        for j, item_j in enumerate(y0):
+            pen_color = random_color()
+            symbol_color = random_color()
+            symbol = random_symbol()
+            curves[j] = p1.plot(
+                name=curve_names[j],
+                pen=pen_color,
+                symbolBrush=symbol_color,
+                symbol=symbol,
+                size=0.2
+            )
+        opt_function = plot_successful_integration_step
+        p1.setWindowTitle('C vs. t (using pyqtgraph)')
+        b1.setText('test mpl')
+        b1.clicked.connect(
+            lambda: gui_docks_p4_03_06(d_area, timer, use_mpl=True)
+        )
+    vlayout.addWidget(p1, 0, 0)
+    vlayout.addWidget(b1, 1, 0)
+    d1.addWidget(vlayout)
     d_area.addDock(d1, 'right')
     timer.stop()
     if timer.connected:
@@ -539,8 +613,6 @@ def gui_docks_p4_03_06(d_area, timer):
         # Not disconnecting them all causes previously
         # running processes to continue when restarted.
         timer.timeout.disconnect()
-
-    time_interval = [0, 150]
 
     # noinspection PyUnusedLocal
     def g(t, y):
@@ -559,140 +631,17 @@ def gui_docks_p4_03_06(d_area, timer):
             +k4 * cm * cp4 - k5 * cm * cp5,
         ]
 
-    p1.setLabel('bottom', text='t')
-
-    y0 = [1.0, 0, 0, 0, 0, 0]
-    y_t = np.empty([20, len(y0)])
-    time_series = [time_interval[0]]
-    y_t[0, :] = y0
-
     r = ode(
         lambda t, y: g(t, y)
     )
     r.set_initial_value(y0, time_interval[0])
     r.set_integrator('dopri5', nsteps=1)
-    # Add the legend before plotting, for it to pick up
-    # all the curves names and properties.
-    p1.setLimits(xMin=0, yMin=0, yMax=1)
-    p1.addLegend()
-
-    curves = [None] * len(y0)
-    curve_names = ['M']
-    for it in range(1, 5 + 1):
-        curve_names.append('P' + str(it))
-    for j, item_j in enumerate(y0):
-        pen_color = random_color()
-        symbol_color = random_color()
-        symbol = random_symbol()
-        curves[j] = p1.plot(
-            name=curve_names[j],
-            pen=pen_color,
-            symbolBrush=symbol_color,
-            symbol=symbol,
-            size=0.2
-        )
-
     # For updating, pass y_t and time_series by reference
     # y_t: Already a mutable object (numpy array)
     # time_series: Mutable object also
     r.set_solout(
         lambda t_l, y_l:
-        plot_successful_integration_step(
-            t_l,
-            y_l,
-            curves,
-            y_t,
-            time_series,
-            time_interval[1],
-            timer)
-    )
-    timer.timeout.connect(
-        lambda: r.integrate(time_interval[1])
-    )
-    timer.connected = True
-    timer.start(50)
-
-
-def gui_docks_p4_03_06_mpl(d_area, timer):
-    d1 = Dock('ADDITION POLYMERIZATION', size=(1, 1), closable=True)
-    matplotlib.pyplot.style.use('dark_background')
-    fig, ax = matplotlib.pyplot.subplots()
-    canvas = FigureCanvas(fig)
-    d1.addWidget(canvas)
-    d_area.addDock(d1, 'right')
-    timer.stop()
-    if timer.connected:
-        # Qt objects can have several connected slots.
-        # Not disconnecting them all causes previously
-        # running processes to continue when restarted.
-        timer.timeout.disconnect()
-
-    time_interval = [0, 150]
-
-    # noinspection PyUnusedLocal
-    def g(t, y):
-        k0, k1, k2, k3, k4, k5 = 0.01, 0.1, 0.1, 0.1, 0.1, 0.1
-        cm, cp1, cp2, cp3, cp4, cp5 = y  # len(y) == 5
-        # Note, in book dM/dt=+k0M - kM sum(P_n)
-        # Monomer only reacts, it should be dM/dt=-k0M - kM sum(P_n)
-        return [
-            -k0 * cm - k1 * cm * cp1 - k2 * cm *
-            cp2 - k3 * cm * cp3 - k4 * cm * cp4 -
-            k5 * cm * cp5,
-            +k0 * cm - k1 * cm * cp1,
-            +k1 * cm * cp1 - k2 * cm * cp2,
-            +k2 * cm * cp2 - k3 * cm * cp3,
-            +k3 * cm * cp3 - k4 * cm * cp4,
-            +k4 * cm * cp4 - k5 * cm * cp5,
-        ]
-
-    ax.set_xlabel('t')
-
-    y0 = [1.0, 0, 0, 0, 0, 0]
-    y_t = np.empty([20, len(y0)])
-    time_series = [time_interval[0]]
-    y_t[0, :] = y0
-
-    r = ode(
-        lambda t, y: g(t, y)
-    )
-    r.set_initial_value(y0, time_interval[0])
-    r.set_integrator('dopri5', nsteps=1)
-    # Add the legend before plotting, for it to pick up
-    # all the curves names and properties.
-    ax.set_xlim(left=0)
-    ax.set_ylim(bottom=0, top=1)
-    ax.legend()
-    ax.autoscale(enable=True, axis='x')
-
-    curves = [None] * len(y0)
-    curve_names = ['M']
-    for it in range(1, 5 + 1):
-        curve_names.append('P' + str(it))
-    for j, item_j in enumerate(y0):
-        pen_color = tuple(
-            [item/255.0 for item in random_color()]
-        )
-        marker_color = tuple(
-            [item/255.0 for item in random_color()]
-        )
-        marker = random_marker()
-        curves[j], = ax.plot(
-            [], [],
-            color=pen_color,
-            markeredgecolor=pen_color,
-            marker=marker,
-            markerfacecolor=marker_color,
-            label=curve_names[j]
-        )
-    ax.legend(handles=curves, loc='best', fancybox=True).draggable(True)
-
-    # For updating, pass y_t and time_series by reference
-    # y_t: Already a mutable object (numpy array)
-    # time_series: Mutable object also
-    r.set_solout(
-        lambda t_l, y_l:
-        plot_successful_integration_step_mpl(
+        opt_function(
             t_l,
             y_l,
             curves,
@@ -880,8 +829,7 @@ def add_which_dock(text, d_area, timer):
     elif text == 'P4.03.04':
         gui_docks_p4_03_04(d_area, timer)
     elif text == 'P4.03.06':
-        # gui_docks_p4_03_06(d_area, timer)
-        gui_docks_p4_03_06_mpl(d_area, timer)
+        gui_docks_p4_03_06(d_area, timer, use_mpl=True)
     elif text == 'P4.04.41':
         gui_docks_p4_04_41(d_area, timer)
     elif text == 'P4.04.53':
