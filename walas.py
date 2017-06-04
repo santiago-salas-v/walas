@@ -1,10 +1,14 @@
 # coding=utf-8
 import sys
 import string
+import time
 import numpy as np
 import matplotlib.cm as colormaps
 # noinspection PyUnresolvedReferences
 import PySide
+import matplotlib
+import matplotlib.pyplot
+from matplotlib.backends.backend_qt4agg import FigureCanvasQTAgg as FigureCanvas
 import pyqtgraph as pg
 from pyqtgraph.dockarea import DockArea, Dock
 from pyqtgraph.Qt import QtGui, QtCore
@@ -35,6 +39,7 @@ series_names = [item for item in string.ascii_uppercase]
 
 symbols = ['t', 't1', 't2', 't3', 's', 'p', 'h', 'star', '+', 'd']
 
+markers = matplotlib.markers.MarkerStyle.markers.keys()
 
 def random_color():
     return tuple(
@@ -53,6 +58,12 @@ def random_symbol():
             0, len(symbols), 1
         ).item()]
 
+
+def random_marker():
+    return markers[
+        np.random.randint(
+            0, len(markers), 1
+        ).item()]
 
 class tab_1_model(QtCore.QAbstractTableModel):
     # To populate tableview with right model and column formats
@@ -121,6 +132,32 @@ def plot_successful_integration_step(t_int, y_int, curves, y_t, t, t1, timer):
         timer.stop()
         return -1  # Stop integration
 
+def plot_successful_integration_step_mpl(t_int, y_int, curves, y_t, t, t1, timer):
+    pos = len(t)
+    if pos >= y_t.shape[0]:
+        tmp = y_t.shape[0]
+        y_t.resize(
+            [y_t.shape[0] * 2, y_t.shape[1]],
+            refcheck=False
+        )
+        y_t[tmp:, :] = np.empty(
+            [tmp, y_t.shape[1]]
+        )
+    if t_int > t[0]:
+        t.append(t_int)
+        y_t[pos] = y_int
+        pos += 1  # Ensure plotting gets right vector length
+    for j, curve in enumerate(curves):
+        curve.set_data(t, y_t[:pos, j])
+        curve.axes.relim()
+        curve.axes.autoscale_view()
+        curve.axes.figure.canvas.draw()
+        curve.axes.figure.canvas.flush_events()
+    if t1 is None:
+        return None
+    elif t_int >= t1:
+        timer.stop()
+        return -1  # Stop integration
 
 def solve_p2_04_01(b, b1, timer, plt,
                    non_linear=True):
@@ -560,6 +597,99 @@ def gui_docks_p4_03_06(d_area, timer):
     timer.start(50)
 
 
+def gui_docks_p4_03_06_mpl(d_area, timer):
+    d1 = Dock('ADDITION POLYMERIZATION', size=(1, 1), closable=True)
+    matplotlib.pyplot.style.use('dark_background')
+    fig, ax = matplotlib.pyplot.subplots()
+    canvas = FigureCanvas(fig)
+    d1.addWidget(canvas)
+    d_area.addDock(d1, 'right')
+    timer.stop()
+    if timer.connected:
+        # Qt objects can have several connected slots.
+        # Not disconnecting them all causes previously
+        # running processes to continue when restarted.
+        timer.timeout.disconnect()
+
+    time_interval = [0, 150]
+
+    # noinspection PyUnusedLocal
+    def g(t, y):
+        k0, k1, k2, k3, k4, k5 = 0.01, 0.1, 0.1, 0.1, 0.1, 0.1
+        cm, cp1, cp2, cp3, cp4, cp5 = y  # len(y) == 5
+        # Note, in book dM/dt=+k0M - kM sum(P_n)
+        # Monomer only reacts, it should be dM/dt=-k0M - kM sum(P_n)
+        return [
+            -k0 * cm - k1 * cm * cp1 - k2 * cm *
+            cp2 - k3 * cm * cp3 - k4 * cm * cp4 -
+            k5 * cm * cp5,
+            +k0 * cm - k1 * cm * cp1,
+            +k1 * cm * cp1 - k2 * cm * cp2,
+            +k2 * cm * cp2 - k3 * cm * cp3,
+            +k3 * cm * cp3 - k4 * cm * cp4,
+            +k4 * cm * cp4 - k5 * cm * cp5,
+        ]
+
+    ax.set_xlabel('t')
+
+    y0 = [1.0, 0, 0, 0, 0, 0]
+    y_t = np.empty([20, len(y0)])
+    time_series = [time_interval[0]]
+    y_t[0, :] = y0
+
+    r = ode(
+        lambda t, y: g(t, y)
+    )
+    r.set_initial_value(y0, time_interval[0])
+    r.set_integrator('dopri5', nsteps=1)
+    # Add the legend before plotting, for it to pick up
+    # all the curves names and properties.
+    ax.set_xlim(left=0)
+    ax.set_ylim(bottom=0, top=1)
+    ax.legend()
+    ax.autoscale(enable=True, axis='x')
+
+    curves = [None] * len(y0)
+    curve_names = ['M']
+    for it in range(1, 5 + 1):
+        curve_names.append('P' + str(it))
+    for j, item_j in enumerate(y0):
+        pen_color = tuple(
+            [item/255.0 for item in random_color()]
+        )
+        marker_color = tuple(
+            [item/255.0 for item in random_color()]
+        )
+        marker = random_marker()
+        curves[j], = ax.plot(
+            [], [],
+            color=pen_color,
+            markeredgecolor=pen_color,
+            marker=marker,
+            markerfacecolor=marker_color
+        )
+
+    # For updating, pass y_t and time_series by reference
+    # y_t: Already a mutable object (numpy array)
+    # time_series: Mutable object also
+    r.set_solout(
+        lambda t_l, y_l:
+        plot_successful_integration_step_mpl(
+            t_l,
+            y_l,
+            curves,
+            y_t,
+            time_series,
+            time_interval[1],
+            timer)
+    )
+    timer.timeout.connect(
+        lambda: r.integrate(time_interval[1])
+    )
+    timer.connected = True
+    timer.start(50)
+
+
 def gui_docks_p4_04_41(d_area, _):
     d1 = Dock('CSTR WITH HEATED RECYCLE 2A ==>> 2B',
               size=(1, 1), closable=True)
@@ -670,7 +800,7 @@ def gui_docks_p4_04_41(d_area, _):
 def gui_docks_p4_04_53(d_area, _):
     d1 = Dock('PUMPAROUND SYSTEM A<<==>>B',
               size=(1, 1), closable=True)
-    tab_1 = pg.TableWidget()
+    tab_1 = QtGui.QTableView()
     d1.addWidget(tab_1)
     d_area.addDock(d1, 'bottom')
 
@@ -710,11 +840,13 @@ def gui_docks_p4_04_53(d_area, _):
         10000
     ).x  # kcal/h
 
-    tab_1.set_data
+    tab_1.setModel(tab_1_model(
+        data=np.array([
 
-    tab_1.setHorizontalHeaderLabels(
-        ['n_a', 'T', 'k', 'K_e', 'Integrand', 'S']
-    )
+        ]),
+        column_names=['n_a', 'T', 'k', 'K_e', 'Integrand', 'S'],
+        column_formats=[]
+    ))
     tab_1.horizontalHeader().setResizeMode(
         QtGui.QHeaderView.ResizeToContents
     )
@@ -730,7 +862,8 @@ def add_which_dock(text, d_area, timer):
     elif text == 'P4.03.04':
         gui_docks_p4_03_04(d_area, timer)
     elif text == 'P4.03.06':
-        gui_docks_p4_03_06(d_area, timer)
+        # gui_docks_p4_03_06(d_area, timer)
+        gui_docks_p4_03_06_mpl(d_area, timer)
     elif text == 'P4.04.41':
         gui_docks_p4_04_41(d_area, timer)
     elif text == 'P4.04.53':
