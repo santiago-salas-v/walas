@@ -149,12 +149,25 @@ def plot_successful_integration_step_mpl(t_int, y_int, curves, y_t, t, t1, timer
         pos += 1  # Ensure plotting gets right vector length
     for j, curve in enumerate(curves):
         curve.set_data(t, y_t[:pos, j])
-    #curve.axes.draw_artist(curve.axes.patch)
-    #curve.axes.draw_artist(curve)
+        # Optimzation with artists:
+        # curve.axes.draw_artist(curve)
+    # for spine in curve.axes.spines.values():
+    #     curve.axes.draw_artist(spine)
+    #
+    # Relim and autoscale view:
     curve.axes.relim()
     curve.axes.autoscale_view()
+    #
+    # Use either canvas.draw() or optimization draw_artist
+    # for specific artists, and uptade:
     curve.axes.figure.canvas.draw()
-    #curve.axes.figure.canvas.update()
+    # Optimzation with artists:
+    # curve.axes.draw_artist(curve.axes.patch)
+    # curve.axes.draw_artist(curve.axes.xaxis)
+    # curve.axes.draw_artist(curve.axes.yaxis)
+    # curve.axes.figure.canvas.update()
+    #
+    # Flush events
     curve.axes.figure.canvas.flush_events()
     if t1 is None:
         return None
@@ -669,8 +682,10 @@ def gui_docks_p4_03_06_mpl(d_area, timer):
             color=pen_color,
             markeredgecolor=pen_color,
             marker=marker,
-            markerfacecolor=marker_color
+            markerfacecolor=marker_color,
+            label=curve_names[j]
         )
+    ax.legend(handles=curves, loc='best', fancybox=True).draggable(True)
 
     # For updating, pass y_t and time_series by reference
     # y_t: Already a mutable object (numpy array)
