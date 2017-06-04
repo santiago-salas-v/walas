@@ -149,10 +149,13 @@ def plot_successful_integration_step_mpl(t_int, y_int, curves, y_t, t, t1, timer
         pos += 1  # Ensure plotting gets right vector length
     for j, curve in enumerate(curves):
         curve.set_data(t, y_t[:pos, j])
-        curve.axes.relim()
-        curve.axes.autoscale_view()
-        curve.axes.figure.canvas.draw()
-        curve.axes.figure.canvas.flush_events()
+    #curve.axes.draw_artist(curve.axes.patch)
+    #curve.axes.draw_artist(curve)
+    curve.axes.relim()
+    curve.axes.autoscale_view()
+    curve.axes.figure.canvas.draw()
+    #curve.axes.figure.canvas.update()
+    curve.axes.figure.canvas.flush_events()
     if t1 is None:
         return None
     elif t_int >= t1:
