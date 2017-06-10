@@ -818,12 +818,76 @@ def gui_docks_p4_04_53(d_area, _):
         QtGui.QHeaderView.ResizeToContents
     )
 
+def gui_docks_p3_02_58(d_area, _):
+    d1 = Dock('IODINATION, FOURTH ORDER',
+              size=(1, 1), closable=True)
+    d2 = Dock('IODINATION, FOURTH ORDER',
+              size=(1, 1), closable=True)
+    tab_1 = QtGui.QTableView()
+    matplotlib.pyplot.style.use('dark_background')
+    fig, ax = matplotlib.pyplot.subplots()
+    p1 = FigureCanvas(fig)
+    ax.set_xlabel('t')
+    ax.autoscale(enable=True, axis='x')
+
+    cici_vs_t = np.array([
+        [0, 0.1750],
+        [1, 0.0815],
+        [3, 0.0519],
+        [5, 0.0409],
+        [7.5, 0.0341],
+        [10, 0.0294],
+        [13, 0.0261],
+        [15.5, 0.0239],
+        [17, 0.0229],
+        [20, 0.0210],
+        [24, 0.0191]
+    ], dtype=float)
+
+    pen_color = tuple(
+        [item / 255.0 for item in random_color()]
+    )
+    marker_color = tuple(
+        [item / 255.0 for item in random_color()]
+    )
+    marker = random_marker()
+
+    ax.plot(cici_vs_t[:, 0], cici_vs_t[:, 1],
+            color=pen_color,
+            markeredgecolor=pen_color,
+            marker=marker,
+            markerfacecolor=marker_color,
+            label='$C_{ICI} vs. t$'
+            )
+
+    ax.legend()
+
+    tab_1_data = np.append(
+        cici_vs_t,
+        np.empty([cici_vs_t.shape[0],3]),
+        1
+    )
+
+    tab_1.setModel(tab_1_model(
+        data=tab_1_data,
+        column_names=['t', 'C_{ICI}', 'k1', 'k2', 'k3'],
+        column_formats=['g', '1.3f', '1.3f', '1.3f', '1.3f']
+    ))
+
+
+    d1.addWidget(tab_1)
+    d2.addWidget(p1)
+    d_area.addDock(d1, 'bottom')
+    d_area.addDock(d2, 'right')
+    pass
 
 def add_which_dock(text, d_area, timer):
     if text == 'P2.04.01':
         gui_docks_p2_04_01(d_area, timer)
     elif text == 'P2.04.02':
         gui_docks_p2_04_02(d_area, timer)
+    elif text == 'P3.02.58':
+        gui_docks_p3_02_58(d_area, timer)
     elif text == 'P4.03.01':
         gui_docks_p4_03_01(d_area, timer)
     elif text == 'P4.03.04':
@@ -854,12 +918,13 @@ wind.setLayout(vlayout_0)
 wind.setWindowTitle('Walas problems')
 wind.resize(app_width, app_height)
 
-covered_chapters = [2, 4]
+covered_chapters = [2, 3, 4]
 chapter_texts = dict(zip(
     covered_chapters,
     [
-        'REACTION RATES AND OPERATING MODES',
-        'IDEAL REACTORS'
+        '2. REACTION RATES AND OPERATING MODES',
+        '3. TREATMENT OF EXPERIMENTAL DATA',
+        '4. IDEAL REACTORS'
     ]
 ))
 chapter_problems = dict(zip(
@@ -868,6 +933,8 @@ chapter_problems = dict(zip(
         zip(['P2.04.01', 'P2.04.02'],
             ['ALKYLATION OF ISOPROPYLBENZENE',
              'DIFFUSION AND SOLID CATALYSIS']),
+        zip(['P3.02.58'],
+            ['IODINATION. FOURTH ORDER']),
         zip(['P4.03.01', 'P4.03.04', 'P4.03.06',
              'P4.04.41', 'P4.04.53'],
             ['GLUCONIC ACID BY FERMENTATION',
