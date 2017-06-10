@@ -818,6 +818,7 @@ def gui_docks_p4_04_53(d_area, _):
         QtGui.QHeaderView.ResizeToContents
     )
 
+
 def gui_docks_p3_02_58(d_area, _):
     d1 = Dock('IODINATION, FOURTH ORDER',
               size=(1, 1), closable=True)
@@ -828,7 +829,7 @@ def gui_docks_p3_02_58(d_area, _):
     fig, ax = matplotlib.pyplot.subplots()
     p1 = FigureCanvas(fig)
     ax.set_xlabel('t')
-    ax.autoscale(enable=True, axis='x')
+    ax.autoscale(enable=True, axis='x|y')
 
     cici_vs_t = np.array([
         [0, 0.1750],
@@ -844,6 +845,21 @@ def gui_docks_p3_02_58(d_area, _):
         [24, 0.0191]
     ], dtype=float)
 
+    cici0 = cici_vs_t[0, 1]
+    ki = np.empty([cici_vs_t.shape[0], 3], dtype=float)
+    for row, k in enumerate(ki):
+        t = cici_vs_t[row, 0]
+        cici = cici_vs_t[row, 1]
+        for q in range(1, 4, 1):
+            if q == 1 and t != 0:
+                k[q - 1] = np.log(cici0 / cici)
+            elif q != 1 and t != 0:
+                k[q - 1] = \
+                    1 / (t * (q - 1)) * \
+                    (1 / (cici ** (q - 1)) - 1 / (cici0 ** (q - 1)))
+            else:
+                k[q - 1] = np.nan
+
     pen_color = tuple(
         [item / 255.0 for item in random_color()]
     )
@@ -853,6 +869,7 @@ def gui_docks_p3_02_58(d_area, _):
     marker = random_marker()
 
     ax.plot(cici_vs_t[:, 0], cici_vs_t[:, 1],
+            linestyle='None',
             color=pen_color,
             markeredgecolor=pen_color,
             marker=marker,
@@ -864,7 +881,7 @@ def gui_docks_p3_02_58(d_area, _):
 
     tab_1_data = np.append(
         cici_vs_t,
-        np.empty([cici_vs_t.shape[0],3]),
+        np.array(ki),
         1
     )
 
@@ -873,13 +890,15 @@ def gui_docks_p3_02_58(d_area, _):
         column_names=['t', 'C_{ICI}', 'k1', 'k2', 'k3'],
         column_formats=['g', '1.3f', '1.3f', '1.3f', '1.3f']
     ))
-
+    tab_1.horizontalHeader().setResizeMode(
+        QtGui.QHeaderView.ResizeToContents
+    )
 
     d1.addWidget(tab_1)
     d2.addWidget(p1)
     d_area.addDock(d1, 'bottom')
     d_area.addDock(d2, 'right')
-    pass
+
 
 def add_which_dock(text, d_area, timer):
     if text == 'P2.04.01':
