@@ -847,19 +847,6 @@ def gui_docks_p3_02_58(d_area, _):
     ], dtype=float)
 
     cici0 = cici_vs_t[0, 1]
-    ki = np.empty([cici_vs_t.shape[0], 3], dtype=float)
-    for row, k in enumerate(ki):
-        t = cici_vs_t[row, 0]
-        cici = cici_vs_t[row, 1]
-        for q in range(1, 4, 1):
-            if q == 1 and t != 0:
-                k[q - 1] = np.log(cici0 / cici)
-            elif q != 1 and t != 0:
-                k[q - 1] = \
-                    1 / (t * (q - 1)) * \
-                    (1 / (cici ** (q - 1)) - 1 / (cici0 ** (q - 1)))
-            else:
-                k[q - 1] = np.nan
 
     pen_color = tuple(
         [item / 255.0 for item in random_color()]
@@ -878,25 +865,12 @@ def gui_docks_p3_02_58(d_area, _):
             label='$C_{ICI} vs. t$'
             )
 
-    tab_1_data = np.append(
-        cici_vs_t,
-        np.array(ki),
-        1
-    )
-
-    tab_1.setModel(tab_1_model(
-        data=tab_1_data,
-        column_names=['t', 'C_{ICI}', 'k1', 'k2', 'k3'],
-        column_formats=['g', '1.3f', '1.3f', '1.3f', '1.3f']
-    ))
-    tab_1.horizontalHeader().setResizeMode(
-        QtGui.QHeaderView.ResizeToContents
-    )
-
-    def residuals(p, y, x):
+    def residuals(p, x, y):
         q, k_q = p
         t = x
         cici = y
+        # linear form: 0 = 1 - k_q * t * (q-1) * cici^(q-1) -
+        #                                (cici/cici0)^(q-1)
         return 1 - k_q * t * (q - 1) * cici ** (q - 1)  - \
             (cici / cici0)**(q - 1)
 
@@ -909,8 +883,8 @@ def gui_docks_p3_02_58(d_area, _):
 
     max_t = int(round(max(cici_vs_t[:, 0]), 0))
     x_plot_range = np.arange(0, max_t + 1, (max_t + 1 - 0) / 100.0)
-    y_plot_range = 1 / (k_q_lsq * (q_lsq - 1) * x_plot_range +
-                        1 / cici0**(q_lsq - 1))**(1 / (1 - q_lsq))
+    y_plot_range = (k_q_lsq * (q_lsq - 1) * x_plot_range +
+                    1 / cici0**(q_lsq - 1))**(1 / (1 - q_lsq))
     k_q_str = '{0:1.4g}'.format(k_q_lsq)
     q_str = '{0:1.4g}'.format(q_lsq)
     pen_color = tuple(
@@ -933,6 +907,40 @@ def gui_docks_p3_02_58(d_area, _):
             )
 
     ax.legend()
+
+    ki = np.empty([cici_vs_t.shape[0], 3 + 1], dtype=float)
+    q = range(1, 4, 1)
+    q.append(q_lsq)
+    for row, k in enumerate(ki):
+        t = cici_vs_t[row, 0]
+        cici = cici_vs_t[row, 1]
+        for col in range(len(q)):
+            if q[col] == 1 and t != 0:
+                k[col] = np.log(cici0 / cici)
+            elif q[col] != 1 and t != 0:
+                k[col] = \
+                    1 / (t * (q[col] - 1)) * \
+                    (1 / (cici ** (q[col] - 1)) - 1 /
+                     (cici0 ** (q[col] - 1)))
+            else:
+                k[col] = np.nan
+
+    tab_1_data = np.append(
+        cici_vs_t,
+        np.array(ki),
+        1
+    )
+
+    tab_1.setModel(tab_1_model(
+        data=tab_1_data,
+        column_names=['t', 'C_{ICI}', 'k1', 'k2', 'k3',
+                      'k' + '{0:1.3f}'.format(q_lsq)],
+        column_formats=['g', '1.3f', '1.3f', '1.3f', '1.3f',
+                        '1.3f']
+    ))
+    tab_1.horizontalHeader().setResizeMode(
+        QtGui.QHeaderView.ResizeToContents
+    )
 
     d1.addWidget(tab_1)
     d2.addWidget(p1)
