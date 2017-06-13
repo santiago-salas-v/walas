@@ -13,7 +13,8 @@ import pyqtgraph as pg
 from pyqtgraph.dockarea import DockArea, Dock
 from pyqtgraph.Qt import QtGui, QtCore
 from scipy.integrate import ode, quad
-from scipy.optimize import root
+from scipy.optimize import root, leastsq
+
 
 app = QtGui.QApplication([])
 dpi_res = 250
@@ -877,8 +878,6 @@ def gui_docks_p3_02_58(d_area, _):
             label='$C_{ICI} vs. t$'
             )
 
-    ax.legend()
-
     tab_1_data = np.append(
         cici_vs_t,
         np.array(ki),
@@ -893,6 +892,47 @@ def gui_docks_p3_02_58(d_area, _):
     tab_1.horizontalHeader().setResizeMode(
         QtGui.QHeaderView.ResizeToContents
     )
+
+    def residuals(p, y, x):
+        q, k_q = p
+        t = x
+        cici = y
+        return 1 - k_q * t * (q - 1) * cici ** (q - 1)  - \
+            (cici / cici0)**(q - 1)
+
+    plsq = leastsq(
+        residuals,
+        [float(3), float(58)],
+        args=(cici_vs_t[:, 0], cici_vs_t[:, 1])
+    )
+    q_lsq, k_q_lsq = plsq[0]
+
+    max_t = int(round(max(cici_vs_t[:, 0]), 0))
+    x_plot_range = np.arange(0, max_t + 1, (max_t + 1 - 0) / 100.0)
+    y_plot_range = 1 / (k_q_lsq * (q_lsq - 1) * x_plot_range +
+                        1 / cici0**(q_lsq - 1))**(1 / (1 - q_lsq))
+    k_q_str = '{0:1.4g}'.format(k_q_lsq)
+    q_str = '{0:1.4g}'.format(q_lsq)
+    pen_color = tuple(
+        [item / 255.0 for item in random_color()]
+    )
+    marker_color = tuple(
+        [item / 255.0 for item in random_color()]
+    )
+    marker = 'None'
+    ax.plot(x_plot_range, y_plot_range,
+            linestyle='-',
+            color=pen_color,
+            markeredgecolor=pen_color,
+            marker=marker,
+            markerfacecolor=marker_color,
+            label='$' + k_q_str +
+                  '=1/(t*(' + q_str + '-1))*' +
+                  '(1/ C_{ICI}^{' + q_str + '-1}' +
+                  '-1/ 0.175^{' + q_str + '-1})' + '$'
+            )
+
+    ax.legend()
 
     d1.addWidget(tab_1)
     d2.addWidget(p1)
