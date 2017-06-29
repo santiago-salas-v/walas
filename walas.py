@@ -732,15 +732,6 @@ def gui_docks_p4_04_41(d_area, _):
             2.0 * v_r * k(t1) * (na1 / v_flow_0)**2
         ]
 
-    # q = root(
-    #     lambda q_load:
-    #     + q_load
-    #     + m0*cp*(temp0 - temp)
-    #     + m0*cp*(temp_r - temp)*x
-    #     + m0*cp*(temp - temp_r)
-    #     + (-delta_hr)*x*na0 # =0
-    # ).x # kcal/h
-
     soln_at_rec = []
     for recycle in [float(x) / 5.0 for x in range(0, 5 + 1, 1)]:
         sol = root(
@@ -784,36 +775,59 @@ def gui_docks_p4_04_53(d_area, _):
     #                               = Kc na/na0 = Kc (1-90%)
     #          ==>>    Kc = nb / na = 90%/(1-90%)
     temp = root(
-        lambda temp: ke(temp) - 0.9 / (1 - 0.9), 300.0
+        lambda temp: ke(temp) - 90.0 / (100.0 - 90.0), 300.0
     ).x
 
     # A<<==>>B delta_Hr = 19870.0 cal/gmolA
     delta_hr = 19870.0  # cal/gmolA, exot.
     cp = 0.50  # cal/(gm K)
     k1 = k(temp)  # 1/h
+    ketf = ke(temp)  # adim
     m0 = 10000  # kg/h
     na0 = 50  # kgmol/h
     vf0 = 5000  # L/h
     temp0 = 300.0  # K
-    temp_r = 60.0  # K
-    x = 0.80  # actual conversion
+    delta_t = 60.0  # K
+    xa = 0.80  # actual conversion
+    naf = (1 - xa) * na0  # kgmol/h , net reactor outlet
+    # proportion due to stoich. nb0=0, nb/na = xa/(1-xa)
+    nbf = xa / (1 - xa) * naf
+    temp_f = temp - delta_t
 
+    # Balance on complete system with reaction
     q = root(
         lambda q_load:
         + q_load
-        + m0 * cp * (temp0 - temp)
-        + m0 * cp * (temp_r - temp) * x
-        + m0 * cp * (temp - temp_r)
-        + (-delta_hr) * x * na0,  # = 0
+        + m0 * cp * temp0
+        - m0 * cp * temp_f
+        + (delta_hr) * xa * na0,  # = 0
         10000
     ).x  # kcal/h
 
+    # Balance on heat exchanger
+    mt = q / (cp * (temp0 - temp_f))  # feed + recycle
+    mr = mt - m0  # recycle
+    nar = mr / m0 * naf  # recycled along with mass proportion
+    # proportion due to stoich. nb0=0, nb/na = xa/(1-xa)
+    nbr = xa / (1 - xa) * nar
+
+    # Conc. in tank (Assune A and B are solutes with ~ high density)
+    ca = na0 * (1 - xa) / vf0  # kgmol/L , conc. in CSTR
+    # proportion due to stoich. nb0=0, nb/na = xa/(1-xa)
+    cb = xa / (1 - xa) * ca
+    # ra = r1 - r1' = k1ca - k1'cb = k1/vf0 * (na - 1/Ke * nb)
+    ra = k1 * (ca - 1 / ketf * cb)  # kgmol / (L h)
+    vr = root(
+        lambda vr: - na0 + naf + ra * vr,  # = 0
+        100.0
+    )
+
     tab_1.setModel(tab_1_model(
         data=np.array([
-
+            na0, temp, k1, ketf, q, q
         ]),
         column_names=['n_a', 'T', 'k', 'K_e', 'Integrand', 'S'],
-        column_formats=[]
+        column_formats=['%1.3g'] * 6
     ))
     tab_1.horizontalHeader().setResizeMode(
         QtGui.QHeaderView.ResizeToContents
@@ -876,7 +890,7 @@ def gui_docks_p3_02_58(d_area, _):
 
     plsq = leastsq(
         residuals,
-        [float(3), float(58)],
+        [float(2), float(58)],
         args=(cici_vs_t[:, 0], cici_vs_t[:, 1])
     )
     q_lsq, k_q_lsq = plsq[0]
