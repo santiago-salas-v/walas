@@ -776,10 +776,10 @@ def gui_docks_p4_04_53(d_area, _):
     #          ==>>    Kc = nb / na = 90%/(1-90%)
     temp = root(
         lambda temp: ke(temp) - 90.0 / (100.0 - 90.0), 300.0
-    ).x
+    ).x.item()
 
     # A<<==>>B delta_Hr = 19870.0 cal/gmolA
-    delta_hr = 19870.0  # cal/gmolA, exot.
+    delta_hr = -19870.0  # cal/gmolA, exot.
     cp = 0.50  # cal/(gm K)
     k1 = k(temp)  # 1/h
     ketf = ke(temp)  # adim
@@ -800,7 +800,7 @@ def gui_docks_p4_04_53(d_area, _):
         + q_load
         + m0 * cp * temp0
         - m0 * cp * temp_f
-        + (delta_hr) * xa * na0,  # = 0
+        + (-delta_hr) * xa * na0,  # = 0
         10000
     ).x  # kcal/h
 
@@ -822,12 +822,40 @@ def gui_docks_p4_04_53(d_area, _):
         100.0
     )
 
+    tab_variables = []
+    na0st = na0 * (1 - xa)
+    t0st = temp_f
+
+    def opt_na(na):
+        t = t0st + (-delta_hr) / (m0 * cp) * (na0st - na)
+        k1 = k(t)
+        ketf = ke(t)
+        summation, err = quad(
+            lambda na_var: 1 / (k1 * (na_var - (na0 - na_var) / ketf)),
+            na, na0st
+        )
+        return summation, t, k1, ketf
+
+    for na in [10, 9.5, 9.0, 8.67, 8.5]:
+        # 0 = m0cp T0 - m0cp T + (-delta_Hr)*na0*xa
+        # -delta_Hr (naf - na) = m0 cp (T - T0)
+        summation, t, k1, ketf = opt_na(na)
+        tab_variables.append(
+            [na, t, k1, ketf, summation]
+        )
+
+    final_na = root(
+        lambda na: 2500.0 / 5000.0 - opt_na(na)[0], na0st
+    )
+    summation, t, k1, ketf = opt_na(final_na.x)
+    tab_variables.append(
+        [final_na.x, t, k1, ketf, summation]
+    )
+
     tab_1.setModel(tab_1_model(
-        data=np.array([
-            na0, temp, k1, ketf, q, q
-        ]),
-        column_names=['n_a', 'T', 'k', 'K_e', 'Integrand', 'S'],
-        column_formats=['%1.3g'] * 6
+        data=np.array(tab_variables),
+        column_names=['n', 'T', 'k', 'K_e', 'S'],
+        column_formats=['1.5g'] * 6
     ))
     tab_1.horizontalHeader().setResizeMode(
         QtGui.QHeaderView.ResizeToContents
