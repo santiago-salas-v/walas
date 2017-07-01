@@ -990,6 +990,25 @@ def gui_docks_p3_02_58(d_area, _):
     d_area.addDock(d2, 'right')
 
 
+def gui_docks_a4_04_53(d_area, _):
+    d1 = Dock('Arno Zweistufiger Prozess',
+              size=(1, 1), closable=True)
+    tab_1 = QtGui.QTableView()
+    fig, ax = matplotlib.pyplot.subplots()
+    p1 = FigureCanvas(fig)
+    ax.set_xlabel('t')
+    ax.autoscale(enable=True, axis='x|y')
+
+    emax = 0.97
+    fmax = 0.95
+    cazu = 1.0 # kmol/m3
+    v10 = 0.01;v20 = 0.01 #m3
+    v1min = 0.01;v2min = 0.01
+    v1voll = 1.0;v2voll = 1.0
+    v0 = 1e-03;v12=1e-03;v2=1e-03 #m3/s
+    k2=100;k2r=100.0;k3=1.0;k4=1e-03
+
+
 def add_which_dock(text, d_area, timer):
     if text == 'P2.04.01':
         gui_docks_p2_04_01(d_area, timer)
@@ -1007,6 +1026,8 @@ def add_which_dock(text, d_area, timer):
         gui_docks_p4_04_41(d_area, timer)
     elif text == 'P4.04.53':
         gui_docks_p4_04_53(d_area, timer)
+    elif text == 'A4.1.2':
+        gui_docks_a4_04_53(d_area, timer)
 
 wind = QtGui.QWidget()
 area = DockArea()
@@ -1027,47 +1048,64 @@ wind.setLayout(vlayout_0)
 wind.setWindowTitle('Walas problems')
 wind.resize(app_width, app_height)
 
-covered_chapters = [2, 3, 4]
-chapter_texts = dict(zip(
-    covered_chapters,
+chapter_layout = [
     [
-        '2. REACTION RATES AND OPERATING MODES',
-        '3. TREATMENT OF EXPERIMENTAL DATA',
-        '4. IDEAL REACTORS'
-    ]
-))
-chapter_problems = dict(zip(
-    covered_chapters,
+        2,
+        'REACTION RATES AND OPERATING MODES',
+        [
+            ['P2.04.01', 'ALKYLATION OF ISOPROPYLBENZENE'],
+            ['P2.04.02', 'DIFFUSION AND SOLID CATALYSIS'],
+        ]
+    ],
     [
-        zip(['P2.04.01', 'P2.04.02'],
-            ['ALKYLATION OF ISOPROPYLBENZENE',
-             'DIFFUSION AND SOLID CATALYSIS']),
-        zip(['P3.02.58'],
-            ['IODINATION. FOURTH ORDER']),
-        zip(['P4.03.01', 'P4.03.04', 'P4.03.06',
-             'P4.04.41', 'P4.04.53'],
-            ['GLUCONIC ACID BY FERMENTATION',
-             'CONSECUTIVE REVERSIBLE REACTIONS',
-             'ADDITION POLYMERIZATION',
-             'CSTR WITH HEATED RECYCLE',
-             'PUMPAROUND SYSTEM'])
+        3,
+        'TREATMENT OF EXPERIMENTAL DATA',
+        [
+            ['P3.02.58', 'IODINATION. FOURTH ORDER']
+        ]
+    ],
+    [
+        4,
+        'IDEAL REACTORS',
+        [
+            ['P4.03.01', 'GLUCONIC ACID BY FERMENTATION'],
+            ['P4.03.04', 'CONSECUTIVE REVERSIBLE REACTIONS'],
+            ['P4.03.06', 'ADDITION POLYMERIZATION'],
+            ['P4.04.41', 'CSTR WITH HEATED RECYCLE'],
+            ['P4.04.53', 'PUMPAROUND SYSTEM']
+        ]
+    ],
+    [
+        'ARNO 4.1',
+        'ZWEISTUFIGER PROZESS',
+        [
+            ['A4.1.2', 'Zweistufiger Prozess'],
+        ]
     ]
-))
+]
+
 problem_counter = 0
-tree.setColumnCount(len(covered_chapters))
-for chapter in covered_chapters:
-    locals()['ti' + str(chapter)] = QtGui.QTreeWidgetItem()
-    tix = locals()['ti' + str(chapter)]
+tree.setColumnCount(len(chapter_layout))
+for chapter in chapter_layout:
+    chapter_code = chapter[0]
+    chapter_text = chapter[1]
+    chapter_problems = chapter[2]
+    if not isinstance(chapter_code, str):
+        chapter_title = 'CHAPTER ' + str(chapter_code) + '. '
+    else:
+        chapter_title = chapter_code
+    locals()['ti' + str(chapter_code)] = QtGui.QTreeWidgetItem()
+    tix = locals()['ti' + str(chapter_code)]
     tix.setText(
-        0, 'CHAPTER ' + str(chapter) + '.')
+        0, chapter_title)
     tix.setText(
-        1, chapter_texts[chapter]
+        1, chapter_text
     )
     tree.addTopLevelItem(tix)
-    for problem in chapter_problems[chapter]:
+    for problem in chapter_problems:
         problem_counter += 1
-        name_item = 'ti' + str(chapter) + str(problem_counter) + str(1)
-        name_label = 'lab_' + str(chapter) + str(problem_counter) + str(1)
+        name_item = 'ti' + str(chapter_code) + str(problem_counter) + str(1)
+        name_label = 'lab_' + str(chapter_code) + str(problem_counter) + str(1)
         locals()[name_item] = QtGui.QTreeWidgetItem([problem[0]])
         locals()[name_label] = QtGui.QLabel(problem[1])
         tix.addChild(locals()[name_item])
