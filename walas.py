@@ -272,7 +272,7 @@ def solve_p2_04_01(b, b1, timer, plt,
     timer.start(50)
 
 
-def gui_docks_p2_04_01(d_area, timer):
+def gui_docks_p2_04_01(d_area, timer, title=None):
     vlayout_1 = pg.LayoutWidget()
     vlayout_2 = pg.LayoutWidget()
     p_2 = pg.PlotWidget(name='Plot_2')
@@ -338,8 +338,8 @@ def gui_docks_p2_04_01(d_area, timer):
     )
 
 
-def gui_docks_p2_04_02(d_area, _):
-    d1 = Dock('Table', size=(1, 1), closable=True)
+def gui_docks_p2_04_02(d_area, _, title=None):
+    d1 = Dock(title, size=(1, 1), closable=True)
     tab_1 = pg.TableWidget()
     d1.addWidget(tab_1)
     d_area.addDock(d1, 'right')
@@ -380,8 +380,8 @@ def gui_docks_p2_04_02(d_area, _):
     )
 
 
-def gui_docks_p4_03_01(d_area, timer):
-    d1 = Dock('Y3, GLUCONIC ACID BY FERMENTATION',
+def gui_docks_p4_03_01(d_area, timer, title=None):
+    d1 = Dock(title,
               size=(1, 1), closable=True)
     p1 = pg.PlotWidget(name='Plot 1')
     d1.addWidget(p1)
@@ -459,7 +459,7 @@ def gui_docks_p4_03_01(d_area, timer):
     timer.start(50)
 
 
-def gui_docks_p4_03_04(d_area, timer):
+def gui_docks_p4_03_04(d_area, timer, title=None):
     d1 = Dock('A<<==>>B<<==>>C', size=(1, 1), closable=True)
     p1 = pg.PlotWidget(name='Plot 1')
     d1.addWidget(p1)
@@ -534,7 +534,7 @@ def gui_docks_p4_03_04(d_area, timer):
     timer.start(50)
 
 
-def gui_docks_p4_03_06(d_area, timer, use_mpl):
+def gui_docks_p4_03_06(d_area, timer, title=None, use_mpl=False):
     d1 = Dock('ADDITION POLYMERIZATION', size=(1, 1), closable=True)
     vlayout = pg.LayoutWidget()
     b1 = QtGui.QPushButton()
@@ -578,7 +578,7 @@ def gui_docks_p4_03_06(d_area, timer, use_mpl):
         ax.set_title('C vs. t (using mpl)')
         b1.setText('test pyqtgraph')
         b1.clicked.connect(
-            lambda: gui_docks_p4_03_06(d_area, timer, use_mpl=False)
+            lambda: gui_docks_p4_03_06(d_area, timer, title=None, use_mpl=False)
         )
     else:
         p1 = pg.PlotWidget(name='Plot 1')
@@ -602,7 +602,7 @@ def gui_docks_p4_03_06(d_area, timer, use_mpl):
         p1.setWindowTitle('C vs. t (using pyqtgraph)')
         b1.setText('test mpl')
         b1.clicked.connect(
-            lambda: gui_docks_p4_03_06(d_area, timer, use_mpl=True)
+            lambda: gui_docks_p4_03_06(d_area, timer, title=None, use_mpl=True)
         )
     vlayout.addWidget(p1, 0, 0)
     vlayout.addWidget(b1, 1, 0)
@@ -658,7 +658,7 @@ def gui_docks_p4_03_06(d_area, timer, use_mpl):
     timer.start(50)
 
 
-def gui_docks_p4_04_41(d_area, _):
+def gui_docks_p4_04_41(d_area, _, title=None):
     d1 = Dock('CSTR WITH HEATED RECYCLE 2A ==>> 2B',
               size=(1, 1), closable=True)
     tab_1 = QtGui.QTableView()
@@ -756,7 +756,7 @@ def gui_docks_p4_04_41(d_area, _):
     )
 
 
-def gui_docks_p4_04_53(d_area, _):
+def gui_docks_p4_04_53(d_area, _, title=None):
     d1 = Dock('PUMPAROUND SYSTEM A<<==>>B',
               size=(1, 1), closable=True)
     tab_1 = QtGui.QTableView()
@@ -862,7 +862,7 @@ def gui_docks_p4_04_53(d_area, _):
     )
 
 
-def gui_docks_p3_02_58(d_area, _):
+def gui_docks_p3_02_58(d_area, _, title=None):
     d1 = Dock('IODINATION, FOURTH ORDER',
               size=(1, 1), closable=True)
     d2 = Dock('IODINATION, FOURTH ORDER',
@@ -990,7 +990,7 @@ def gui_docks_p3_02_58(d_area, _):
     d_area.addDock(d2, 'right')
 
 
-def gui_docks_a4_04_53(d_area, _):
+def gui_docks_a4_04_53(d_area, _, title=None):
     d1 = Dock('Arno Zweistufiger Prozess',
               size=(1, 1), closable=True)
     tab_1 = QtGui.QTableView()
@@ -1009,25 +1009,25 @@ def gui_docks_a4_04_53(d_area, _):
     k2=100;k2r=100.0;k3=1.0;k4=1e-03
 
 
-def add_which_dock(text, d_area, timer):
+def add_which_dock(text, d_area, timer, title):
     if text == 'P2.04.01':
-        gui_docks_p2_04_01(d_area, timer)
+        gui_docks_p2_04_01(d_area, timer, title)
     elif text == 'P2.04.02':
-        gui_docks_p2_04_02(d_area, timer)
+        gui_docks_p2_04_02(d_area, timer, title)
     elif text == 'P3.02.58':
-        gui_docks_p3_02_58(d_area, timer)
+        gui_docks_p3_02_58(d_area, timer, title)
     elif text == 'P4.03.01':
-        gui_docks_p4_03_01(d_area, timer)
+        gui_docks_p4_03_01(d_area, timer, title)
     elif text == 'P4.03.04':
-        gui_docks_p4_03_04(d_area, timer)
+        gui_docks_p4_03_04(d_area, timer, title)
     elif text == 'P4.03.06':
-        gui_docks_p4_03_06(d_area, timer, use_mpl=True)
+        gui_docks_p4_03_06(d_area, timer, title, use_mpl=True)
     elif text == 'P4.04.41':
-        gui_docks_p4_04_41(d_area, timer)
+        gui_docks_p4_04_41(d_area, timer, title)
     elif text == 'P4.04.53':
-        gui_docks_p4_04_53(d_area, timer)
+        gui_docks_p4_04_53(d_area, timer, title)
     elif text == 'A4.1.2':
-        gui_docks_a4_04_53(d_area, timer)
+        gui_docks_a4_04_53(d_area, timer, title)
 
 wind = QtGui.QWidget()
 area = DockArea()
@@ -1123,7 +1123,8 @@ tree.setHeaderHidden(True)
 # noinspection PyUnresolvedReferences
 tree.itemClicked.connect(
     lambda it, column:
-    add_which_dock(it.text(0), area, shared_timer)
+    add_which_dock(it.text(0), area, shared_timer,
+                   tree.itemWidget(it, 1).text())
 )
 # noinspection PyUnresolvedReferences
 btn_3.clicked.connect(
