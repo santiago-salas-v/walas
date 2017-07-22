@@ -1075,19 +1075,31 @@ def gui_docks_ue3_1(d_area, _, title=None):
     tab1_data = np.array(
         [
             [
-                'xs02', 'xn2', 'xo2', 'xso3', 'n', 'csi1', 'u'
+                'xso2', 'xn2', 'xo2', 'xso3', 'n', 'csi1', 'U', 'n0', 'n/n0'
             ],
-            np.append(var0, 0),
-            np.append(soln.x, 1 - xso2/x0so2 * n / n0 )
+            np.append(var0, [0, n0, 0]),
+            np.append(soln.x, [1 - xso2/x0so2 * n / n0, n0, n/n0])
         ],
         dtype=object
-    ).T
+    )
+
+    for n0 in range(1,20):
+        var0[-2] = n0
+        new_root = root(func_set, var0)
+        xso2, xn2, xo2, xso3, n, csi1 = new_root.x
+        new_row = np.append(new_root.x, [1 - xso2/x0so2 * n / n0, n0, n/n0])
+        tab1_data = np.append(
+            tab1_data,
+            new_row.reshape([1,len(new_row)]), axis=0
+        )
 
     tab_1.setModel(
         tab_1_model(
-            data = tab1_data,
-            column_names=['Var', 'Val(init)', 'Val(eq)'],
-            column_formats= [str, 'g', 'g']
+            data = tab1_data.T,
+            column_names=['Var', 'Val(init)', 'Val(eq)'] +
+                         ['Val(eq)'] * (len(tab1_data) - 3),
+            column_formats= [str, 'g', 'g'] +
+                            ['g'] * (len(tab1_data) - 3)
         )
     )
 
