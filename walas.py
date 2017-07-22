@@ -95,14 +95,22 @@ class tab_1_model(QtCore.QAbstractTableModel):
     def data(self, index, role=QtCore.Qt.DisplayRole):
         if index.isValid():
             if role == QtCore.Qt.DisplayRole:
-                # Format of columns: '1.2f', '1.2e', etc.
-                column_format = \
-                    '{0:' + \
-                    self._column_formats[index.column()] + \
-                    '}'
-                return column_format.format(
-                    self._data[index.row(), index.column()]
-                )
+                # If format is a function, use function.
+                # Else a number format
+                format_of_index = self._column_formats[index.column()]
+                if callable(format_of_index):
+                    return format_of_index(
+                        self._data[index.row(), index.column()]
+                    )
+                else:
+                    # Format of columns: '1.2f', '1.2e', etc.
+                    column_format = \
+                        '{0:' + \
+                         format_of_index + \
+                        '}'
+                    return column_format.format(
+                        self._data[index.row(), index.column()]
+                    )
 
 
 def stop_shared_timer(timer):
@@ -991,9 +999,9 @@ def gui_docks_p3_02_58(d_area, _, title=None):
 
 
 def gui_docks_a4_04_53(d_area, _, title=None):
-    d1 = Dock('Arno Zweistufiger Prozess',
-              size=(1, 1), closable=True)
-    tab_1 = QtGui.QTableView()
+    d1 = Dock(title,
+              size=(1, 1), closable=True
+              )
     fig, ax = matplotlib.pyplot.subplots()
     p1 = FigureCanvas(fig)
     ax.set_xlabel('t')
@@ -1007,6 +1015,91 @@ def gui_docks_a4_04_53(d_area, _, title=None):
     v1voll = 1.0;v2voll = 1.0
     v0 = 1e-03;v12=1e-03;v2=1e-03 #m3/s
     k2=100;k2r=100.0;k3=1.0;k4=1e-03
+
+    y0 = np.empty([9, 1], dtype=float)
+
+    y0[1] = 1.0e-2
+    y0[0] = 2/3.0 * y0[1]
+    y0[3] = 0.0
+    y0[4] = 0.0
+    y0[5] = 0.0
+    y0[6] = 0.0
+    y0[7] = 0.01
+    y0[8] = 0.01
+    y0[2] = y0[7]**3 * y0[0] / y0[1]**3
+
+def gui_docks_ue3_1(d_area, _, title=None):
+    d1 = Dock(title,
+              size=(1, 1), closable=True
+              )
+    tab_1 = QtGui.QTableView()
+    text1 = QtGui.QPlainTextEdit()
+    vlayout1 = pg.LayoutWidget()
+
+    x0so2 = 0.078
+    x0n2 = 0.814
+    x0o2 = 0.108
+    x0so3 = 0.0
+
+    nuso2 = -1
+    nun2 = 0
+    nuo2 = -1/2.0
+    nuso3 = 1
+    n0 = 1 + 1/2.0
+
+    var0 = [x0so2, x0n2, x0o2, x0so3, n0, 0.0]
+
+    def func_set(x):
+        xso2 = x[0]
+        xn2 = x[1]
+        xo2 = x[2]
+        xso3 = x[3]
+        n = x[4]
+        csi1 = x[5]
+
+        return [
+            - xso2 * n + x0so2 * n0 + nuso2 * csi1,
+            - xn2 * n + x0n2 * n0 + nun2 * csi1,
+            - xo2 * n + x0o2 * n0 + nuo2 * csi1,
+            - xso3 * n + x0so3 * n0 + nuso3 * csi1,
+            1 - 0.96 - (xso2 / x0so2) * (n / n0),
+            -1 + xso2 + xn2 + xo2 + xso3
+        ]
+
+    soln = root(func_set, var0)
+
+    text1.setPlainText(str(soln))
+
+    xso2, xn2, xo2, xso3, n, csi1 = soln.x
+
+    tab1_data = np.array(
+        [
+            [
+                'xs02', 'xn2', 'xo2', 'xso3', 'n', 'csi1', 'u'
+            ],
+            np.append(var0, 0),
+            np.append(soln.x, 1 - xso2/x0so2 * n / n0 )
+        ],
+        dtype=object
+    ).T
+
+    tab_1.setModel(
+        tab_1_model(
+            data = tab1_data,
+            column_names=['Var', 'Val(init)', 'Val(eq)'],
+            column_formats= [str, 'g', 'g']
+        )
+    )
+
+    tab_1.horizontalHeader().setResizeMode(
+        QtGui.QHeaderView.ResizeToContents
+    )
+
+    vlayout1.addWidget(tab_1, row=0, col=0)
+    vlayout1.addWidget(text1, row=1, col=0)
+
+    d1.addWidget(vlayout1)
+    d_area.addDock(d1)
 
 
 def add_which_dock(text, d_area, timer, title):
@@ -1028,6 +1121,8 @@ def add_which_dock(text, d_area, timer, title):
         gui_docks_p4_04_53(d_area, timer, title)
     elif text == 'A4.1.2':
         gui_docks_a4_04_53(d_area, timer, title)
+    elif text == u'Ü3.1':
+        gui_docks_ue3_1(d_area, timer, title)
 
 wind = QtGui.QWidget()
 area = DockArea()
@@ -1081,6 +1176,13 @@ chapter_layout = [
         [
             ['A4.1.2', 'Zweistufiger Prozess'],
         ]
+    ],
+    [
+        'HAGEN 3.1',
+        'Umsatz',
+        [
+            [u'Ü3.1', u'Schwefelsäure Herstellung']
+        ]
     ]
 ]
 
@@ -1130,7 +1232,7 @@ tree.itemClicked.connect(
 btn_3.clicked.connect(
     lambda: stop_shared_timer(shared_timer))
 # Qt objects can have several connected slots.
-# Not disconnecting them all causes previously
+# Not disconnecting them all ca uses previously
 # running processes to continue when restarted.
 # Keep track in this shared timer via added
 # attribute.
