@@ -1092,6 +1092,7 @@ def gui_docks_ue3_1(d_area, _, title=None):
             tab1_data,
             new_row.reshape([1,len(new_row)]), axis=0
         )
+        text1.appendPlainText(str(new_root))
 
     tab_1.setModel(
         tab_1_model(
