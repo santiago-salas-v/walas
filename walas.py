@@ -5,7 +5,7 @@ import time
 import numpy as np
 import matplotlib.cm as colormaps
 # noinspection PyUnresolvedReferences
-import PySide
+# import PySide
 import matplotlib
 import matplotlib.pyplot
 from matplotlib.backends.backend_qt4agg import FigureCanvasQTAgg as FigureCanvas
@@ -40,7 +40,7 @@ series_names = [item for item in string.ascii_uppercase]
 
 symbols = ['t', 't1', 't2', 't3', 's', 'p', 'h', 'star', '+', 'd']
 
-markers = matplotlib.markers.MarkerStyle.markers.keys()
+markers = list(matplotlib.markers.MarkerStyle.markers.keys())
 
 
 def random_color():
@@ -363,19 +363,17 @@ def gui_docks_p2_04_02(d_area, _, title=None):
         ).x
 
     r_calc = np.array(
-        map(lambda conc: solve_for_r(conc, 0.1), c)
+        [solve_for_r(conc, 0.1) for conc in c]
     ).flatten()
     simple_t = -np.gradient(c) * 1 / r_calc
     simple_t[0] = 0
     simple_t = np.cumsum(simple_t)
     quad_t = np.array(
-        map(
-            lambda c_min:
-            quad(
-                lambda conc:
-                1 / solve_for_r(conc, 0.1),
-                c_min, 2.0),
-            c)
+        [quad(
+            lambda conc: 1 / solve_for_r(conc, 0.1),
+            c_min, 
+            2.0) for c_min in c
+        ]
     )[:, 0]
     data = np.array([c, 1 / r_calc, simple_t, quad_t]).T
     tab_1.setData(data)
@@ -959,7 +957,7 @@ def gui_docks_p3_02_58(d_area, _, title=None):
     ax.legend()
 
     ki = np.empty([cici_vs_t.shape[0], 3 + 1], dtype=float)
-    q = range(1, 4, 1)
+    q = list(range(1, 4, 1))
     q.append(q_lsq)
     for row, k in enumerate(ki):
         t = cici_vs_t[row, 0]
