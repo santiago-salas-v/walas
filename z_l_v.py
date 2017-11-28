@@ -21,22 +21,59 @@ omega_af = np.array([
     0.050, -0.219, 0.224, 0.344, 0.563, 0.037
 ])
 
-# SRK (1972) params
-epsilon = 0.
-sigma = 1.
-omega = 0.08664
-psi = 0.42748
+
+def use_pr_eos():
+    # PR (1976) params
+    global epsilon
+    global sigma
+    global omega
+    global psi
+    global alpha
+
+    epsilon = 1 - np.sqrt(2)
+    sigma = 1 + np.sqrt(2)
+    omega = 0.07780
+    psi = 0.45724
+
+    def alpha(tr, af_omega): return \
+        (1 + (
+            0.37464 + 1.54226 * af_omega - 0.26992 * af_omega ** 2
+        ) * (1 - tr ** (1 / 2.))) ** 2
 
 
-def alpha(tr, af_omega):
-    return (1 + (
-        0.480 + 1.574 * af_omega - 0.176 * af_omega ** 2
-    ) * (1 - tr ** (1 / 2.))) ** 2
-# SRK without acentric factor alpha(Tr) = Tr^(-1/2)
+def use_srk_eos():
+    # SRK (1972) params
+    global epsilon
+    global sigma
+    global omega
+    global psi
+    global alpha
+    epsilon = 0.
+    sigma = 1.
+    omega = 0.08664
+    psi = 0.42748
+
+    def alpha(tr, af_omega): return \
+        (1 + (
+            0.480 + 1.574 * af_omega - 0.176 * af_omega ** 2
+        ) * (1 - tr ** (1 / 2.))) ** 2
 
 
-def alpha(tr, af_omega):
-    return (tr) ** (-1 / 2.)
+def use_srk_eos_simple_alpha():
+    # SRK (1972) params
+    # SRK without acentric factor alpha(Tr) = Tr^(-1/2)
+    global epsilon
+    global sigma
+    global omega
+    global psi
+    global alpha
+    epsilon = 0.
+    sigma = 1.
+    omega = 0.08664
+    psi = 0.42748
+
+    def alpha(tr, af_omega): return \
+        (tr) ** (-1 / 2.)
 
 
 def beta(tr, pr):
@@ -143,6 +180,7 @@ def z_non_sat(t, p, x_i, tc_i, pc_i, af_omega_i):
         soln[item] = locals().get(item)
     return soln
 
+
 def phi_l(t, p, x_i, tc_i, pc_i, af_omega_i):
     tr_i = t / tc_i
     a_i = psi * alpha(tr_i, af_omega_i) * r ** 2 * tc_i ** 2 / pc_i
@@ -178,8 +216,9 @@ def phi_l(t, p, x_i, tc_i, pc_i, af_omega_i):
         lambda z_var: z_l_func(z_var, beta_l, q_l),
         beta_l).x
     i_int_l = 1 / (sigma - epsilon) * \
-            np.log((z_l + sigma * beta_l) / (z_l + epsilon * beta_l))
-    ln_phi_l = b_i / b_l * (z_l - 1) - np.log(z_l - beta_l) - q_mp_i_l * i_int_l
+        np.log((z_l + sigma * beta_l) / (z_l + epsilon * beta_l))
+    ln_phi_l = b_i / b_l * (z_l - 1) - np.log(z_l -
+                                              beta_l) - q_mp_i_l * i_int_l
     phi_l = np.exp(ln_phi_l)
 
     soln = dict()
@@ -190,15 +229,16 @@ def phi_l(t, p, x_i, tc_i, pc_i, af_omega_i):
         soln[item] = locals().get(item)
     return soln
 
+
 def phi_v(t, p, y_i, tc_i, pc_i, af_omega_i):
     tr_i = t / tc_i
     a_i = psi * alpha(tr_i, af_omega_i) * r ** 2 * tc_i ** 2 / pc_i
     b_i = omega * r * tc_i / pc_i
     beta_i = b_i * p / (r * t)
     q_i = a_i / (b_i * r * t)
-    a_ij = np.empty([len(x_i), len(x_i)])
-    for i in range(len(x_i)):
-        for j in range(len(x_i)):
+    a_ij = np.empty([len(y_i), len(y_i)])
+    for i in range(len(y_i)):
+        for j in range(len(y_i)):
             a_ij[i, j] = np.sqrt(a_i[i] * a_i[j])
     # Variablen, die von der Gasphase-Zusammensetzung abhängig sind
     b_v = sum(y_i * b_i)
@@ -224,8 +264,9 @@ def phi_v(t, p, y_i, tc_i, pc_i, af_omega_i):
         lambda z_var: z_v_func(z_var, beta_v, q_v),
         1.0).x
     i_int_v = 1 / (sigma - epsilon) * \
-              np.log((z_v + sigma * beta_v) / (z_v + epsilon * beta_v))
-    ln_phi_v = b_i / b_v * (z_v - 1) - np.log(z_v - beta_v) - q_mp_i_v * i_int_v
+        np.log((z_v + sigma * beta_v) / (z_v + epsilon * beta_v))
+    ln_phi_v = b_i / b_v * (z_v - 1) - np.log(z_v -
+                                              beta_v) - q_mp_i_v * i_int_v
     phi_v = np.exp(ln_phi_v)
 
     soln = dict()
@@ -236,18 +277,19 @@ def phi_v(t, p, y_i, tc_i, pc_i, af_omega_i):
         soln[item] = locals().get(item)
     return soln
 
+
 def siedepunkt(t, p, x_i, y_i, tc_i, pc_i, af_omega_i, max_it):
     soln_l = phi_l(t, p, x_i, tc_i, pc_i, af_omega_i)
     soln_v = phi_v(t, p, y_i, tc_i, pc_i, af_omega_i)
-    k_i = soln_l['phi_l']/soln_v['phi_v']
+    k_i = soln_l['phi_l'] / soln_v['phi_v']
     y_i = k_i * x_i / sum(k_i * x_i)
     i = 0
-    while i < max_it and np.abs(1-sum(y_i))>0:
+    while i < max_it and np.abs(1 - sum(y_i)) > 0:
         i = i + 1
         soln_v = phi_v(t, p, y_i, tc_i, pc_i, af_omega_i)
         k_i = soln_l['phi_l'] / soln_v['phi_v']
         y_i = k_i * x_i / sum(k_i * x_i)
-        #print('i='+str(i))
+        # print('i='+str(i))
 
     opt_func = 1 - sum(k_i * x_i)
 
@@ -255,6 +297,7 @@ def siedepunkt(t, p, x_i, y_i, tc_i, pc_i, af_omega_i, max_it):
     for item in ['soln_l', 'soln_v', 'k_i', 'y_i', 'opt_func']:
         soln[item] = locals().get(item)
     return soln
+
 
 def isot_flash(t, p, x_i, y_i, z_i, tc_i, pc_i, af_omega_i):
     soln_l = phi_l(t, p, x_i, tc_i, pc_i, af_omega_i)
@@ -266,146 +309,147 @@ def isot_flash(t, p, x_i, y_i, z_i, tc_i, pc_i, af_omega_i):
         0.5
     )
     v_f = soln_v_f.x
-    x_i = z_i/(1+v_f*(k_i-1))
+    x_i = z_i / (1 + v_f * (k_i - 1))
     y_i = x_i * k_i
 
     # Normalize
 
-    x_i = x_i/sum(x_i)
-    y_i = y_i/sum(y_i)
+    x_i = x_i / sum(x_i)
+    y_i = y_i / sum(y_i)
     soln = dict()
     for item in ['soln_l', 'soln_v', 'k_i', 'v_f', 'x_i', 'y_i']:
         soln[item] = locals().get(item)
     return soln
 
 
-print(
-    'ref. VDI Wärmeatlas H2 Dampfdruck um -256.6K: ' +
-    '{:.4g}'.format(
-        p_sat(-256.6 + 273.15, -0.216, 33.19, 13.13).x.item() * 1000
-    ) + ' mbar. (Literaturwert 250mbar)'
-)
-
-t = 273.15 + np.linspace(-200, 500, 30)
-res = np.empty_like(t)
-success = True
-i = 0
-res_0 = 1.
-while i < len(t) and success:
-    temp = t[i]
-
-    def fs(psat): return p_sat_func(
-        psat, temp, omega_af[0], tc[0], pc[0]
+def beispiel_wdi_atlas():
+    use_pr_eos()
+    print(
+        'ref. VDI Wärmeatlas H2 Dampfdruck um -256.6K: ' +
+        '{:.4g}'.format(
+            p_sat(-256.6 + 273.15, -0.216, 33.19, 13.13).x.item() * 1000
+        ) + ' mbar. (Literaturwert 250mbar)'
     )
-    root = optimize.root(fs, 1.0, method='lm')
-    if root.success:
-        res[i] = root.x
-        res_0 = res[i]
-    else:
-        res[i:] = np.nan
-        success = False
-    i += 1
+    t = 273.15 + np.linspace(-200, 500, 30)
+    res = np.empty_like(t)
+    success = True
+    i = 0
+    res_0 = 1.
+    while i < len(t) and success:
+        temp = t[i]
 
-print(res)
+        def fs(psat): return p_sat_func(
+            psat, temp, omega_af[0], tc[0], pc[0]
+        )
+        root = optimize.root(fs, 1.0, method='lm')
+        if root.success:
+            res[i] = root.x
+            res_0 = res[i]
+        else:
+            res[i:] = np.nan
+            success = False
+        i += 1
 
-print('SVN Ex. 14.1')
-x_i = np.array([0.4, 0.6])
-tc_i = np.array([126.2, 190.6])
-pc_i = np.array([34., 45.99])
-af_omega_i = np.array([0.038, 0.012])
-print(z_non_sat(200, 30, x_i, tc_i, pc_i, af_omega_i))
+    print(res)
 
-print('SVN Ex. 14.2')
 
-# With acentric factor
-def alpha(tr, af_omega):
-    return (1 + (
-        0.480 + 1.574 * af_omega - 0.176 * af_omega ** 2
-    ) * (1 - tr ** (1 / 2.))) ** 2
+def beispiel_svn_14_1():
+    use_srk_eos_simple_alpha()
+    x_i = np.array([0.4, 0.6])
+    tc_i = np.array([126.2, 190.6])
+    pc_i = np.array([34., 45.99])
+    af_omega_i = np.array([0.038, 0.012])
+    print(z_non_sat(200, 30, x_i, tc_i, pc_i, af_omega_i))
 
-x_i = np.array([0.2,0.8])
-y_i = np.array([0.5,0.5]) # Est
-tc_i = np.array([190.6, 425.1])
-pc_i = np.array([45.99, 37.96])
-af_omega_i = np.array([0.012, 0.200])
-max_it = 100
-print(siedepunkt(310.92, 30, x_i, y_i, tc_i, pc_i, af_omega_i, max_it))
-y_i = siedepunkt(310.92, 30, x_i, y_i, tc_i, pc_i, af_omega_i, max_it)['y_i']
-for i in range(5):
-    soln = siedepunkt(310.92, 30, x_i, y_i, tc_i, pc_i, af_omega_i, max_it)
-    y_i = soln['y_i']
-    k_i = soln['k_i']
-    print(y_i)
-    print(1-sum(y_i))
-    print(sum(k_i * x_i))
 
-soln = optimize.root(
-    lambda p: siedepunkt(
-        310.92, p, x_i, y_i, tc_i, pc_i, af_omega_i, max_it
-    )['opt_func'], 1.
-)
-print(soln)
-print(siedepunkt(310.92, soln.x, x_i, y_i, tc_i, pc_i, af_omega_i, max_it))
-
-x = np.linspace(0.0, 0.8, 30)
-y = np.empty_like(x)
-p_v = np.empty_like(x)
-p_v0 = 1.0
-for i in range(len(x)):
-    x_i = np.array([x[i],1-x[i]])
-    soln =  optimize.root(
+def beispiel_svn_14_2():
+    use_srk_eos()
+    x_i = np.array([0.2, 0.8])
+    y_i = np.array([0.5, 0.5])  # Est
+    tc_i = np.array([190.6, 425.1])
+    pc_i = np.array([45.99, 37.96])
+    af_omega_i = np.array([0.012, 0.200])
+    max_it = 100
+    print(siedepunkt(310.92, 30, x_i, y_i, tc_i, pc_i, af_omega_i, max_it))
+    y_i = siedepunkt(
+        310.92,
+        30,
+        x_i,
+        y_i,
+        tc_i,
+        pc_i,
+        af_omega_i,
+        max_it)['y_i']
+    for i in range(5):
+        soln = siedepunkt(310.92, 30, x_i, y_i, tc_i, pc_i, af_omega_i, max_it)
+        y_i = soln['y_i']
+        k_i = soln['k_i']
+        print(y_i)
+        print(1 - sum(y_i))
+        print(sum(k_i * x_i))
+    soln = optimize.root(
         lambda p: siedepunkt(
             310.92, p, x_i, y_i, tc_i, pc_i, af_omega_i, max_it
-        )['opt_func'], p_v0
+        )['opt_func'], 1.
     )
-    p_v[i] = soln.x
-    output = siedepunkt(
+    print(soln)
+    print(siedepunkt(310.92, soln.x, x_i, y_i, tc_i, pc_i, af_omega_i, max_it))
+
+    x = np.linspace(0.0, 0.8, 30)
+    y = np.empty_like(x)
+    p_v = np.empty_like(x)
+    p_v0 = 1.0
+    for i in range(len(x)):
+        x_i = np.array([x[i], 1 - x[i]])
+        soln = optimize.root(
+            lambda p: siedepunkt(
+                310.92, p, x_i, y_i, tc_i, pc_i, af_omega_i, max_it
+            )['opt_func'], p_v0
+        )
+        p_v[i] = soln.x
+        output = siedepunkt(
             310.92, p_v[i], x_i, y_i, tc_i, pc_i, af_omega_i, max_it
-    )
-    y[i] = output['y_i'][0]
-    if soln.success:
-        p_v0 = p_v[i]
-plt.plot(x, p_v, y, p_v)
-#plt.show()
+        )
+        y[i] = output['y_i'][0]
+        if soln.success:
+            p_v0 = p_v[i]
+    plt.plot(x, p_v, y, p_v)
+    plt.show()
 
 
-# PR (1976) params
-epsilon = 1 - np.sqrt(2)
-sigma = 1 + np.sqrt(2)
-omega = 0.07780
-psi = 0.45724
+def beispiel_pat_ue_03_flash():
+    use_pr_eos()
+    n = np.array([
+        205.66,
+        14377.78,
+        1489.88,
+        854.75,
+        1348.86,
+        2496.13
+    ])
+
+    z_i = n / sum(n)
+    x_i = 1 / len(n) * np.ones(len(n))
+    y_i = 1 / len(n) * np.ones(len(n))
+    tc_i = tc
+    pc_i = pc
+    af_omega_i = omega_af
+    t = 60 + 273.15
+    p = 50.
+
+    for i in range(20):
+        soln = isot_flash(t, p, x_i, y_i, z_i, tc_i, pc_i, af_omega_i)
+        y_i = soln['y_i']
+        x_i = soln['x_i']
+        v_f = soln['v_f']
+        k_i = soln['k_i']
+        print(z_i * sum(n))
+        print(y_i * sum(n) * v_f)
+        print(x_i * sum(n) * (1 - v_f))
+        print(v_f)
 
 
-def alpha(tr, af_omega):
-    return (1 + (
-        0.37464 + 1.54226 * af_omega - 0.26992 * af_omega ** 2
-    ) * (1 - tr ** (1 / 2.))) ** 2
-
-n = np.array([
-    205.66,
-    14377.78,
-    1489.88,
-    854.75,
-    1348.86,
-    2496.13
-])
-
-z_i = n/sum(n)
-x_i = 1/len(n)*np.ones(len(n))
-y_i = 1/len(n)*np.ones(len(n))
-tc_i = tc
-pc_i = pc
-af_omega_i = omega_af
-t = 60 + 273.15
-p = 50.
-
-for i in range(20):
-    soln=isot_flash(t, p, x_i, y_i, z_i, tc_i, pc_i, af_omega_i)
-    y_i = soln['y_i']
-    x_i = soln['x_i']
-    v_f = soln['v_f']
-    k_i = soln['k_i']
-    print(z_i * sum(n))
-    print(y_i * sum(n) * v_f)
-    print(x_i * sum(n) * (1-v_f))
-    print(v_f)
+beispiel_wdi_atlas()
+beispiel_svn_14_1()
+beispiel_svn_14_2()
+beispiel_pat_ue_03_flash()
