@@ -325,7 +325,6 @@ def isot_flash(t, p, x_i, y_i, z_i, tc_i, pc_i, af_omega_i):
     # Normalize
 
     x_i = x_i / sum(x_i)
-    y_i = y_i / sum(y_i)
     soln = dict()
     for item in ['soln_l', 'soln_v', 'k_i', 'v_f', 'x_i', 'y_i']:
         soln[item] = locals().get(item)
@@ -453,10 +452,15 @@ def beispiel_pat_ue_03_flash():
         x_i = soln['x_i']
         v_f = soln['v_f']
         k_i = soln['k_i']
-        print(z_i * sum(n))
-        print(y_i * sum(n) * v_f)
-        print(x_i * sum(n) * (1 - v_f))
-        print(v_f)
+        print('k_i: ')
+        print(k_i)
+        print('l_i: ')
+        print(sum(n) * (1 - v_f) * x_i)
+        print('v_i: ')
+        print(sum(n) * v_f * y_i)
+        print('f_i: ')
+        print(sum(n) * (1 - v_f) * x_i + sum(n) * v_f * y_i)
+
 
 
 def beispiel_isot_flash_seader_4_1():
@@ -466,7 +470,7 @@ def beispiel_isot_flash_seader_4_1():
         20,
         30,
         40
-    ])
+    ], dtype=float)
     z_i = n / sum(n)
     x_i = 1 / len(n) * np.ones(len(n))
     y_i = 1 / len(n) * np.ones(len(n))
@@ -495,9 +499,11 @@ def beispiel_isot_flash_seader_4_1():
         x_i = soln['x_i']
         y_i = soln['y_i']
         v_f = soln['v_f']
+        k_i = soln['k_i']
         print(x_i)
         print(y_i)
         print(v_f)
+        print(k_i)
 
 
 def beispiel_pat_ue_03_komplett():
@@ -509,8 +515,6 @@ def beispiel_pat_ue_03_komplett():
     t0_ref = 298.15  # K
     r = 8.314  # J/(mol K)
     rvg = 0.8  # Rückvermischungsgrad
-    t_flash = 273.16 + 60  # K
-    p = 50.  # bar
 
     namen = ['CO', 'H2', 'CO2', 'H2O', 'CH3OH', 'N2']
 
@@ -607,6 +611,7 @@ def beispiel_pat_ue_03_komplett():
     sol_x_2 = 862.886897607255377806723117828
     sol_x_4 = 149.394609392209389397976337932
     sol_x_m_1 = 579.830273084205259692680556327
+    #n0 = np.array([n0co, n0h2, n0co2, n0h2o, sol_x_2, n0n2])
     n0 = np.array([n0co, n0h2, n0co2, n0h2o, sol_x_2, n0n2])
 
     # n0 = ne
@@ -644,32 +649,25 @@ def beispiel_pat_ue_03_komplett():
 
         # phi_l, phi_v, k_i. Lösung des isothermischen Verdampfers
         z_i = n2 / sum(n2)
-        x_i = np.array([
-            2.20682E-05,
-            0.000827379,
-            0.005554105,
-            0.420278293,
-            0.572815988,
-            0.000502009
-        ])
-        y_i = np.array([
-            0.010909844,
-            0.762776308,
-            0.078483105,
-            0.002406051,
-            0.013035567,
-            0.132389231,
-        ])
+        x_i = 1/len(n2)*np.ones(len(n2))
+        y_i = 1/len(n2)*np.ones(len(n2))
         x_i = x_i / sum(x_i)
         y_i = y_i / sum(y_i)
         for i in range(10):
             soln = isot_flash(
-                t2, p, x_i, y_i, z_i, tc, pc, omega_af
+                t_flash, p, x_i, y_i, z_i, tc, pc, omega_af
             )
             y_i = soln['y_i']
             x_i = soln['x_i']
             v_f = soln['v_f']
             k_i_verteilung = soln['k_i']
+            print('k_i: ')
+            print(k_i_verteilung)
+            print('l_i: ')
+            print(sum(n2) * (1-v_f) * x_i)
+            print('v_i: ')
+            print(sum(n2) * v_f * y_i)
+
 
         n = n2 * v_f / (1 + rvg)
         nco = n[0]
@@ -710,6 +708,6 @@ def beispiel_pat_ue_03_komplett():
 # beispiel_wdi_atlas()
 # beispiel_svn_14_1()
 # beispiel_svn_14_2()
-# beispiel_pat_ue_03_flash()
-beispiel_isot_flash_seader_4_1()
+beispiel_pat_ue_03_flash()
+# beispiel_isot_flash_seader_4_1()
 # beispiel_pat_ue_03_komplett()
