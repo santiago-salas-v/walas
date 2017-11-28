@@ -326,7 +326,8 @@ def isot_flash(t, p, x_i, y_i, z_i, tc_i, pc_i, af_omega_i):
 
     x_i = x_i / sum(x_i)
     soln = dict()
-    for item in ['soln_l', 'soln_v', 'k_i', 'v_f', 'x_i', 'y_i']:
+    for item in ['soln_l', 'soln_v', 'soln_v_f',
+                 'k_i', 'v_f', 'x_i', 'y_i']:
         soln[item] = locals().get(item)
     return soln
 
@@ -613,6 +614,14 @@ def beispiel_pat_ue_03_komplett():
     sol_x_m_1 = 579.830273084205259692680556327
     #n0 = np.array([n0co, n0h2, n0co2, n0h2o, sol_x_2, n0n2])
     n0 = np.array([n0co, n0h2, n0co2, n0h2o, sol_x_2, n0n2])
+    n0 = np.array([
+        205.66,
+        14377.78,
+        1489.88,
+        854.75,
+        134886,
+        249613
+    ])
 
     # n0 = ne
 
@@ -631,6 +640,7 @@ def beispiel_pat_ue_03_komplett():
 
         # Stoffströme am Ausgang des Reaktors
         n2 = np.array([n2co, n2h2, n2co2, n2h2o, n2ch3oh, n2n2])
+        n2_t = sum(n2)
         # Stoffströme am Austritt des Systems (Gas)
         # n = np.array([nco, nh2, nco2, nh2o, nch3oh, nn2])
         # Stoffströme am Austritt des Systems (Flüssigkeit)
@@ -668,7 +678,6 @@ def beispiel_pat_ue_03_komplett():
             print('v_i: ')
             print(sum(n2) * v_f * y_i)
 
-
         n = n2 * v_f / (1 + rvg)
         nco = n[0]
         nh2 = n[1]
@@ -686,11 +695,11 @@ def beispiel_pat_ue_03_komplett():
         f5 = -n2ch3oh + rvg * nch3oh + n0ch3oh + xi1 + xi2 - 0
         f6 = -n2n2 + rvg * nn2 + n0n2 + 0
         f7 = -k_t2[0] * (n2co * n2h2 ** 2) + \
-            n2ch3oh * (p / 1.) ** -2 * (n2) ** -(-2)
+            n2ch3oh * (p / 1.) ** -2 * (n2_t) ** -(-2)
         f8 = -k_t2[1] * (n2co2 * n2h2 ** 3) + \
-            n2ch3oh * n2h2o * (p / 1.) ** -2 * (n2) ** -(-2)
+            n2ch3oh * n2h2o * (p / 1.) ** -2 * (n2_t) ** -(-2)
         f9 = -k_t2[2] * (n2co * n2h2o) + \
-            n2co2 * n2h2 * (p / 1.) ** 0 * (n2) ** -0
+            n2co2 * n2h2 * (p / 1.) ** 0 * (n2_t) ** -0
         f10 = np.sum(
             np.multiply(n0, (h_0 - h_298)) -
             np.multiply(n, (h_t2 - h_298))) + np.dot(xi, -delta_h_t2)
@@ -708,6 +717,6 @@ def beispiel_pat_ue_03_komplett():
 # beispiel_wdi_atlas()
 # beispiel_svn_14_1()
 # beispiel_svn_14_2()
-beispiel_pat_ue_03_flash()
+# beispiel_pat_ue_03_flash()
 # beispiel_isot_flash_seader_4_1()
-# beispiel_pat_ue_03_komplett()
+beispiel_pat_ue_03_komplett()
