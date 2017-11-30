@@ -615,14 +615,20 @@ def beispiel_pat_ue_03_komplett():
     #n0 = np.array([n0co, n0h2, n0co2, n0h2o, sol_x_2, n0n2])
     n0 = np.array([n0co, n0h2, n0co2, n0h2o, sol_x_2, n0n2])
     n0 = np.array([
-        205.66,
-        14377.78,
-        1489.88,
-        854.75,
-        134886,
-        249613
+        1207.62,
+        19070.30,
+        2398.33,
+        692.79,
+        1025.43,
+        2498.44
     ])
-
+    xi0 = np.array([
+        772.8851667,
+        0.001166667,
+        - 264.4761667
+    ])
+    t0 = 552.3947
+    t_feed = 477.7349  # K
     # n0 = ne
 
     # Lösung des einfacheren Falls in schwierigerem Fall einwenden.
@@ -650,8 +656,8 @@ def beispiel_pat_ue_03_komplett():
         # Reaktionslaufzahlen
         xi = np.array([xi1, xi2, xi3])
 
-        h_0 = h_493
-        cp_0 = cp_493
+        h_0 = h(t_feed)
+        cp_0 = cp(t_feed)
         cp_t2 = cp(t2)
         h_t2 = h(t2)
         g_t2 = g(t2, h_t2)
@@ -674,26 +680,26 @@ def beispiel_pat_ue_03_komplett():
             print('k_i: ')
             print(k_i_verteilung)
             print('l_i: ')
-            print(sum(n2) * (1-v_f) * x_i)
+            print(n2_t * (1-v_f) * x_i)
             print('v_i: ')
-            print(sum(n2) * v_f * y_i)
+            print(n2_t * v_f * y_i)
 
-        n = n2 * v_f / (1 + rvg)
-        nco = n[0]
-        nh2 = n[1]
-        nco2 = n[2]
-        nh2o = n[3]
-        nch3oh = n[4]
-        nn2 = n[5]
+        nv = (n2_t * v_f) * y_i
+        nvco = nv[0]
+        nvh2 = nv[1]
+        nvco2 = nv[2]
+        nvh2o = nv[3]
+        nvch3oh = nv[4]
+        nvn2 = nv[5]
 
         delta_h_t2 = nuij.T.dot(h_t2)  # J/mol
 
-        f1 = -n2co + rvg * nco + n0co - xi1 + 0 - xi3
-        f2 = -n2h2 + rvg * nh2 + n0h2 - 2 * xi1 - 3 * xi2 + xi3
-        f3 = -n2co2 + rvg * nco2 + n0co2 + 0 - xi2 + xi3
-        f4 = -n2h2o + rvg * nh2o + n0h2o + 0 + xi2 - xi3
-        f5 = -n2ch3oh + rvg * nch3oh + n0ch3oh + xi1 + xi2 - 0
-        f6 = -n2n2 + rvg * nn2 + n0n2 + 0
+        f1 = -n2co + rvg * nvco + n0co - xi1 + 0 - xi3
+        f2 = -n2h2 + rvg * nvh2 + n0h2 - 2 * xi1 - 3 * xi2 + xi3
+        f3 = -n2co2 + rvg * nvco2 + n0co2 + 0 - xi2 + xi3
+        f4 = -n2h2o + rvg * nvh2o + n0h2o + 0 + xi2 - xi3
+        f5 = -n2ch3oh + rvg * nvch3oh + n0ch3oh + xi1 + xi2 - 0
+        f6 = -n2n2 + rvg * nvn2 + n0n2 + 0
         f7 = -k_t2[0] * (n2co * n2h2 ** 2) + \
             n2ch3oh * (p / 1.) ** -2 * (n2_t) ** -(-2)
         f8 = -k_t2[1] * (n2co2 * n2h2 ** 3) + \
@@ -701,13 +707,14 @@ def beispiel_pat_ue_03_komplett():
         f9 = -k_t2[2] * (n2co * n2h2o) + \
             n2co2 * n2h2 * (p / 1.) ** 0 * (n2_t) ** -0
         f10 = np.sum(
-            np.multiply(n0, (h_0 - h_298)) -
-            np.multiply(n, (h_t2 - h_298))) + np.dot(xi, -delta_h_t2)
+            np.multiply(ne + rvg * nv, (h_0 - h_298)) -
+            np.multiply(n2, (h_t2 - h_298))) + np.dot(xi, -delta_h_t2)
 
         return [
             f1, f2, f3, f4, f5, f6, f7, f8, f9, f10]
 
-    x0 = np.append(n0, [0., 0., 0., sol_x_m_1])
+    x0 = np.append(n0, xi0)
+    x0 = np.append(x0, [t0])
 
     sol = optimize.root(fun, x0)
 
