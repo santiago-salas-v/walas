@@ -515,7 +515,7 @@ def beispiel_pat_ue_03_komplett():
     t_flash = 273.16 + 60  # K
     t0_ref = 298.15  # K
     r = 8.314  # J/(mol K)
-    rvg = 0.8  # Rückvermischungsgrad
+    rvg = 0.2  # Rückvermischungsgrad
 
     namen = ['CO', 'H2', 'CO2', 'H2O', 'CH3OH', 'N2']
 
@@ -613,22 +613,22 @@ def beispiel_pat_ue_03_komplett():
     sol_x_4 = 149.394609392209389397976337932
     sol_x_m_1 = 579.830273084205259692680556327
     #n0 = np.array([n0co, n0h2, n0co2, n0h2o, sol_x_2, n0n2])
-    n0 = np.array([n0co, n0h2, n0co2, n0h2o, sol_x_2, n0n2])
+    #n0 = np.array([n0co, n0h2, n0co2, n0h2o, sol_x_2, n0n2])
     n0 = np.array([
-        1207.62,
-        19070.30,
-        2398.33,
-        692.79,
-        1025.43,
-        2498.44
+        568.2782,
+        6612.109,
+        1043.674,
+        295.6395,
+        227.3014,
+        624.9937
     ])
     xi0 = np.array([
-        772.8851667,
-        0.001166667,
-        - 264.4761667
+        -210.22086,
+        -0.00037,
+        -85.15083
     ])
-    t0 = 552.3947
-    t_feed = 477.7349  # K
+    t0 = 571.8273 # K
+    t_feed = 493.15  # K
     # n0 = ne
 
     # Lösung des einfacheren Falls in schwierigerem Fall einwenden.
