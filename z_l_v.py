@@ -463,7 +463,6 @@ def beispiel_pat_ue_03_flash():
         print(sum(n) * (1 - v_f) * x_i + sum(n) * v_f * y_i)
 
 
-
 def beispiel_isot_flash_seader_4_1():
     use_pr_eos()
     n = np.array([
@@ -516,6 +515,7 @@ def beispiel_pat_ue_03_komplett():
     t0_ref = 298.15  # K
     r = 8.314  # J/(mol K)
     rvg = 0.2  # Rückvermischungsgrad
+    # rvg = 0.606089894 # Rückvermischungsgrad für 350kmol/h in der Flüssigkeit
 
     namen = ['CO', 'H2', 'CO2', 'H2O', 'CH3OH', 'N2']
 
@@ -622,14 +622,16 @@ def beispiel_pat_ue_03_komplett():
         227.3014,
         624.9937
     ])
+    #n0 = ne
     xi0 = np.array([
         -210.22086,
         -0.00037,
         -85.15083
     ])
-    t0 = 571.8273 # K
+    #xi0 = np.zeros([1,3])
+    t0 = 571.8273  # K
+    # t0 = 493.15 # K
     t_feed = 493.15  # K
-    # n0 = ne
 
     # Lösung des einfacheren Falls in schwierigerem Fall einwenden.
     def fun(x_vec):
@@ -665,8 +667,8 @@ def beispiel_pat_ue_03_komplett():
 
         # phi_l, phi_v, k_i. Lösung des isothermischen Verdampfers
         z_i = n2 / sum(n2)
-        x_i = 1/len(n2)*np.ones(len(n2))
-        y_i = 1/len(n2)*np.ones(len(n2))
+        x_i = 1 / len(n2) * np.ones(len(n2))
+        y_i = 1 / len(n2) * np.ones(len(n2))
         x_i = x_i / sum(x_i)
         y_i = y_i / sum(y_i)
         for i in range(10):
@@ -680,7 +682,7 @@ def beispiel_pat_ue_03_komplett():
             print('k_i: ')
             print(k_i_verteilung)
             print('l_i: ')
-            print(n2_t * (1-v_f) * x_i)
+            print(n2_t * (1 - v_f) * x_i)
             print('v_i: ')
             print(n2_t * v_f * y_i)
 
