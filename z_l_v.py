@@ -901,13 +901,26 @@ def beispiel_pat_ue_03_vollstaendig(rvg):
         sum(np.multiply(nl, h_t_flash))) + ' kJ/h')
     print('\n\n')
 
-    print('Dampf-Austritt:')
+    print('Dampf aus Verdampfer:')
+    for i in range(len(namen)):
+        print(namen[i] + ': ' + '{:0.16g}'.format(nv[i]) + ' kmol/h')
+    print('n: ' + '{:0.16g}'.format(sum(nv)) + ' kmol/h')
+    for i in range(len(namen)):
+        print('y(' + namen[i] + ')' + ': ' +
+              '{:0.16g}'.format(nv[i] / sum(nv)))
+    print('T: ' + '{:g}'.format(t_flash) + ' K')
+    print('p: ' + '{:g}'.format(p) + ' bar')
+    print('H: ' + '{:g}'.format(
+        sum(np.multiply(nv, h_t_flash))) + ' kJ/h')
+    print('\n\n')
+
+    print('Dampf-Ablauf:')
     for i in range(len(namen)):
         print(namen[i] + ': ' + '{:0.16g}'.format(npr[i]) + ' kmol/h')
     print('n: ' + '{:0.16g}'.format(sum(npr)) + ' kmol/h')
     for i in range(len(namen)):
         print('y(' + namen[i] + ')' + ': ' +
-              '{:0.16g}'.format(nv[i] / sum(nv)))
+              '{:0.16g}'.format(npr[i] / sum(npr)))
     print('T: ' + '{:g}'.format(t_flash) + ' K')
     print('p: ' + '{:g}'.format(p) + ' bar')
     print('H: ' + '{:g}'.format(
