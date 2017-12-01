@@ -506,7 +506,8 @@ def beispiel_isot_flash_seader_4_1():
         print(k_i)
 
 
-def beispiel_pat_ue_03_vollstaendig():
+def beispiel_pat_ue_03_vollstaendig(rvg):
+    # Als Funktion des Rückvermischungsgrades.
     use_pr_eos()
 
     p = 50.  # bar
@@ -514,7 +515,7 @@ def beispiel_pat_ue_03_vollstaendig():
     t_flash = 273.15 + 60  # K
     t0_ref = 298.15  # K
     r = 8.314  # J/(mol K)
-    rvg = 0.2  # Rückvermischungsgrad
+    # rvg = 0.2  # Rückvermischungsgrad
     # rvg = 0.606089894 # Rückvermischungsgrad für 350kmol/h in der Flüssigkeit
 
     namen = ['CO', 'H2', 'CO2', 'H2O', 'CH3OH', 'N2']
@@ -742,7 +743,7 @@ def beispiel_pat_ue_03_vollstaendig():
     g_t2 = g(t2, h_t2)  # J/mol
     k_t2 = k(t2, g_t2)  # []
 
-    h_t_flash = h(t_flash) # J/mol
+    h_t_flash = h(t_flash)  # J/mol
 
     delta_h_t2 = nuij.T.dot(h_t2)  # J/mol
 
@@ -762,7 +763,7 @@ def beispiel_pat_ue_03_vollstaendig():
     nl = (n2_t * (1 - v_f)) * x_i  # kmol/h
     nr = nv * rvg  # kmol/h
     npr = nv * (1 - rvg)  # kmol/h
-    nmischer = ne + rvg * nv # kmol/h
+    nmischer = ne + rvg * nv  # kmol/h
 
     tmischung = optimize.root(
         lambda t: sum(
@@ -779,7 +780,7 @@ def beispiel_pat_ue_03_vollstaendig():
     q_a_reak = np.sum(
         np.multiply(ne + rvg * nv, (h_0 - h_298)) -
         np.multiply(n2, (h(t2) - h_298))) + \
-        np.dot(xi, -delta_h_t2)# kJ/h
+        np.dot(xi, -delta_h_t2)  # kJ/h
 
     q_g_kueh = np.sum(
         np.multiply(n2, (h(t_flash) - h_298)) -
@@ -787,7 +788,7 @@ def beispiel_pat_ue_03_vollstaendig():
 
     print('Ausgangsstrom am Mischer:')
     for i in range(len(namen)):
-        print(namen[i] + ': ' + '{:0.16g}'.format(nmischer[i])+' kmol/h')
+        print(namen[i] + ': ' + '{:0.16g}'.format(nmischer[i]) + ' kmol/h')
     print('n: ' + '{:0.16g}'.format(sum(nmischer)) + ' kmol/h')
     print('T: ' + '{:g}'.format(tmischung.item()) + ' K')
     print('p: ' + '{:g}'.format(p) + ' bar')
@@ -801,7 +802,7 @@ def beispiel_pat_ue_03_vollstaendig():
 
     print('Eingangsstrom am Reaktor:')
     for i in range(len(namen)):
-        print(namen[i] + ': ' + '{:0.16g}'.format(nmischer[i])+' kmol/h')
+        print(namen[i] + ': ' + '{:0.16g}'.format(nmischer[i]) + ' kmol/h')
     print('n: ' + '{:0.16g}'.format(sum(nmischer)) + ' kmol/h')
     print('T: ' + '{:g}'.format(493.15) + ' K')
     print('p: ' + '{:g}'.format(p) + ' bar')
@@ -863,7 +864,8 @@ def beispiel_pat_ue_03_vollstaendig():
         sum(np.multiply(npr, h_t_flash))) + ' kJ/h')
     print('\n\n')
 
-    print('Rücklaufstrom:')
+    print('Rücklaufstrom bei Rückvermischungsgrad ' +
+          str(rvg) + ' :')
     for i in range(len(namen)):
         print(namen[i] + ': ' + '{:0.16g}'.format(nr[i]) + ' kmol/h')
     print('n: ' + '{:0.16g}'.format(sum(nr)) + ' kmol/h')
@@ -873,8 +875,7 @@ def beispiel_pat_ue_03_vollstaendig():
         sum(np.multiply(nr, h_t_flash))) + ' kJ/h')
     print('\n\n')
 
-
-
+    return nl[-2]  # Methanol in der Flüssigkeit
 
 
 # beispiel_wdi_atlas()
@@ -882,4 +883,11 @@ def beispiel_pat_ue_03_vollstaendig():
 # beispiel_svn_14_2()
 # beispiel_pat_ue_03_flash()
 # beispiel_isot_flash_seader_4_1()
-beispiel_pat_ue_03_vollstaendig()
+beispiel_pat_ue_03_vollstaendig(0.2)
+
+# optimize.root(
+#    lambda rvg: 350.0 - beispiel_pat_ue_03_vollstaendig(rvg),
+#    0.4
+# )
+
+beispiel_pat_ue_03_vollstaendig(0.64137041)
