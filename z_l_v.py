@@ -463,7 +463,6 @@ def beispiel_pat_ue_03_flash():
         print(sum(n) * (1 - v_f) * x_i + sum(n) * v_f * y_i)
 
 
-
 def beispiel_isot_flash_seader_4_1():
     use_pr_eos()
     n = np.array([
@@ -516,6 +515,7 @@ def beispiel_pat_ue_03_komplett():
     t0_ref = 298.15  # K
     r = 8.314  # J/(mol K)
     rvg = 0.2  # Rückvermischungsgrad
+    # rvg = 0.606089894 # Rückvermischungsgrad für 350kmol/h in der Flüssigkeit
 
     namen = ['CO', 'H2', 'CO2', 'H2O', 'CH3OH', 'N2']
 
@@ -612,24 +612,6 @@ def beispiel_pat_ue_03_komplett():
     sol_x_2 = 862.886897607255377806723117828
     sol_x_4 = 149.394609392209389397976337932
     sol_x_m_1 = 579.830273084205259692680556327
-    #n0 = np.array([n0co, n0h2, n0co2, n0h2o, sol_x_2, n0n2])
-    #n0 = np.array([n0co, n0h2, n0co2, n0h2o, sol_x_2, n0n2])
-    n0 = np.array([
-        568.2782,
-        6612.109,
-        1043.674,
-        295.6395,
-        227.3014,
-        624.9937
-    ])
-    xi0 = np.array([
-        -210.22086,
-        -0.00037,
-        -85.15083
-    ])
-    t0 = 571.8273 # K
-    t_feed = 493.15  # K
-    # n0 = ne
 
     # Lösung des einfacheren Falls in schwierigerem Fall einwenden.
     def fun(x_vec):
@@ -640,9 +622,17 @@ def beispiel_pat_ue_03_komplett():
         n2ch3oh = x_vec[4]
         n2n2 = x_vec[5]
         xi1 = x_vec[6]
-        xi2 = x_vec[7]
-        xi3 = x_vec[8]
-        t2 = x_vec[9]
+        # Folgende Werte können benutzt sein, um entweder drei Reaktionen
+        # oder eine Reaktion zu behandeln.
+        xi2 = 0.
+        xi3 = 0.
+        t2 = 0.
+        if len(x_vec) > 8:
+            xi2 = x_vec[7]
+            xi3 = x_vec[8]
+            t2 = x_vec[9]
+        elif len(x_vec) == 8:
+            t2 = x_vec[7]
 
         # Stoffströme am Ausgang des Reaktors
         n2 = np.array([n2co, n2h2, n2co2, n2h2o, n2ch3oh, n2n2])
@@ -665,8 +655,8 @@ def beispiel_pat_ue_03_komplett():
 
         # phi_l, phi_v, k_i. Lösung des isothermischen Verdampfers
         z_i = n2 / sum(n2)
-        x_i = 1/len(n2)*np.ones(len(n2))
-        y_i = 1/len(n2)*np.ones(len(n2))
+        x_i = 1 / len(n2) * np.ones(len(n2))
+        y_i = 1 / len(n2) * np.ones(len(n2))
         x_i = x_i / sum(x_i)
         y_i = y_i / sum(y_i)
         for i in range(10):
@@ -680,7 +670,7 @@ def beispiel_pat_ue_03_komplett():
             print('k_i: ')
             print(k_i_verteilung)
             print('l_i: ')
-            print(n2_t * (1-v_f) * x_i)
+            print(n2_t * (1 - v_f) * x_i)
             print('v_i: ')
             print(n2_t * v_f * y_i)
 
@@ -693,6 +683,13 @@ def beispiel_pat_ue_03_komplett():
         nvn2 = nv[5]
 
         delta_h_t2 = nuij.T.dot(h_t2)  # J/mol
+
+        if len(x_vec) > 8:
+            # delta_h_t2 = nuij.T.dot(h_t2)  # J/mol
+            pass
+        elif len(x_vec) == 8:
+            delta_h_t2 = delta_h_t2[0]
+            pass
 
         f1 = -n2co + rvg * nvco + n0co - xi1 + 0 - xi3
         f2 = -n2h2 + rvg * nvh2 + n0h2 - 2 * xi1 - 3 * xi2 + xi3
@@ -710,8 +707,35 @@ def beispiel_pat_ue_03_komplett():
             np.multiply(ne + rvg * nv, (h_0 - h_298)) -
             np.multiply(n2, (h_t2 - h_298))) + np.dot(xi, -delta_h_t2)
 
-        return [
-            f1, f2, f3, f4, f5, f6, f7, f8, f9, f10]
+        res = [f1, f2, f3, f4, f5, f6, f7, f10]
+
+        if len(x_vec) > 8:
+            res = [f1, f2, f3, f4, f5, f6, f7, f8, f9, f10]
+        elif len(x_vec) == 8:
+            # res = [f1, f2, f3, f4, f5, f6, f7, f10]
+            pass
+
+        return res
+
+    # n0 = np.array([n0co, n0h2, n0co2, n0h2o, sol_x_2, n0n2])
+    n0 = np.array([
+        568.2782,
+        6612.109,
+        1043.674,
+        295.6395,
+        227.3014,
+        624.9937
+    ])
+    # n0 = ne
+    # xi0 = np.array([
+    #     210.22086,
+    #     0.00037,
+    #     85.15083
+    # ]) * -1
+    xi0 = np.zeros([1,3])
+    # t0 = 571.8273  # K
+    t0 = 493.15 # K
+    t_feed = 493.15  # K
 
     x0 = np.append(n0, xi0)
     x0 = np.append(x0, [t0])
