@@ -4,7 +4,7 @@ from matplotlib import pyplot as plt
 import sys
 
 r = 8.314 * 10.**6 / 10.**5  # bar cm^3/(mol K)
-rvg = 0.8  # Rückvermischungsgrad
+rlv = 0.8  # Rücklaufverhältnis
 t_flash = 273.16 + 60  # K
 
 # Nach unten hin: CO, H2, CO2, H2O, CH3OH, N2, CH4
@@ -507,8 +507,8 @@ def beispiel_isot_flash_seader_4_1():
         print(k_i)
 
 
-def beispiel_pat_ue_03_vollstaendig(rvg):
-    # Als Funktion des Rückvermischungsgrades.
+def beispiel_pat_ue_03_vollstaendig(rlv):
+    # Als Funktion des Rücklaufverhältnises.
     use_pr_eos()
 
     # log
@@ -521,8 +521,8 @@ def beispiel_pat_ue_03_vollstaendig(rvg):
     t_flash = 273.15 + 60  # K
     t0_ref = 298.15  # K
     r = 8.314  # J/(mol K)
-    # rvg = 0.2  # Rückvermischungsgrad
-    # rvg = 0.606089894 # Rückvermischungsgrad für 350kmol/h in der Flüssigkeit
+    # rlv = 0.2  # Rücklaufverhältnis
+    # rlv = 0.606089894 # Rücklaufverhältnis für 350kmol/h in der Flüssigkeit
 
     namen = ['CO', 'H2', 'CO2', 'H2O', 'CH3OH', 'N2']
 
@@ -645,7 +645,7 @@ def beispiel_pat_ue_03_vollstaendig(rvg):
         # Stoffströme am Austritt des Systems (Flüssigkeit)
         # nl = n0 - n
         # Stoffströme im Rücklaufstrom
-        # nr = rvg * n
+        # nr = rlv * n
         # Reaktionslaufzahlen
         xi = np.array([xi1, xi2, xi3])
 
@@ -685,12 +685,12 @@ def beispiel_pat_ue_03_vollstaendig(rvg):
 
         delta_h_t2 = nuij.T.dot(h_t2)  # J/mol
 
-        f1 = -n2co + rvg * nvco + n0co - xi1 + 0 - xi3
-        f2 = -n2h2 + rvg * nvh2 + n0h2 - 2 * xi1 - 3 * xi2 + xi3
-        f3 = -n2co2 + rvg * nvco2 + n0co2 + 0 - xi2 + xi3
-        f4 = -n2h2o + rvg * nvh2o + n0h2o + 0 + xi2 - xi3
-        f5 = -n2ch3oh + rvg * nvch3oh + n0ch3oh + xi1 + xi2 - 0
-        f6 = -n2n2 + rvg * nvn2 + n0n2 + 0
+        f1 = -n2co + rlv * nvco + n0co - xi1 + 0 - xi3
+        f2 = -n2h2 + rlv * nvh2 + n0h2 - 2 * xi1 - 3 * xi2 + xi3
+        f3 = -n2co2 + rlv * nvco2 + n0co2 + 0 - xi2 + xi3
+        f4 = -n2h2o + rlv * nvh2o + n0h2o + 0 + xi2 - xi3
+        f5 = -n2ch3oh + rlv * nvch3oh + n0ch3oh + xi1 + xi2 - 0
+        f6 = -n2n2 + rlv * nvn2 + n0n2 + 0
         f7 = -k_t2[0] * (n2co * n2h2 ** 2) + \
             n2ch3oh * (p / 1.) ** -2 * (n2_t) ** -(-2)
         f8 = -k_t2[1] * (n2co2 * n2h2 ** 3) + \
@@ -698,7 +698,7 @@ def beispiel_pat_ue_03_vollstaendig(rvg):
         f9 = -k_t2[2] * (n2co * n2h2o) + \
             n2co2 * n2h2 * (p / 1.) ** 0 * (n2_t) ** -0
         f10 = np.sum(
-            np.multiply(ne + rvg * nv, (h_0 - h_298)) -
+            np.multiply(ne + rlv * nv, (h_0 - h_298)) -
             np.multiply(n2, (h_t2 - h_298))) + np.dot(xi, -delta_h_t2)
 
         res = [f1, f2, f3, f4, f5, f6, f7, f10]
@@ -768,24 +768,24 @@ def beispiel_pat_ue_03_vollstaendig(rvg):
         k_i_verteilung = soln['k_i']
     nv = (n2_t * v_f) * y_i  # kmol/h
     nl = (n2_t * (1 - v_f)) * x_i  # kmol/h
-    nr = nv * rvg  # kmol/h
-    npr = nv * (1 - rvg)  # kmol/h
-    nmischer = ne + rvg * nv  # kmol/h
+    nr = nv * rlv  # kmol/h
+    npr = nv * (1 - rlv)  # kmol/h
+    nmischer = ne + rlv * nv  # kmol/h
 
     tmischung = optimize.root(
         lambda t: sum(
-            np.multiply(rvg * nv, (h(t_flash) - h_298)) +
+            np.multiply(rlv * nv, (h(t_flash) - h_298)) +
             np.multiply(ne, (h_0 - h_298)) -
-            np.multiply(ne + rvg * nv, (h(t) - h_298))
+            np.multiply(ne + rlv * nv, (h(t) - h_298))
         ), (493.15 + t_flash) / 2
     ).x  # K
 
     q_f_heiz = np.sum(
-        np.multiply(ne + rvg * nv, (h_0 - h_298)) -
-        np.multiply(ne + rvg * nv, (h(tmischung) - h_298)))  # kJ/h
+        np.multiply(ne + rlv * nv, (h_0 - h_298)) -
+        np.multiply(ne + rlv * nv, (h(tmischung) - h_298)))  # kJ/h
 
     q_a_reak = np.sum(
-        np.multiply(ne + rvg * nv, (h_0 - h_298)) -
+        np.multiply(ne + rlv * nv, (h_0 - h_298)) -
         np.multiply(n2, (h(t2) - h_298))) + \
         np.dot(xi, -delta_h_t2)  # kJ/h
 
@@ -805,8 +805,8 @@ def beispiel_pat_ue_03_vollstaendig(rvg):
     print('H: ' + '{:g}'.format(
         sum(np.multiply(ne, h(t_feed)))) + ' kJ/h')
     print('\n')
-    print('Rücklaufstrom bei Rückvermischungsgrad ' +
-          str(rvg) + ' :')
+    print('Rücklaufstrom bei Rücklaufverhältnis ' +
+          str(rlv) + ' :')
     for i in range(len(namen)):
         print(namen[i] + ': ' + '{:0.16g}'.format(nr[i]) + ' kmol/h')
     print('n: ' + '{:0.16g}'.format(sum(nr)) + ' kmol/h')
@@ -822,7 +822,7 @@ def beispiel_pat_ue_03_vollstaendig(rvg):
     print('T: ' + '{:g}'.format(tmischung.item()) + ' K')
     print('p: ' + '{:g}'.format(p) + ' bar')
     print('H: ' + '{:g}'.format(
-        sum(np.multiply(ne + rvg * nv, h(tmischung)))) + ' kJ/h')
+        sum(np.multiply(ne + rlv * nv, h(tmischung)))) + ' kJ/h')
     print('\n\n')
 
     print('========================================')
@@ -842,7 +842,7 @@ def beispiel_pat_ue_03_vollstaendig(rvg):
     print('T: ' + '{:g}'.format(t_feed) + ' K')
     print('p: ' + '{:g}'.format(p) + ' bar')
     print('H: ' + '{:g}'.format(
-        sum(np.multiply(ne + rvg * nv, h_493))) + ' kJ/h')
+        sum(np.multiply(ne + rlv * nv, h_493))) + ' kJ/h')
     print('\n')
 
     print('Reaktionslaufzahlen des adiabatisch betriebenen Reaktors:')
@@ -928,7 +928,7 @@ def beispiel_pat_ue_03_vollstaendig(rvg):
     print('\n\n')
 
     print('Rücklaufstrom bei Rücklaufverhältnis ' +
-          str(rvg) + ' :')
+          str(rlv) + ' :')
     for i in range(len(namen)):
         print(namen[i] + ': ' + '{:0.16g}'.format(nr[i]) + ' kmol/h')
     print('n: ' + '{:0.16g}'.format(sum(nr)) + ' kmol/h')
@@ -952,7 +952,7 @@ def beispiel_pat_ue_03_vollstaendig(rvg):
 # beispiel_pat_ue_03_vollstaendig(0.2)
 
 # optimize.root(
-#    lambda rvg: 350.0 - beispiel_pat_ue_03_vollstaendig(rvg),
+#    lambda rlv: 350.0 - beispiel_pat_ue_03_vollstaendig(rlv),
 #    0.4
 # )
 # beispiel_pat_ue_03_vollstaendig(0.64137041)
