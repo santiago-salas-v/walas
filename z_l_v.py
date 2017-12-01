@@ -612,6 +612,26 @@ def beispiel_pat_ue_03_komplett():
     sol_x_2 = 862.886897607255377806723117828
     sol_x_4 = 149.394609392209389397976337932
     sol_x_m_1 = 579.830273084205259692680556327
+    #n0 = np.array([n0co, n0h2, n0co2, n0h2o, sol_x_2, n0n2])
+    #n0 = np.array([n0co, n0h2, n0co2, n0h2o, sol_x_2, n0n2])
+    n0 = np.array([
+        568.2782,
+        6612.109,
+        1043.674,
+        295.6395,
+        227.3014,
+        624.9937
+    ])
+    #n0 = ne
+    xi0 = np.array([
+        -210.22086,
+        -0.00037,
+        -85.15083
+    ])
+    #xi0 = np.zeros([1,3])
+    t0 = 571.8273  # K
+    # t0 = 493.15 # K
+    t_feed = 493.15  # K
 
     # Lösung des einfacheren Falls in schwierigerem Fall einwenden.
     def fun(x_vec):
