@@ -506,12 +506,12 @@ def beispiel_isot_flash_seader_4_1():
         print(k_i)
 
 
-def beispiel_pat_ue_03_komplett():
+def beispiel_pat_ue_03_vollstaendig():
     use_pr_eos()
 
     p = 50.  # bar
     temp = 273.15 + 220.  # K
-    t_flash = 273.16 + 60  # K
+    t_flash = 273.15 + 60  # K
     t0_ref = 298.15  # K
     r = 8.314  # J/(mol K)
     rvg = 0.2  # Rückvermischungsgrad
@@ -653,8 +653,6 @@ def beispiel_pat_ue_03_komplett():
         z_i = n2 / sum(n2)
         x_i = 1 / len(n2) * np.ones(len(n2))
         y_i = 1 / len(n2) * np.ones(len(n2))
-        x_i = x_i / sum(x_i)
-        y_i = y_i / sum(y_i)
         for i in range(10):
             soln = isot_flash(
                 t_flash, p, x_i, y_i, z_i, tc, pc, omega_af
@@ -679,13 +677,6 @@ def beispiel_pat_ue_03_komplett():
         nvn2 = nv[5]
 
         delta_h_t2 = nuij.T.dot(h_t2)  # J/mol
-
-        if len(x_vec) > 8:
-            # delta_h_t2 = nuij.T.dot(h_t2)  # J/mol
-            pass
-        elif len(x_vec) == 8:
-            delta_h_t2 = delta_h_t2[0]
-            pass
 
         f1 = -n2co + rvg * nvco + n0co - xi1 + 0 - xi3
         f2 = -n2h2 + rvg * nvh2 + n0h2 - 2 * xi1 - 3 * xi2 + xi3
@@ -713,25 +704,24 @@ def beispiel_pat_ue_03_komplett():
 
         return res
 
-    # n0 = np.array([n0co, n0h2, n0co2, n0h2o, sol_x_2, n0n2])
-    n0 = np.array([
-        568.2782,
-        6612.109,
-        1043.674,
-        295.6395,
-        227.3014,
-        624.9937
-    ])
-    # n0 = ne
-    # xi0 = np.array([
-    #     210.22086,
-    #     0.00037,
-    #     85.15083
-    # ]) * -1
-    xi0 = np.zeros([1, 3])
-    # t0 = 571.8273  # K
+    # Schlechte Anfangswerte können mit dem vereinfachten Fall
+    # einer einzigen Reaktion gelöst werden:
+    n0 = ne
     t0 = 493.15  # K
     t_feed = 493.15  # K
+
+    xi0 = np.zeros([1, 1])
+
+    x0 = np.append(n0, xi0)
+    x0 = np.append(x0, [t0])
+
+    sol = optimize.root(fun, x0)
+
+    # Mit der Lösung des vereinfachten Falls als Anfangswerte erreicht
+    # man Konvergenz des vollständigen Problems.
+    xi0 = np.array([sol.x[-2], 0., 0.])
+    t0 = sol.x[-1]
+    n0 = sol.x[:6]
 
     x0 = np.append(n0, xi0)
     x0 = np.append(x0, [t0])
@@ -740,10 +730,156 @@ def beispiel_pat_ue_03_komplett():
 
     print(sol)
 
+    n2 = sol.x[:6]  # kmol/h
+    n2_t = sum(n2)  # kmol/h
+    xi = sol.x[6:-1]  # kmol/h
+    t2 = sol.x[-1]  # K
+
+    h_0 = h(t_feed)  # J/mol
+    cp_0 = cp(t_feed)  # J/(mol K)
+    cp_t2 = cp(t2)  # J/(mol K)
+    h_t2 = h(t2)  # J/mol
+    g_t2 = g(t2, h_t2)  # J/mol
+    k_t2 = k(t2, g_t2)  # []
+
+    h_t_flash = h(t_flash) # J/mol
+
+    delta_h_t2 = nuij.T.dot(h_t2)  # J/mol
+
+    # phi_l, phi_v, k_i. Lösung des isothermischen Verdampfers
+    z_i = n2 / sum(n2)
+    x_i = 1 / len(n2) * np.ones(len(n2))
+    y_i = 1 / len(n2) * np.ones(len(n2))
+    for i in range(10):
+        soln = isot_flash(
+            t_flash, p, x_i, y_i, z_i, tc, pc, omega_af
+        )
+        y_i = soln['y_i']
+        x_i = soln['x_i']
+        v_f = soln['v_f']
+        k_i_verteilung = soln['k_i']
+    nv = (n2_t * v_f) * y_i  # kmol/h
+    nl = (n2_t * (1 - v_f)) * x_i  # kmol/h
+    nr = nv * rvg  # kmol/h
+    npr = nv * (1 - rvg)  # kmol/h
+    nmischer = ne + rvg * nv # kmol/h
+
+    tmischung = optimize.root(
+        lambda t: sum(
+            np.multiply(rvg * nv, (h(t_flash) - h_298)) +
+            np.multiply(ne, (h_0 - h_298)) -
+            np.multiply(ne + rvg * nv, (h(t) - h_298))
+        ), (493.15 + t_flash) / 2
+    ).x  # K
+
+    q_f_heiz = np.sum(
+        np.multiply(ne + rvg * nv, (h_0 - h_298)) -
+        np.multiply(ne + rvg * nv, (h(tmischung) - h_298)))  # kJ/h
+
+    q_a_reak = np.sum(
+        np.multiply(ne + rvg * nv, (h_0 - h_298)) -
+        np.multiply(n2, (h(t2) - h_298))) + \
+        np.dot(xi, -delta_h_t2)# kJ/h
+
+    q_g_kueh = np.sum(
+        np.multiply(n2, (h(t_flash) - h_298)) -
+        np.multiply(n2, (h_t2 - h_298)))  # kJ/h
+
+    print('Ausgangsstrom am Mischer:')
+    for i in range(len(namen)):
+        print(namen[i] + ': ' + '{:0.16g}'.format(nmischer[i])+' kmol/h')
+    print('n: ' + '{:0.16g}'.format(sum(nmischer)) + ' kmol/h')
+    print('T: ' + '{:g}'.format(tmischung.item()) + ' K')
+    print('p: ' + '{:g}'.format(p) + ' bar')
+    print('H: ' + '{:g}'.format(
+        sum(np.multiply(ne + rvg * nv, h(tmischung)))) + ' kJ/h')
+    print('\n\n')
+
+    print('Heizung des Eingangsstroms:')
+    print('Q: ' + '{:g}'.format(q_f_heiz) + ' kJ/h')
+    print('\n\n')
+
+    print('Eingangsstrom am Reaktor:')
+    for i in range(len(namen)):
+        print(namen[i] + ': ' + '{:0.16g}'.format(nmischer[i])+' kmol/h')
+    print('n: ' + '{:0.16g}'.format(sum(nmischer)) + ' kmol/h')
+    print('T: ' + '{:g}'.format(493.15) + ' K')
+    print('p: ' + '{:g}'.format(p) + ' bar')
+    print('H: ' + '{:g}'.format(
+        sum(np.multiply(ne + rvg * nv, h_493))) + ' kJ/h')
+    print('\n\n')
+
+    print('Reaktionslaufzahle des adiabatisch betriebenen Reaktors:')
+    for i in range(len(nuij.T)):
+        print('xi_' + str(i) + ': ' + '{:g}'.format(xi[i]))
+    print('Q: ' + '{:g}'.format(q_a_reak) + ' kJ/h ~ 0')
+    print('\n\n')
+
+    print('Ausgangsstrom am Reaktor:')
+    for i in range(len(namen)):
+        print(namen[i] + ': ' + '{:0.16g}'.format(n2[i]) + ' kmol/h')
+    print('n: ' + '{:0.16g}'.format(sum(n2)) + ' kmol/h')
+    print('T: ' + '{:g}'.format(t2) + ' K')
+    print('p: ' + '{:g}'.format(p) + ' bar')
+    print('H: ' + '{:g}'.format(
+        sum(np.multiply(n2, h_t2))) + ' kJ/h')
+    print('\n\n')
+
+    print('Kühlungsleistung des Ausgangsstroms:')
+    print('Q: ' + '{:g}'.format(q_g_kueh) + ' kJ/h')
+    print('\n\n')
+
+    print('Abgekühlter Strom nach Reaktorkühler:')
+    for i in range(len(namen)):
+        print(namen[i] + ': ' + '{:0.16g}'.format(n2[i]) + ' kmol/h')
+    print('n: ' + '{:0.16g}'.format(sum(n2)) + ' kmol/h')
+    print('T: ' + '{:g}'.format(t2) + ' K')
+    print('p: ' + '{:g}'.format(p) + ' bar')
+    print('H: ' + '{:g}'.format(
+        sum(np.multiply(n2, h_t2))) + ' kJ/h')
+    print('\n\n')
+
+    print('Dampf/Flüssigkeit Verhältnis am Flash:')
+    print('V/F: ' + '{:0.16g}'.format(v_f.item()) + ' kJ/h')
+    print('\n\n')
+
+    print('Produkt Flüssigkeit:')
+    for i in range(len(namen)):
+        print(namen[i] + ': ' + '{:0.16g}'.format(nl[i]) + ' kmol/h')
+    print('n: ' + '{:0.16g}'.format(sum(nl)) + ' kmol/h')
+    print('T: ' + '{:g}'.format(t_flash) + ' K')
+    print('p: ' + '{:g}'.format(p) + ' bar')
+    print('H: ' + '{:g}'.format(
+        sum(np.multiply(nl, h_t_flash))) + ' kJ/h')
+    print('\n\n')
+
+    print('Austrittsgas:')
+    for i in range(len(namen)):
+        print(namen[i] + ': ' + '{:0.16g}'.format(npr[i]) + ' kmol/h')
+    print('n: ' + '{:0.16g}'.format(sum(npr)) + ' kmol/h')
+    print('T: ' + '{:g}'.format(t_flash) + ' K')
+    print('p: ' + '{:g}'.format(p) + ' bar')
+    print('H: ' + '{:g}'.format(
+        sum(np.multiply(npr, h_t_flash))) + ' kJ/h')
+    print('\n\n')
+
+    print('Rücklaufstrom:')
+    for i in range(len(namen)):
+        print(namen[i] + ': ' + '{:0.16g}'.format(nr[i]) + ' kmol/h')
+    print('n: ' + '{:0.16g}'.format(sum(nr)) + ' kmol/h')
+    print('T: ' + '{:g}'.format(t_flash) + ' K')
+    print('p: ' + '{:g}'.format(p) + ' bar')
+    print('H: ' + '{:g}'.format(
+        sum(np.multiply(nr, h_t_flash))) + ' kJ/h')
+    print('\n\n')
+
+
+
+
 
 # beispiel_wdi_atlas()
 # beispiel_svn_14_1()
 # beispiel_svn_14_2()
 # beispiel_pat_ue_03_flash()
 # beispiel_isot_flash_seader_4_1()
-beispiel_pat_ue_03_komplett()
+beispiel_pat_ue_03_vollstaendig()
