@@ -1,6 +1,7 @@
 import numpy as np
 from scipy import optimize
 from matplotlib import pyplot as plt
+import sys
 
 r = 8.314 * 10.**6 / 10.**5  # bar cm^3/(mol K)
 rvg = 0.8  # Rückvermischungsgrad
@@ -510,6 +511,11 @@ def beispiel_pat_ue_03_vollstaendig(rvg):
     # Als Funktion des Rückvermischungsgrades.
     use_pr_eos()
 
+    # log
+    old_stdout = sys.stdout
+    log_file = open('output.log', 'w')
+    sys.stdout = log_file
+
     p = 50.  # bar
     temp = 273.15 + 220.  # K
     t_flash = 273.15 + 60  # K
@@ -717,6 +723,7 @@ def beispiel_pat_ue_03_vollstaendig(rvg):
     x0 = np.append(x0, [t0])
 
     sol = optimize.root(fun, x0)
+    print(sol)
 
     # Mit der Lösung des vereinfachten Falls als Anfangswerte erreicht
     # man Konvergenz des vollständigen Problems.
@@ -786,7 +793,29 @@ def beispiel_pat_ue_03_vollstaendig(rvg):
         np.multiply(n2, (h(t_flash) - h_298)) -
         np.multiply(n2, (h_t2 - h_298)))  # kJ/h
 
-    print('Ausgangsstrom am Mischer:')
+    print('========================================')
+    print('MISCHER')
+    print('========================================')
+    print('Zulauf des gesammten Prozesses:')
+    for i in range(len(namen)):
+        print(namen[i] + ': ' + '{:0.16g}'.format(ne[i]) + ' kmol/h')
+    print('n: ' + '{:0.16g}'.format(sum(ne)) + ' kmol/h')
+    print('T: ' + '{:g}'.format(t_feed) + ' K')
+    print('p: ' + '{:g}'.format(p) + ' bar')
+    print('H: ' + '{:g}'.format(
+        sum(np.multiply(ne, h(t_feed)))) + ' kJ/h')
+    print('\n')
+    print('Rücklaufstrom bei Rückvermischungsgrad ' +
+          str(rvg) + ' :')
+    for i in range(len(namen)):
+        print(namen[i] + ': ' + '{:0.16g}'.format(nr[i]) + ' kmol/h')
+    print('n: ' + '{:0.16g}'.format(sum(nr)) + ' kmol/h')
+    print('T: ' + '{:g}'.format(t_flash) + ' K')
+    print('p: ' + '{:g}'.format(p) + ' bar')
+    print('H: ' + '{:g}'.format(
+        sum(np.multiply(nr, h_t_flash))) + ' kJ/h')
+    print('\n')
+    print('Erzeugnis des Mischers:')
     for i in range(len(namen)):
         print(namen[i] + ': ' + '{:0.16g}'.format(nmischer[i]) + ' kmol/h')
     print('n: ' + '{:0.16g}'.format(sum(nmischer)) + ' kmol/h')
@@ -796,27 +825,33 @@ def beispiel_pat_ue_03_vollstaendig(rvg):
         sum(np.multiply(ne + rvg * nv, h(tmischung)))) + ' kJ/h')
     print('\n\n')
 
-    print('Heizung des Eingangsstroms:')
+    print('========================================')
+    print('F-HEIZ')
+    print('========================================')
+    print('Aufheizung des Eingangsstroms:')
     print('Q: ' + '{:g}'.format(q_f_heiz) + ' kJ/h')
     print('\n\n')
 
-    print('Eingangsstrom am Reaktor:')
+    print('========================================')
+    print('R-MeOH')
+    print('========================================')
+    print('Aufgeheizter Eingangsstrom am Reaktor:')
     for i in range(len(namen)):
         print(namen[i] + ': ' + '{:0.16g}'.format(nmischer[i]) + ' kmol/h')
     print('n: ' + '{:0.16g}'.format(sum(nmischer)) + ' kmol/h')
-    print('T: ' + '{:g}'.format(493.15) + ' K')
+    print('T: ' + '{:g}'.format(t_feed) + ' K')
     print('p: ' + '{:g}'.format(p) + ' bar')
     print('H: ' + '{:g}'.format(
         sum(np.multiply(ne + rvg * nv, h_493))) + ' kJ/h')
-    print('\n\n')
+    print('\n')
 
-    print('Reaktionslaufzahle des adiabatisch betriebenen Reaktors:')
+    print('Reaktionslaufzahlen des adiabatisch betriebenen Reaktors:')
     for i in range(len(nuij.T)):
         print('xi_' + str(i) + ': ' + '{:g}'.format(xi[i]))
     print('Q: ' + '{:g}'.format(q_a_reak) + ' kJ/h ~ 0')
-    print('\n\n')
+    print('\n')
 
-    print('Ausgangsstrom am Reaktor:')
+    print('Erzeugnis des Reaktors:')
     for i in range(len(namen)):
         print(namen[i] + ': ' + '{:0.16g}'.format(n2[i]) + ' kmol/h')
     print('n: ' + '{:0.16g}'.format(sum(n2)) + ' kmol/h')
@@ -826,14 +861,23 @@ def beispiel_pat_ue_03_vollstaendig(rvg):
         sum(np.multiply(n2, h_t2))) + ' kJ/h')
     print('\n\n')
 
-    print('Kühlungsleistung des Ausgangsstroms:')
+    print('========================================')
+    print('KUEHLER')
+    print('========================================')
+    print('Abkühlungsleistung des Ausgangsstroms:')
     print('Q: ' + '{:g}'.format(q_g_kueh) + ' kJ/h')
     print('\n\n')
 
+    print('========================================')
+    print('FLASH')
+    print('========================================')
     print('Abgekühlter Strom nach Reaktorkühler:')
     for i in range(len(namen)):
         print(namen[i] + ': ' + '{:0.16g}'.format(n2[i]) + ' kmol/h')
     print('n: ' + '{:0.16g}'.format(sum(n2)) + ' kmol/h')
+    for i in range(len(namen)):
+        print('z(' + namen[i] + ')' + ': ' +
+              '{:0.16g}'.format(n2[i] / sum(n2)))
     print('T: ' + '{:g}'.format(t2) + ' K')
     print('p: ' + '{:g}'.format(p) + ' bar')
     print('H: ' + '{:g}'.format(
@@ -848,23 +892,29 @@ def beispiel_pat_ue_03_vollstaendig(rvg):
     for i in range(len(namen)):
         print(namen[i] + ': ' + '{:0.16g}'.format(nl[i]) + ' kmol/h')
     print('n: ' + '{:0.16g}'.format(sum(nl)) + ' kmol/h')
+    for i in range(len(namen)):
+        print('x(' + namen[i] + ')' + ': ' +
+              '{:0.16g}'.format(nl[i] / sum(nl)))
     print('T: ' + '{:g}'.format(t_flash) + ' K')
     print('p: ' + '{:g}'.format(p) + ' bar')
     print('H: ' + '{:g}'.format(
         sum(np.multiply(nl, h_t_flash))) + ' kJ/h')
     print('\n\n')
 
-    print('Austrittsgas:')
+    print('Dampf-Austritt:')
     for i in range(len(namen)):
         print(namen[i] + ': ' + '{:0.16g}'.format(npr[i]) + ' kmol/h')
     print('n: ' + '{:0.16g}'.format(sum(npr)) + ' kmol/h')
+    for i in range(len(namen)):
+        print('y(' + namen[i] + ')' + ': ' +
+              '{:0.16g}'.format(nv[i] / sum(nv)))
     print('T: ' + '{:g}'.format(t_flash) + ' K')
     print('p: ' + '{:g}'.format(p) + ' bar')
     print('H: ' + '{:g}'.format(
         sum(np.multiply(npr, h_t_flash))) + ' kJ/h')
     print('\n\n')
 
-    print('Rücklaufstrom bei Rückvermischungsgrad ' +
+    print('Rücklaufstrom bei Rücklaufverhältnis ' +
           str(rvg) + ' :')
     for i in range(len(namen)):
         print(namen[i] + ': ' + '{:0.16g}'.format(nr[i]) + ' kmol/h')
@@ -875,6 +925,9 @@ def beispiel_pat_ue_03_vollstaendig(rvg):
         sum(np.multiply(nr, h_t_flash))) + ' kJ/h')
     print('\n\n')
 
+    sys.stdout = old_stdout
+    log_file.close()
+
     return nl[-2]  # Methanol in der Flüssigkeit
 
 
@@ -883,11 +936,15 @@ def beispiel_pat_ue_03_vollstaendig(rvg):
 # beispiel_svn_14_2()
 # beispiel_pat_ue_03_flash()
 # beispiel_isot_flash_seader_4_1()
-beispiel_pat_ue_03_vollstaendig(0.2)
+# beispiel_pat_ue_03_vollstaendig(0.2)
 
 # optimize.root(
 #    lambda rvg: 350.0 - beispiel_pat_ue_03_vollstaendig(rvg),
 #    0.4
 # )
-
-beispiel_pat_ue_03_vollstaendig(0.64137041)
+# beispiel_pat_ue_03_vollstaendig(0.64137041)
+# beispiel_pat_ue_03_vollstaendig(0.633)
+# Die Lösung ist zwischen 0,65 (346kmol/h) und
+# 0,70 (400kmol/h), aber in jenem Bereich entsteht ein
+# Stabilitätsproblem
+beispiel_pat_ue_03_vollstaendig(0.65)
