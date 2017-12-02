@@ -668,12 +668,12 @@ def beispiel_pat_ue_03_vollstaendig(rlv, print_output=False):
             x_i = soln['x_i']
             v_f = soln['v_f']
             k_i_verteilung = soln['k_i']
-            print('k_i: ')
-            print(k_i_verteilung)
-            print('l_i: ')
-            print(n2_t * (1 - v_f) * x_i)
-            print('v_i: ')
-            print(n2_t * v_f * y_i)
+            # print('k_i: ')
+            # print(k_i_verteilung)
+            # print('l_i: ')
+            # print(n2_t * (1 - v_f) * x_i)
+            # print('v_i: ')
+            # print(n2_t * v_f * y_i)
 
         nv = (n2_t * v_f) * y_i
         nvco = nv[0]
