@@ -507,7 +507,7 @@ def beispiel_isot_flash_seader_4_1():
         print(k_i)
 
 
-def beispiel_pat_ue_03_vollstaendig(rlv):
+def beispiel_pat_ue_03_vollstaendig(rlv, print_output=False):
     # Als Funktion des Rücklaufverhältnises.
     use_pr_eos()
 
@@ -938,7 +938,32 @@ def beispiel_pat_ue_03_vollstaendig(rlv):
         sum(np.multiply(nr, h_t_flash))) + ' kJ/h')
     print('\n\n')
 
+    print('Umsatz (CO): ' + '{:g}'.format(
+        (ne[0] - nl[0] - nv[0] * (1 - rlv)) / ne[0]
+    ))
+
+    print('Umsatz (CO2): ' + '{:g}'.format(
+        (ne[2] - nl[2] - nv[2] * (1 - rlv)) / ne[2]
+    ))
+
+    print('Ausbeute (CH3OH/CO, Flüssigkeit): ' + '{:g}'.format(
+        (nl[-2] + 0 * nv[-2] * (1 - rlv) - ne[-2]) /
+        (ne[0] - nl[0] - nv[0] * (1 - rlv))
+    ))
+
+    print('Ausbeute (CH3OH/CO2, Flüssigkeit): ' + '{:g}'.format(
+        (nl[-2] + 0 * nv[-2] * (1 - rlv) - ne[-2]) /
+        (ne[2] - nl[2] - nv[2] * (1 - rlv))
+    ))
+
     sys.stdout = old_stdout
+    log_file.close()
+
+    log_file = open('output.log', 'r')
+
+    if print_output:
+        print(log_file.read())
+
     log_file.close()
 
     return nl[-2]  # Methanol in der Flüssigkeit
@@ -960,4 +985,4 @@ def beispiel_pat_ue_03_vollstaendig(rlv):
 # Die Lösung ist zwischen 0,65 (346kmol/h) und
 # 0,70 (400kmol/h), aber in jenem Bereich entsteht ein
 # Stabilitätsproblem
-beispiel_pat_ue_03_vollstaendig(0.65)
+# beispiel_pat_ue_03_vollstaendig(0.65, True)
