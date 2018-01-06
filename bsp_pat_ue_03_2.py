@@ -1,5 +1,6 @@
 import numpy as np
 from scipy import integrate
+from scipy import optimize
 import z_l_v
 
 # Modell feststellen
@@ -12,12 +13,23 @@ t0_ref = 298.15  # K
 r = 8.314  # J/(mol K)
 
 namen = ['CO', 'H2', 'CO2', 'H2O', 'CH4', 'NH3', 'AR', 'O2', 'N2']
-ne = np.array([
-    0, 0, 0, 60000, 20000, 0,
+
+ne_dampf = np.array([
+    0, 0, 0, 60000, 0, 0, 0, 0, 0
+], dtype=float)  # kmol/h
+ne_rohgas = np.array([
+    0, 0, 0, 0, 20000, 0, 0, 0, 0
+], dtype=float)  # kmol/h
+ne_luft = np.array([
+    0, 0, 0, 0, 0, 0, 
     0.01 * 15000,
     0.21 * 15000,
     0.78 * 15000
 ], dtype=float)  # kmol/h
+
+te_dampf = 500+273.15 # °K
+te_rohgas = 20+273.15 # °K
+te_luft = 20+273.15 # °K
 
 nuij = np.array([
     [-1, +1, +1, -1, +0, +0, +0, +0, +0],
@@ -131,22 +143,24 @@ def k(t, g_t):
     return np.exp(-delta_g_t / (r * t))
 
 
-delta_gr_298 = nuij.T.dot(g_298)
+ne = ne_dampf + ne_rohgas + ne_luft # kmol/h
+h_dampf_ein = h(te_dampf)
+h_rohgas_ein = h(te_rohgas)
+h_luft_ein = h(te_luft)
+# Adiabatische Vermischung sum(n_i h_i(T)-n_i h_i(T0))=0
+t_ein = optimize.root(lambda temp:
+    sum(
+        ne_dampf*1000*(h(temp)-h_dampf_ein) + 
+        ne_rohgas*1000*(h(temp)-h_rohgas_ein) + 
+        ne_luft*1000*(h(temp)-h_luft_ein)
+        ), 
+    (te_luft+te_dampf+te_rohgas)/3
+    ).x
 
-delta_hr_298 = nuij.T.dot(h_298)
+h_ein = h(t_ein)  # J/mol
 
-cp_493 = r * cp_durch_r(493.15)  # J/(mol K)
-h_ein = h(323.09 + 273.15)  # J/mol
-print(h(298.15))
-print(g(298.15, h(298.15)))
-print(np.sum(h_ein * ne / sum(ne)) * 1000)
-h_493 = h(493.15)
-g_493 = g(493.15, h_493)  # J/mol
-print(g_493)
-k_493 = k(493.15, g_493)  # []
-print(nuij.T.dot(g_493))
-print(k(127+273.15, g(127+273.15, h(127+273.15)))[-1]*(101325.0/(8.314*1000*(127+273.16)))**(1-1/2-3/2)) # Als Konz.
-print(k(25+273.15, g(25+273.15, h(25+273.15)))[-1]) # [762] S. 158 Bsp. 13.2: Weingärtner, Hermann: Chemische Thermodynamik : Einführung für Chemiker und Chemieingenieure. Berlin Heidelberg New York: Springer-Verlag, 2013.
-print(k(1000, g(1000, h(1000)))[-1]) # [5,45E-04] S. 160 Bsp. 13.3: Weingärtner, Hermann: Chemische Thermodynamik : Einführung für Chemiker und Chemieingenieure. Berlin Heidelberg New York: Springer-Verlag, 2013.
-print(k(1100, g(1100, h(1100)))[0]) # [1,0] S. 502 Ex. 13.5: SVN
-print(k(273.15+450, g(273.15+450, h(273.15+450)))[-1]) # [6,59E-03] S. 52: Baerns, Manfred ; Behr, Arno ; Brehm, Axel ; Gmehling, JÃ1⁄4rgen ; Hinrichsen, Kai-Olaf ; Hofmann, Hanns ; Onken, Ulfert ; Palkovits, Regina ; Renken, Albert: Technische Chemie. New York: John Wiley & Sons, 2014.
+h_t_ein = h(t_ein)
+g_t_ein = g(t_ein, h_t_ein)  # J/mol
+k_t_ein = k(493.15, g_t_ein)  # []
+
+print(t_ein)
