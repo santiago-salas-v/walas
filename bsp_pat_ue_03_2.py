@@ -166,23 +166,24 @@ cp_t_ein = r * cp_durch_r(t_ein)
 g_t_ein = g(t_ein, h_t_ein)  # J/mol
 k_t_ein = k(t_ein, g_t_ein)  # []
 
-print(t_ein)
+t_aus_rdampfr =  995 + 273.15 # °K
+h_0 = h_t_ein
+cp_0 = cp_t_ein
+g_0 = g_t_ein
+k_0 = k_t_ein
+
+h_1 = h(t_aus_rdampfr)
+cp_1 = r * cp_durch_r(t_aus_rdampfr)
+g_1 = g(t_aus_rdampfr, h_1)
+k_1 = k(t_aus_rdampfr, g_1)
+print(k_1)
+print(nuij.T.dot(h_1) )
 
 
 def r_dampf_reformierung(x_vec):
     n_aus = x_vec[:len(n_ein)]
-    xi_aus = x_vec[len(n_ein):-1]
-    t_aus = x_vec[-1]
+    xi_aus = x_vec[len(n_ein):]
 
-    h_0 = h_t_ein
-    cp_0 = cp_t_ein
-    g_0 = g_t_ein
-    k_0 = k_t_ein
-
-    h_1 = h(t_aus)
-    cp_1 = r * cp_durch_r(t_aus)
-    g_1 = g(t_aus, h_1)
-    k_1 = k(t_aus, g_1)
 
     delta_h_1 = nuij.T.dot(h_1)  # J/mol
 
@@ -194,23 +195,32 @@ def r_dampf_reformierung(x_vec):
     # Gleichgewicht-Verhältnisse
     # 0 = - Kj prod_i(ni^(nuij*deltaij)) + prod_i(ni^(nuij*(1-deltaij)))
     # deltaij = 1 , wenn nuij < 0 ; 0 sonst
-    t1 = np.array(k_1)
-    t2 = np.ones_like(k_1)
+    pir = np.ones_like(k_1)
+    pip = np.ones_like(k_1)
 
     for i in range(nuij.shape[0]):  # Komponente i
         for j in range(nuij.shape[1]):  # Reaktion j
             if nuij[i, j] < 0:
-                t1[j] = t1[j] * n_aus[i]**abs(nuij[i, j])
+                pir[j] = pir[j] * n_aus[i]**abs(nuij[i, j])
             elif nuij[i, j] > 0:
-                t2[j] = t2[j] * n_aus[i]**abs(nuij[i, j])
+                pip[j] = pip[j] * n_aus[i]**abs(nuij[i, j])
             elif nuij[i, j] == 0:
                 # Mit ni^0 multiplizieren
                 pass
 
-    f[len(n_ein):-1] = -t1 + t2
+    # Abstand zum Gleichgewicht
+    k_pir = np.multiply(k_1, pir)
+    for i in range(len(f[len(n_ein):])):
+        if k_pir[i] < pip[i]:
+            f[len(n_ein)+i] = k_pir[i]/pip[i] - 1
+        elif k_pir[i] > pip[i]:
+            f[len(n_ein)+i] = 1 - pip[i]/k_pir[i]
+        elif k_pir[i] > pip[i]:
+            f[len(n_ein)+i] = 0
+    print(f[len(n_ein):])
 
     # Energiebilanz
-    f[-1] = np.sum(
+    q = np.sum(
         np.multiply(n_ein, (h_0 - h_298)) -
         np.multiply(n_aus, (h_1 - h_298))
     ) + np.dot(xi_aus, -delta_h_1)
@@ -232,7 +242,7 @@ xi_0 = np.array([
 print(xi_0)
 x0 = np.concatenate([
     naus_0,
-    xi_0, [995 + 273.15]
+    xi_0
 ])
 x0[x0 == 0] = eps
 # print(x0)
