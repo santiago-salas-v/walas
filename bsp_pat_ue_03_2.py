@@ -3,6 +3,8 @@ from scipy import integrate
 from scipy import optimize
 import z_l_v
 
+eps = np.finfo(float).eps
+
 # Modell feststellen
 z_l_v.use_pr_eos()
 
@@ -21,17 +23,19 @@ ne_rohgas = np.array([
     0, 0, 0, 0, 20000, 0, 0, 0, 0
 ], dtype=float)  # kmol/h
 ne_luft = np.array([
-    0, 0, 0, 0, 0, 0, 
+    0, 0, 0, 0, 0, 0,
     0.01 * 15000,
     0.21 * 15000,
     0.78 * 15000
 ], dtype=float)  # kmol/h
 
-te_dampf = 500+273.15 # °K
-te_rohgas = 20+273.15 # °K
-te_luft = 20+273.15 # °K
+te_dampf = 500 + 273.15  # °K
+te_rohgas = 20 + 273.15  # °K
+te_luft = 20 + 273.15  # °K
 
 nuij = np.array([
+    [+1, +2, +0, +0, -1, +0, +0, -1 / 2, +0],
+    [+1, +3, +0, -1, -1, +0, +0, +0, +0],
     [-1, +1, +1, -1, +0, +0, +0, +0, +0],
     [-1, -3, +0, +1, +1, +0, +0, +0, +0],
     [+0, -4, -1, +2, +1, +0, +0, +0, +0],
@@ -143,24 +147,96 @@ def k(t, g_t):
     return np.exp(-delta_g_t / (r * t))
 
 
-ne = ne_dampf + ne_rohgas + ne_luft # kmol/h
+n_ein = (ne_dampf + ne_rohgas + ne_luft) * 1000  # mol/h
 h_dampf_ein = h(te_dampf)
 h_rohgas_ein = h(te_rohgas)
 h_luft_ein = h(te_luft)
 # Adiabatische Vermischung sum(n_i h_i(T)-n_i h_i(T0))=0
 t_ein = optimize.root(lambda temp:
-    sum(
-        ne_dampf*1000*(h(temp)-h_dampf_ein) + 
-        ne_rohgas*1000*(h(temp)-h_rohgas_ein) + 
-        ne_luft*1000*(h(temp)-h_luft_ein)
-        ), 
-    (te_luft+te_dampf+te_rohgas)/3
-    ).x
-
-h_ein = h(t_ein)  # J/mol
+                      sum(
+                          ne_dampf * 1000 * (h(temp) - h_dampf_ein) +
+                          ne_rohgas * 1000 * (h(temp) - h_rohgas_ein) +
+                          ne_luft * 1000 * (h(temp) - h_luft_ein)
+                      ),
+                      (te_luft + te_dampf + te_rohgas) / 3
+                      ).x
 
 h_t_ein = h(t_ein)
+cp_t_ein = r * cp_durch_r(t_ein)
 g_t_ein = g(t_ein, h_t_ein)  # J/mol
-k_t_ein = k(493.15, g_t_ein)  # []
+k_t_ein = k(t_ein, g_t_ein)  # []
 
 print(t_ein)
+
+
+def r_dampf_reformierung(x_vec):
+    n_aus = x_vec[:len(n_ein)]
+    xi_aus = x_vec[len(n_ein):-1]
+    t_aus = x_vec[-1]
+
+    h_0 = h_t_ein
+    cp_0 = cp_t_ein
+    g_0 = g_t_ein
+    k_0 = k_t_ein
+
+    h_1 = h(t_aus)
+    cp_1 = r * cp_durch_r(t_aus)
+    g_1 = g(t_aus, h_1)
+    k_1 = k(t_aus, g_1)
+
+    delta_h_1 = nuij.T.dot(h_1)  # J/mol
+
+    f = np.empty_like(x_vec)
+
+    # Stoffbilanzen
+    f[:len(n_ein)] = -n_aus + n_ein + nuij.dot(xi_aus)
+
+    # Gleichgewicht-Verhältnisse
+    # 0 = - Kj prod_i(ni^(nuij*deltaij)) + prod_i(ni^(nuij*(1-deltaij)))
+    # deltaij = 1 , wenn nuij < 0 ; 0 sonst
+    t1 = np.array(k_1)
+    t2 = np.ones_like(k_1)
+
+    for i in range(nuij.shape[0]):  # Komponente i
+        for j in range(nuij.shape[1]):  # Reaktion j
+            if nuij[i, j] < 0:
+                t1[j] = t1[j] * n_aus[i]**abs(nuij[i, j])
+            elif nuij[i, j] > 0:
+                t2[j] = t2[j] * n_aus[i]**abs(nuij[i, j])
+            elif nuij[i, j] == 0:
+                # Mit ni^0 multiplizieren
+                pass
+
+    f[len(n_ein):-1] = -t1 + t2
+
+    # Energiebilanz
+    f[-1] = np.sum(
+        np.multiply(n_ein, (h_0 - h_298)) -
+        np.multiply(n_aus, (h_1 - h_298))
+    ) + np.dot(xi_aus, -delta_h_1)
+
+    return f
+
+
+print(n_ein)
+naus_0 = np.array([
+    13535.13, 57854.92, 5909.098,
+    40496.69, 555.78, 57.88693,
+    150, 0, 11671.06
+]) * 1000
+print(-naus_0[:5] + n_ein[:5])
+print(nuij)
+xi_0 = np.array([
+    2*0.21 * 15000, 19444.22, 0, 0, 0, 0
+]) * 1000
+print(xi_0)
+x0 = np.concatenate([
+    naus_0,
+    xi_0, [995 + 273.15]
+])
+x0[x0 == 0] = eps
+# print(x0)
+# print(x0[:len(n_ein)])
+# print(nuij.dot(np.zeros(nuij.shape[1])))
+soln = optimize.root(r_dampf_reformierung, x0)
+print(soln)
