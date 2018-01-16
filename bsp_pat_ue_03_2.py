@@ -193,7 +193,8 @@ def r_dampf_reformierung(x_vec):
     f[:len(n_ein)] = -n_aus + n_ein + nuij.dot(xi_aus)
 
     # Gleichgewicht-Verhältnisse
-    # 0 = - Kj prod_i(ni^(nuij*deltaij)) + prod_i(ni^(nuij*(1-deltaij)))
+    # 0 = - Kj * n_T^sum_i(nuij) *  prod_i(ni^(nuij*deltaij)) + 
+    #                               prod_i(ni^(nuij*(1-deltaij)))
     # deltaij = 1 , wenn nuij < 0 ; 0 sonst
     pir = np.ones_like(k_1)
     pip = np.ones_like(k_1)
@@ -208,14 +209,15 @@ def r_dampf_reformierung(x_vec):
                 # Mit ni^0 multiplizieren
                 pass
 
+    # Substrate, inklusive totale Mengen je Molenbruch
+    k_pir = np.sum(n_aus)**np.sum(+ nuij) * np.multiply(k_1, pir)
     # Abstand zum Gleichgewicht
-    k_pir = np.multiply(k_1, pir)
     for i in range(len(f[len(n_ein):])):
         if k_pir[i] < pip[i]:
             f[len(n_ein)+i] = k_pir[i]/pip[i] - 1
         elif k_pir[i] > pip[i]:
             f[len(n_ein)+i] = 1 - pip[i]/k_pir[i]
-        elif k_pir[i] > pip[i]:
+        elif k_pir[i] == pip[i]:
             f[len(n_ein)+i] = 0
     print(f[len(n_ein):])
 
