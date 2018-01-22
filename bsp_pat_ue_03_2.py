@@ -4,6 +4,7 @@ from scipy import optimize
 import z_l_v
 import logging
 from numerik import nr_ls
+from numerik import gauss_elimination
 
 eps = np.finfo(float).eps
 
@@ -178,6 +179,7 @@ h_1 = h(t_aus_rdampfr)
 cp_1 = r * cp_durch_r(t_aus_rdampfr)
 g_1 = g(t_aus_rdampfr, h_1)
 k_1 = k(t_aus_rdampfr, g_1)
+print('T = ' + '{0:.6g}'.format(t_aus_rdampfr))
 print(k_1)
 print(nuij.T.dot(h_1) )
 
@@ -302,7 +304,7 @@ print(-naus_0[:5] + n_ein[:5])
 print(nuij)
 xi_0 = np.array([
     2*0.21 * 15000, 19444.22, 0, 0, 0, 0
-]) * 1000 * 0
+]) * 1000
 print(xi_0)
 x0 = np.concatenate([
     naus_0,
@@ -316,6 +318,28 @@ soln = optimize.root(r_dampf_reformierung, x0)
 print(soln)
 
 n_ein = np.matrix(n_ein).T
+
+resp = """
+ 13.535,13   
+ 57.854,92   
+ 5.909,09   
+-19.053,31   
+-19.444,22   
+ 57,89      
+""".replace('.','').replace(',','.').replace('–', '-').replace(' ','').split('\n')
+
+resp = np.matrix([x for x in resp if len(x)>0], dtype=float).T
+
+print(resp)
+print(nuij[:6,:6])
+print(nuij[[0,2,3,4],:4])
+
+print(gauss_elimination(nuij[:6,:6],resp))
+
+
+for row in nuij:
+    print(str(row.tolist()).replace('[','').replace(']','').replace(',',' ').replace('.',','))
+
 progress_k, stop, outer_it_k, outer_it_j, \
         lambda_ls, accum_step, x, \
         diff, f_val, lambda_ls_y, \

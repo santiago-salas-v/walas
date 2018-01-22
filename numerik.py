@@ -41,12 +41,12 @@ def gauss_elimination(a, b):
     :param b: numpy.matrix n X 1
     """
     n = a.shape[0]
-    x = np.matrix(np.zeros_like(b))
-    y = np.matrix(np.zeros_like(b))
+    x = np.matrix(np.zeros_like(b, dtype=float))
+    y = np.matrix(np.zeros_like(b, dtype=float))
     l, r, p, d, da = lrpd(a)
     pdb = p * d * b
-    sum_lik_xk = 0
-    sum_lik_yk = 0
+    sum_lik_xk = 0.
+    sum_lik_yk = 0.
     for j in range(0, n, +1):
         # Forward substitution Ly = PDb
         for k in range(0, j, +1):
