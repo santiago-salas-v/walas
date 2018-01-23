@@ -339,16 +339,16 @@ def func_0(index, xi):
 def ln_func_0(index, xi):
     return  -np.log(k_1[index]) -sum(nuij[:,index])*np.log(sum(n_ein)+sum(nuij[:,index])*xi)+np.sum([np.log((n_ein[i]+nu*xi)**nu) for i, nu in enumerate(nuij[:,index])])
 
-def func_1(index, xi):
+def func_1(index, n, xi):
     pip = 1.0
     pir = 1.0
-    n_t = sum(naus_0)
+    n_t = sum(n)
     nu_t = sum(nuij[:, index])
     for i in range(nuij.shape[0]):  # Komponente i
         if nuij[i, index] < 0:
-            pir = pir * np.power(naus_0[i] + xi * nuij[i, index], abs(nuij[i, index]))
+            pir = pir * np.power(n[i] + xi * nuij[i, index], abs(nuij[i, index]))
         elif nuij[i, index] > 0:
-            pip = pip * np.power(naus_0[i] + xi * nuij[i, index], abs(nuij[i, index]))
+            pip = pip * np.power(n[i] + xi * nuij[i, index], abs(nuij[i, index]))
         elif nuij[i, index] == 0:
             # Mit ni^0 multiplizieren
             pass
@@ -372,16 +372,35 @@ print([func_b_0(i, 0) for i in range(nuij.shape[1])])
 
 #xi_0 = [x.x.item()  if x.success else 0 for x in [optimize.root(lambda xi: func_1(y, xi), 1/len(n_ein)*sum(n_ein)) for y in range(nuij.shape[1])]]
 
-xi_0 = [0 for j in range(nuij.shape[1])]
+# Relaxations-Methode (Gmehling Chem. Therm.)
+def relaxation(n_0, x_mal):
+    n = np.copy(n_0)
+    xi_0 = [0 for j in range(nuij.shape[1])]
 
-naus_0 = np.copy(n_ein)
+    for x in range(x_mal):
+        for j in range(nuij.shape[1]):
+            soln_xi = optimize.root(lambda xi: func_1(j, n, xi), 1 / len(n) * sum(n))
+            if soln_xi.success:
+                xi_0[j] = soln_xi.x
+            elif not soln_xi.success:
+                soln_xi = optimize.bisect(
+                    lambda xi:
+                    func_1(j, n, xi), -1 / len(n) * sum(n),1 / len(n) * sum(n),
+                    full_output=True)
+                if soln_xi[1].converged:
+                    xi_0[j] = soln_xi[0]
+            n = n + nuij[:, j] * xi_0[j]
+    return (n, xi_0)
 
-for x in range(10):
-    for j in range(nuij.shape[1]):
-        soln_xi = optimize.root(lambda xi: func_1(j, xi), 1 / len(naus_0) * sum(naus_0))
-        if soln_xi.success:
-            xi_0[j] = soln_xi.x
-        naus_0 = naus_0 + nuij[:, j] * xi_0[j]
+
+# 4-Mal Relaxation-Methode
+naus_0, xi_0 = relaxation(naus_0, 3)
+_, xi_0 = relaxation(n_ein, 1)
+
+x0 = np.concatenate([
+    naus_0,
+    xi_0
+])
 
 progress_k, stop, outer_it_k, outer_it_j, \
         lambda_ls, accum_step, x, \
