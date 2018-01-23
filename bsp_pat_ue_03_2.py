@@ -215,25 +215,28 @@ def r_dampf_reformierung(x_vec):
                 pass
 
     # Substrate, inklusive totale Mengen je Molenbruch
-    k_pir = n_t**np.sum(+ nuij) * np.multiply(k_1, pir)
+    k_pir_nt = n_t**sum(+ nuij) * k_1 * pir
+    # f_val = k_pir_nt - pip
     # Abstand zum Gleichgewicht
-    #for i in range(len(f[len(n_ein):])):
-    #    if k_pir[i] < pip[i]:
-    #        f[len(n_ein)+i] = k_pir[i]/pip[i] - 1
-    #    elif k_pir[i] > pip[i]:
-    #        f[len(n_ein)+i] = 1 - pip[i]/k_pir[i]
-    #    elif k_pir[i] == pip[i]:
-    #        f[len(n_ein)+i] = 0
-    f_val = n_t**np.sum(+ nuij) * k_1 - np.array(
-        [
-            np.prod(np.power(n_aus[j], nuij[:,j])) for j in range(nuij.shape[1])
-        ])
-    if type(f) is np.ndarray:
-        f[len(n_ein):] = f_val
-    elif type(f) is np.matrixlib.defmatrix.matrix:
-        f[len(n_ein):] = np.matrix(f_val).T
+    for i in range(len(f[len(n_ein):])):
+        if k_pir_nt[i] < pip[i]:
+            f[len(n_ein)+i] = k_pir_nt[i]/pip[i] - 1
+        elif k_pir_nt[i] > pip[i]:
+            f[len(n_ein)+i] = 1 - pip[i]/k_pir_nt[i]
+        elif k_pir_nt[i] == pip[i]:
+            f[len(n_ein)+i] = 0
+    # f_val = np.multiply(k_1, np.power(n_t, sum(nuij))) - np.array(
+    #     [
+    #         np.prod(np.power(n_aus[j], nuij[:,j])) for j in range(nuij.shape[1])
+    #     ])
+
+    #if type(f) is np.ndarray:
+    #    f[len(n_ein):] = f_val
+    #elif type(f) is np.matrixlib.defmatrix.matrix:
+    #    f[len(n_ein):] = np.matrix(f_val).T
     #print(f[len(n_ein):])
-    print(f)
+    print('k_pir_nt: ' + str(k_pir_nt))
+    print('pip: ' + str(pip))
 
 
     # Energiebilanz
@@ -248,11 +251,21 @@ def jac_r_dampf_reformierung(x_vec):
     n_aus = x_vec[:len(n_ein)]
     xi_aus = x_vec[len(n_ein):]
 
-    n_t = np.sum(n_aus)
-    prod_n_nuij = np.array([
-        np.prod(np.power(n_aus[j],nuij[:,j])) for j in range(nuij.shape[1])
-        ])
-    sum_nuij = np.sum(nuij)
+    n_t = sum(n_aus).item()
+    pir = np.ones_like(k_1)
+    pip = np.ones_like(k_1)
+
+    for i in range(nuij.shape[0]):  # Komponente i
+        for j in range(nuij.shape[1]):  # Reaktion j
+            if nuij[i, j] < 0:
+                pir[j] = pir[j] * np.power(n_aus[i], abs(nuij[i, j]))
+            elif nuij[i, j] > 0:
+                pip[j] = pip[j] * np.power(n_aus[i], abs(nuij[i, j]))
+            elif nuij[i, j] == 0:
+                # Mit ni^0 multiplizieren
+                pass
+
+    sum_nuij = sum(nuij)
 
     len_n_aus = len(n_aus)
     len_xi_aus = len(xi_aus)
@@ -263,9 +276,16 @@ def jac_r_dampf_reformierung(x_vec):
         jac[i, i] = -1.
         for j in range(len_xi_aus):
             jac[i, len_n_aus + j] = nuij[i, j]
-            jac[len_n_aus + j, i] = \
-                sum_nuij * n_t**(sum_nuij - 1) * k_1[j] - \
-                nuij[i, j] / n_aus[i] * prod_n_nuij[j]
+            if nuij[i,j] < 0:
+                jac[len_n_aus + j, i] = \
+                    (sum_nuij[j] / n_t - nuij[i, j] / n_aus[i]) * n_t ** sum_nuij[j] * k_1[j] * pir[j]
+            elif nuij[i,j] > 0:
+                jac[len_n_aus + j, i] = \
+                    (sum_nuij[j] / n_t - 0) * n_t ** sum_nuij[j] * k_1[j] * pir[j] - nuij[i,j]/n_aus[i] * pip[j]
+            elif nuij[i,j] == 0:
+                jac[len_n_aus + j, i] = \
+                    (sum_nuij[j] / n_t - 0) * n_t ** sum_nuij[j] * k_1[j] * pir[j]
+
 
     return jac
 
@@ -318,7 +338,7 @@ soln = optimize.root(r_dampf_reformierung, x0)
 print(soln)
 
 #n_ein = np.matrix(n_ein).T
-n_ein[n_ein == 0] = eps
+#n_ein[n_ein == 0] = eps
 naus_0 = np.copy(n_ein)
 
 
@@ -397,10 +417,19 @@ def relaxation(n_0, x_mal):
 naus_0, xi_0 = relaxation(naus_0, 3)
 _, xi_0 = relaxation(n_ein, 1)
 
+print(func_1(0, naus_0, 0))
+
 x0 = np.concatenate([
     naus_0,
     xi_0
 ])
+
+soln = optimize.root(r_dampf_reformierung, x0)
+print(soln)
+for item in soln.x:
+    print('{0:0.10g}'.format(item / 1000.).replace('.', ','))
+
+n_ein = np.matrix(n_ein).T
 
 progress_k, stop, outer_it_k, outer_it_j, \
         lambda_ls, accum_step, x, \
