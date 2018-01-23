@@ -224,16 +224,6 @@ def r_dampf_reformierung(x_vec):
             f[len(n_ein) + i] = 1 - pip[i] / k_pir_nt[i]
         elif k_pir_nt[i] == pip[i]:
             f[len(n_ein) + i] = 0
-    # f_val = np.multiply(k_1, np.power(n_t, sum(nuij))) - np.array(
-    #     [
-    #         np.prod(np.power(n_aus[j], nuij[:,j])) for j in range(nuij.shape[1])
-    #     ])
-
-    # if type(f) is np.ndarray:
-    #    f[len(n_ein):] = f_val
-    # elif type(f) is np.matrixlib.defmatrix.matrix:
-    #    f[len(n_ein):] = np.matrix(f_val).T
-    # print(f[len(n_ein):])
     print('k_pir_nt: ' + str(k_pir_nt))
     print('pip: ' + str(pip))
 
@@ -319,59 +309,20 @@ def notify_status_func(progress_k, stop_value, k,
 
 
 print(n_ein)
-# naus_0 = np.array([
-#     13535.13, 57854.92, 5909.098,
-#     40496.69, 555.78, 57.88693,
-#     150, 0, 11671.06
-# ]) * 1000
 naus_0 = n_ein
 print(-naus_0[:5] + n_ein[:5])
 print(nuij)
-xi_0 = np.array([
-    2 * 0.21 * 15000, 19444.22, 0, 0, 0, 0
-]) * 1000 * 0
+xi_0 = np.zeros(nuij.shape[1])
 print(xi_0)
 x0 = np.concatenate([
     naus_0,
     xi_0
 ])
-x0[x0 == 0] = eps
-# print(x0)
-# print(x0[:len(n_ein)])
-# print(nuij.dot(np.zeros(nuij.shape[1])))
+#x0[x0 == 0] = eps
 soln = optimize.root(r_dampf_reformierung, x0)
 print(soln)
 
-#n_ein = np.matrix(n_ein).T
-#n_ein[n_ein == 0] = eps
 naus_0 = np.copy(n_ein)
-
-
-def func_b_0(index, xi):
-    d_1 = -k_1[index] + np.prod([(n_ein[i] + nu * xi) ** nu for i, nu in enumerate(
-        nuij[:, index])]) / (sum(n_ein) + sum(nuij[:, index]) * xi) ** sum(nuij[:, index])
-    d_2 = -1 / k_1[index] + np.prod([(n_ein[i] + nu * xi) ** (-nu) for i, nu in enumerate(
-        nuij[:, index])]) * (sum(n_ein) + sum(nuij[:, index]) * xi) ** sum(nuij[:, index])
-    if np.isnan(d_1) or np.isinf(d_1):
-        return d_2
-    else:
-        return d_1
-
-
-def func_0(index, xi):
-    return -k_1[index] * (sum(n_ein) + sum(nuij[:,
-                                                index]) * xi)**sum(nuij[:,
-                                                                        index]) + np.prod([(n_ein[i] + nu * xi)**nu for i,
-                                                                                           nu in enumerate(nuij[:,
-                                                                                                                index])])
-
-
-def ln_func_0(index, xi):
-    return -np.log(k_1[index]) - sum(nuij[:,
-                                          index]) * np.log(sum(n_ein) + sum(nuij[:,
-                                                                                 index]) * xi) + np.sum([np.log((n_ein[i] + nu * xi)**nu) for i,
-                                                                                                         nu in enumerate(nuij[:,
-                                                                                                                              index])])
 
 
 def func_1(index, n, xi):
@@ -393,22 +344,6 @@ def func_1(index, n, xi):
     print('k_pir_nt: ' + str(k_pir_nt))
     print('pip: ' + str(pip))
     return +k_1[index] * (n_t + xi * nu_t) ** nu_t * pir - pip
-    # return -k_1[index] * (n_t + xi * nu_t) ** nu_t * pir + pip
-    # return - np.log(k_1[index]) - nu_t * np.log(n_t + xi * nu_t) - np.log(pir) + np.log(pip)
-    # return k_pir_nt / pip - 1
-    # if k_pir_nt < pip:
-    #    return k_pir_nt / pip - 1
-    # elif k_pir_nt > pip:
-    #    return 1 - pip / k_pir_nt
-    # elif k_pir_nt == pip:
-    #    return 0
-
-
-print([ln_func_0(i, 0) for i in range(nuij.shape[1])])
-
-print([func_b_0(i, 0) for i in range(nuij.shape[1])])
-
-#xi_0 = [x.x.item()  if x.success else 0 for x in [optimize.root(lambda xi: func_1(y, xi), 1/len(n_ein)*sum(n_ein)) for y in range(nuij.shape[1])]]
 
 # Relaxations-Methode (Gmehling Chem. Therm.)
 
@@ -416,6 +351,7 @@ print([func_b_0(i, 0) for i in range(nuij.shape[1])])
 def relaxation(n_0, x_mal):
     n = np.copy(n_0)
     xi_0 = [0 for j in range(nuij.shape[1])]
+    xi_0_accum = [0 for j in range(nuij.shape[1])]
 
     for x in range(x_mal):
         for j in range(nuij.shape[1]):
@@ -424,25 +360,26 @@ def relaxation(n_0, x_mal):
                     j, n, xi), 1 / len(n) * sum(n))
             if soln_xi.success:
                 xi_0[j] = soln_xi.x
+                xi_0_accum[j] = xi_0_accum[j] + soln_xi.x
             elif not soln_xi.success:
                 soln_xi = optimize.bisect(
                     lambda xi: func_1(
                         j, n, xi), -1 / len(n) * sum(n), 1 / len(n) * sum(n), full_output=True)
                 if soln_xi[1].converged:
                     xi_0[j] = soln_xi[0]
+                    xi_0_accum[j] = xi_0_accum[j] + soln_xi[0]
             n = n + nuij[:, j] * xi_0[j]
-    return (n, xi_0)
+    return (n, xi_0, xi_0_accum)
 
 
 # 4-Mal Relaxation-Methode
-naus_0, xi_0 = relaxation(naus_0, 3)
-_, xi_0 = relaxation(n_ein, 1)
+naus_0, _ , xi_0_accum = relaxation(naus_0, 3)
 
 print(func_1(0, naus_0, 0))
 
 x0 = np.concatenate([
     naus_0,
-    xi_0
+    xi_0_accum
 ])
 
 soln = optimize.root(r_dampf_reformierung, x0)
@@ -451,6 +388,11 @@ for item in soln.x:
     print('{0:0.10g}'.format(item / 1000.).replace('.', ','))
 
 n_ein = np.matrix(n_ein).T
+
+x0 = np.concatenate([
+    naus_0,
+    np.zeros(len(xi_0))
+])
 
 progress_k, stop, outer_it_k, outer_it_j, \
     lambda_ls, accum_step, x, \
