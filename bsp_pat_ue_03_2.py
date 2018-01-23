@@ -236,78 +236,6 @@ def r_dampf_reformierung(x_vec):
     return f
 
 
-def jac_r_dampf_reformierung(x_vec):
-    n_aus = x_vec[:len(n_ein)]
-    xi_aus = x_vec[len(n_ein):]
-
-    n_t = sum(n_aus).item()
-
-    sum_nuij = sum(nuij)
-
-    len_n_aus = len(n_aus)
-    len_xi_aus = len(xi_aus)
-
-    jac = np.zeros([len(x_vec), len(x_vec)])
-
-    pir = np.ones_like(k_1)
-    pip = np.ones_like(k_1)
-
-    for i in range(nuij.shape[0]):  # Komponente i
-        for j in range(nuij.shape[1]):  # Reaktion j
-            if nuij[i, j] < 0:
-                pir[j] = pir[j] * np.power(n_aus[i], abs(nuij[i, j]))
-            elif nuij[i, j] > 0:
-                pip[j] = pip[j] * np.power(n_aus[i], abs(nuij[i, j]))
-            elif nuij[i, j] == 0:
-                # Mit ni^0 multiplizieren
-                pass
-        # Substrate, inklusive totale Mengen je Molenbruch
-
-    k_pir_nt = n_t ** sum(+ nuij) * k_1 * pir
-
-    for i in range(len_n_aus):
-        jac[i, i] = -1.
-        for j in range(len_xi_aus):
-            jac[i, len_n_aus + j] = nuij[i, j]
-            if k_pir_nt[j] < pip[j]:
-                jac[len_n_aus + j, i] = \
-                    (sum_nuij[j] / n_t - nuij[i, j] / n_aus[i]) * \
-                    k_1[j] * n_t ** sum_nuij[j] * pir[j] / pip[j]
-            elif k_pir_nt[j] > pip[j]:
-                jac[len_n_aus + j, i] = \
-                    -(sum_nuij[j] / n_t - nuij[i, j] / n_aus[i]) * \
-                    1 / k_1[j] * n_t ** -sum_nuij[j] * pip[j] / pir[j]
-            elif k_pir_nt[j] == pip[j]:
-                jac[len_n_aus + j, i] = \
-                    (sum_nuij[j] / n_t - nuij[i, j] / n_aus[i]) * 1.0
-
-    return jac
-
-
-def notify_status_func(progress_k, stop_value, k,
-                       j_it_backtrack, lambda_ls, accum_step,
-                       x, diff, f_val, j_val, lambda_ls_y,
-                       method_loops):
-    g_min = np.nan
-    g1 = np.nan
-    y = lambda_ls_y
-    pr_str = ';k=' + str(k) + \
-        ';backtrack=' + str(j_it_backtrack) + \
-        ';lambda_ls=' + str(lambda_ls) + \
-        ';accum_step=' + str(accum_step) + \
-        ';stop=' + str(stop_value) + \
-        ';X=' + '[' + ','.join(map(str, x.T)) + ']' + \
-        ';||X(k)-X(k-1)||=' + str((diff.T * diff).item()) + \
-        ';f(X)=' + '[' + ','.join(map(str, f_val.T.A1)) + ']' + \
-        ';||f(X)||=' + str(np.sqrt((f_val.T * f_val).item())) + \
-        ';j(X)=' + str(j_val.tolist()) + \
-        ';Y=' + '[' + ','.join(map(str, y.T.A1)) + ']' + \
-        ';||Y||=' + str(np.sqrt((y.T * y).item())) + \
-        ';g=' + str(g_min) + \
-        ';|g-g1|=' + str(abs(g_min - g1))
-    logging.debug(pr_str)
-
-
 print(n_ein)
 naus_0 = n_ein
 print(-naus_0[:5] + n_ein[:5])
@@ -325,7 +253,7 @@ print(soln)
 naus_0 = np.copy(n_ein)
 
 
-def func_1(index, n, xi):
+def r_j(index, n, xi):
     pip = 1.0
     pir = 1.0
     n_t = sum(n)
@@ -356,56 +284,31 @@ def relaxation(n_0, x_mal):
     for x in range(x_mal):
         for j in range(nuij.shape[1]):
             soln_xi = optimize.root(
-                lambda xi: func_1(
+                lambda xi: r_j(
                     j, n, xi), 1 / len(n) * sum(n))
             if soln_xi.success:
                 xi_0[j] = soln_xi.x
                 xi_0_accum[j] = xi_0_accum[j] + soln_xi.x
             elif not soln_xi.success:
                 soln_xi = optimize.bisect(
-                    lambda xi: func_1(
+                    lambda xi: r_j(
                         j, n, xi), -1 / len(n) * sum(n), 1 / len(n) * sum(n), full_output=True)
                 if soln_xi[1].converged:
                     xi_0[j] = soln_xi[0]
                     xi_0_accum[j] = xi_0_accum[j] + soln_xi[0]
             n = n + nuij[:, j] * xi_0[j]
-    return (n, xi_0, xi_0_accum)
+            fehler = np.sqrt(np.array(xi_0).dot(np.array(xi_0)))
+            print(fehler)
+    return (n, xi_0, xi_0_accum, fehler)
 
 
 # 4-Mal Relaxation-Methode
-naus_0, _ , xi_0_accum = relaxation(naus_0, 3)
+naus_0, _, xi_0_accum, fehler = relaxation(naus_0, 40)
 
-print(func_1(0, naus_0, 0))
+for item in naus_0:
+    print('{0:0.20g}'.format(item / 1000.).replace('.', ','))
 
-x0 = np.concatenate([
-    naus_0,
-    xi_0_accum
-])
+for item in np.array(xi_0_accum):
+    print('{0:0.20g}'.format(item / 1000.).replace('.', ','))
 
-soln = optimize.root(r_dampf_reformierung, x0)
-print(soln)
-for item in soln.x:
-    print('{0:0.10g}'.format(item / 1000.).replace('.', ','))
-
-n_ein = np.matrix(n_ein).T
-
-x0 = np.concatenate([
-    naus_0,
-    np.zeros(len(xi_0))
-])
-
-progress_k, stop, outer_it_k, outer_it_j, \
-    lambda_ls, accum_step, x, \
-    diff, f_val, lambda_ls_y, \
-    method_loops = \
-    nr_ls(x0=np.matrix(x0).T,
-          f=lambda x: np.matrix(r_dampf_reformierung(x)),
-          j=lambda x: np.matrix(jac_r_dampf_reformierung(x)),
-          tol=1e-12,
-          max_it=1000,
-          inner_loop_condition=lambda x_vec:
-          all([item >= 0 for item in
-               x_vec[0:len(n_ein)]]),
-          notify_status_func=notify_status_func,
-          method_loops=[0, 0],
-          process_func_handle=None)
+print('fehler: ' + '{0:0.20g}'.format(fehler).replace('.', ','))
