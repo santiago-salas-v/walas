@@ -304,7 +304,7 @@ print(-naus_0[:5] + n_ein[:5])
 print(nuij)
 xi_0 = np.array([
     2*0.21 * 15000, 19444.22, 0, 0, 0, 0
-]) * 1000
+]) * 1000 * 0
 print(xi_0)
 x0 = np.concatenate([
     naus_0,
@@ -317,28 +317,59 @@ x0[x0 == 0] = eps
 soln = optimize.root(r_dampf_reformierung, x0)
 print(soln)
 
-n_ein = np.matrix(n_ein).T
-
-resp = """
- 13.535,13   
- 57.854,92   
- 5.909,09   
--19.053,31   
--19.444,22   
- 57,89      
-""".replace('.','').replace(',','.').replace('–', '-').replace(' ','').split('\n')
-
-resp = np.matrix([x for x in resp if len(x)>0], dtype=float).T
-
-print(resp)
-print(nuij[:6,:6])
-print(nuij[[0,2,3,4],:4])
-
-print(gauss_elimination(nuij[:6,:6],resp))
+#n_ein = np.matrix(n_ein).T
+n_ein[n_ein == 0] = eps
 
 
-for row in nuij:
-    print(str(row.tolist()).replace('[','').replace(']','').replace(',',' ').replace('.',','))
+def func_b_0(index, xi):
+    d_1 = -k_1[index] + np.prod([(n_ein[i] + nu * xi) ** nu for i, nu in enumerate(nuij[:, index])]) / (
+            sum(n_ein) + sum(nuij[:, index]) * xi) ** sum(nuij[:, index])
+    d_2 = -1 / k_1[index] + np.prod([(n_ein[i] + nu * xi) ** (-nu) for i, nu in enumerate(nuij[:, index])]) * (
+            sum(n_ein) + sum(nuij[:, index]) * xi) ** sum(nuij[:, index])
+    if np.isnan(d_1) or np.isinf(d_1):
+        return d_2
+    else:
+        return d_1
+
+def func_0(index, xi):
+    return  -k_1[index]*(sum(n_ein)+sum(nuij[:,index])*xi)**sum(nuij[:,index])+np.prod([(n_ein[i]+nu*xi)**nu for i, nu in enumerate(nuij[:,index])])
+
+
+def ln_func_0(index, xi):
+    return  -np.log(k_1[index]) -sum(nuij[:,index])*np.log(sum(n_ein)+sum(nuij[:,index])*xi)+np.sum([np.log((n_ein[i]+nu*xi)**nu) for i, nu in enumerate(nuij[:,index])])
+
+def func_1(index, xi):
+    pip = 1.0
+    pir = 1.0
+    n_t = sum(n_ein)
+    nu_t = sum(nuij[:, index])
+    for i in range(nuij.shape[0]):  # Komponente i
+        if nuij[i, index] < 0:
+            pir = pir * np.power(n_ein[i] + xi * nuij[i, index], abs(nuij[i, index]))
+        elif nuij[i, index] > 0:
+            pip = pip * np.power(n_ein[i] + xi * nuij[i, index], abs(nuij[i, index]))
+        elif nuij[i, index] == 0:
+            # Mit ni^0 multiplizieren
+            pass
+    k_pir_nt = k_1[index] * pir * (n_t +  xi * nu_t )**nu_t
+    print( 'k_pir_nt: '+ str(k_pir_nt))
+    print('pip: ' + str(pip))
+    return +k_1[index] * (n_t + xi * nu_t) ** nu_t * pir - pip
+    #return -k_1[index] * (n_t + xi * nu_t) ** nu_t * pir + pip
+    #return - np.log(k_1[index]) - nu_t * np.log(n_t + xi * nu_t) - np.log(pir) + np.log(pip)
+    #return k_pir_nt / pip - 1
+    #if k_pir_nt < pip:
+    #    return k_pir_nt / pip - 1
+    #elif k_pir_nt > pip:
+    #    return 1 - pip / k_pir_nt
+    #elif k_pir_nt == pip:
+    #    return 0
+
+print([ln_func_0(i, 0) for i in range(nuij.shape[1])])
+
+print([func_b_0(i, 0) for i in range(nuij.shape[1])])
+
+xi_0 = [x.x.item()  if x.success else 0 for x in [optimize.root(lambda xi: func_1(y, xi), 1/len(n_ein)*sum(n_ein)) for y in range(nuij.shape[1])]]
 
 progress_k, stop, outer_it_k, outer_it_j, \
         lambda_ls, accum_step, x, \
