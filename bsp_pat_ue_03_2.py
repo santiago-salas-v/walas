@@ -319,6 +319,7 @@ print(soln)
 
 #n_ein = np.matrix(n_ein).T
 n_ein[n_ein == 0] = eps
+naus_0 = np.copy(n_ein)
 
 
 def func_b_0(index, xi):
@@ -341,13 +342,13 @@ def ln_func_0(index, xi):
 def func_1(index, xi):
     pip = 1.0
     pir = 1.0
-    n_t = sum(n_ein)
+    n_t = sum(naus_0)
     nu_t = sum(nuij[:, index])
     for i in range(nuij.shape[0]):  # Komponente i
         if nuij[i, index] < 0:
-            pir = pir * np.power(n_ein[i] + xi * nuij[i, index], abs(nuij[i, index]))
+            pir = pir * np.power(naus_0[i] + xi * nuij[i, index], abs(nuij[i, index]))
         elif nuij[i, index] > 0:
-            pip = pip * np.power(n_ein[i] + xi * nuij[i, index], abs(nuij[i, index]))
+            pip = pip * np.power(naus_0[i] + xi * nuij[i, index], abs(nuij[i, index]))
         elif nuij[i, index] == 0:
             # Mit ni^0 multiplizieren
             pass
@@ -369,7 +370,18 @@ print([ln_func_0(i, 0) for i in range(nuij.shape[1])])
 
 print([func_b_0(i, 0) for i in range(nuij.shape[1])])
 
-xi_0 = [x.x.item()  if x.success else 0 for x in [optimize.root(lambda xi: func_1(y, xi), 1/len(n_ein)*sum(n_ein)) for y in range(nuij.shape[1])]]
+#xi_0 = [x.x.item()  if x.success else 0 for x in [optimize.root(lambda xi: func_1(y, xi), 1/len(n_ein)*sum(n_ein)) for y in range(nuij.shape[1])]]
+
+xi_0 = [0 for j in range(nuij.shape[1])]
+
+naus_0 = np.copy(n_ein)
+
+for x in range(10):
+    for j in range(nuij.shape[1]):
+        soln_xi = optimize.root(lambda xi: func_1(j, xi), 1 / len(naus_0) * sum(naus_0))
+        if soln_xi.success:
+            xi_0[j] = soln_xi.x
+        naus_0 = naus_0 + nuij[:, j] * xi_0[j]
 
 progress_k, stop, outer_it_k, outer_it_j, \
         lambda_ls, accum_step, x, \
