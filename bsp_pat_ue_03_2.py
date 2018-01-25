@@ -11,7 +11,7 @@ eps = np.finfo(float).eps
 # Modell feststellen
 z_l_v.use_pr_eos()
 
-p = 50.  # bar
+p = 35.  # bar
 temp = 273.15 + 220.  # K
 t_flash = 273.15 + 60  # K
 t0_ref = 298.15  # K
@@ -180,8 +180,6 @@ cp_1 = r * cp_durch_r(t_aus_rdampfr)
 g_1 = g(t_aus_rdampfr, h_1)
 k_1 = k(t_aus_rdampfr, g_1)
 print('T = ' + '{0:.6g}'.format(t_aus_rdampfr))
-print(k_1)
-print(nuij.T.dot(h_1))
 
 
 def r_dampf_reformierung(x_vec):
@@ -224,9 +222,6 @@ def r_dampf_reformierung(x_vec):
             f[len(n_ein) + i] = 1 - pip[i] / k_pir_nt[i]
         elif k_pir_nt[i] == pip[i]:
             f[len(n_ein) + i] = 0
-    print('k_pir_nt: ' + str(k_pir_nt))
-    print('pip: ' + str(pip))
-
     # Energiebilanz
     # q = np.sum(
     #    np.multiply(n_ein, (h_0 - h_298)) -
@@ -234,23 +229,6 @@ def r_dampf_reformierung(x_vec):
     #) + np.dot(xi_aus, -delta_h_1)
 
     return f
-
-
-print(n_ein)
-naus_0 = n_ein
-print(-naus_0[:5] + n_ein[:5])
-print(nuij)
-xi_0 = np.zeros(nuij.shape[1])
-print(xi_0)
-x0 = np.concatenate([
-    naus_0,
-    xi_0
-])
-#x0[x0 == 0] = eps
-soln = optimize.root(r_dampf_reformierung, x0)
-print(soln)
-
-naus_0 = np.copy(n_ein)
 
 
 def r_j(index, n, xi):
@@ -269,8 +247,6 @@ def r_j(index, n, xi):
             # Mit ni^0 multiplizieren
             pass
     k_pir_nt = k_1[index] * pir * (n_t + xi * nu_t)**nu_t
-    print('k_pir_nt: ' + str(k_pir_nt))
-    print('pip: ' + str(pip))
     return +k_1[index] * (n_t + xi * nu_t) ** nu_t * pir - pip
 
 # Relaxations-Methode (Gmehling Chem. Therm.)
@@ -297,18 +273,77 @@ def relaxation(n_0, x_mal):
                     xi_0[j] = soln_xi[0]
                     xi_0_accum[j] = xi_0_accum[j] + soln_xi[0]
             n = n + nuij[:, j] * xi_0[j]
-            fehler = np.sqrt(np.array(xi_0).dot(np.array(xi_0)))
-            print(fehler)
-    return (n, xi_0, xi_0_accum, fehler)
+    return (n, xi_0, xi_0_accum)
 
+
+naus_0 = np.copy(n_ein)
+xi_0 = np.zeros(nuij.shape[1])
+x0 = np.concatenate([
+    naus_0,
+    xi_0
+])
 
 # 4-Mal Relaxation-Methode
-naus_0, _, xi_0_accum, fehler = relaxation(naus_0, 40)
+n_aus, _, xi_accum = relaxation(naus_0, 4)
 
-for item in naus_0:
+for item in n_aus:
     print('{0:0.20g}'.format(item / 1000.).replace('.', ','))
 
-for item in np.array(xi_0_accum):
+for item in np.array(xi_accum):
     print('{0:0.20g}'.format(item / 1000.).replace('.', ','))
 
-print('fehler: ' + '{0:0.20g}'.format(fehler).replace('.', ','))
+print('========================================')
+
+fehler = r_dampf_reformierung(np.concatenate([n_aus, xi_accum]))
+print('Gesamtfehler (Relaxation): ' + str(np.sqrt(fehler.dot(fehler))))
+
+for j in range(5):
+    print('')
+
+print('========================================')
+print('Dampf-Reformierung: Vorwärmer + Reaktor')
+print('========================================')
+
+q = sum((n_aus * h_1 - n_ein * h_0))  # mol/h * J/mol = J/h
+
+# 1h/60^2s * 1kW / 1000W
+print(
+    'Vormärmer (auf T= ' + str(t_aus_rdampfr) + ' °K), Q: ' +
+    '{0:0.20g}'.format(
+        sum(n_ein*(h_1 - h_0)) * 1 / 60.**2 * 1 / 1000.
+    ).replace('.', ',') + ' kW'
+)
+
+print(
+    'Isothermisch betriebener Reaktor, Q: ' +
+    '{0:0.20g}'.format(
+        sum(nuij.dot(xi_accum)*h_1) * 1 / 60.**2 * 1 / 1000.
+    ).replace('.', ',') + ' kW'
+)
+
+print(
+    'Totale zu tauschende Energie, Q: ' +
+    '{0:0.20g}'.format(
+        sum(n_aus * h_1 - n_ein * h_0) * 1 / 60.**2 * 1 / 1000.
+    ).replace('.', ',') + ' kW'
+)
+
+print('')
+
+for i, item in enumerate(np.array(n_aus)):
+    print('n_{' + namen[i] + '}=' +
+        '{0:0.20g}'.format(item / 1000.).replace('.', ',') +
+        ' kmol/h')
+print('n_T' + '=' +
+        '{0:0.20g}'.format(sum(n_aus) / 1000.).replace('.', ',') +
+        ' kmol/h')
+print('')
+for i, item in enumerate(np.array(n_aus/sum(n_aus))):
+    print('y_{' + namen[i] + '}=' +
+        '{0:0.20g}'.format(item).replace('.', ',')
+        )
+print('')
+print('T: ' + '{:g}'.format(t_aus_rdampfr) + ' °K')
+print('p: ' + '{:g}'.format(p) + ' bar')
+print('H: ' + '{:g}'.format(
+    sum(n_aus * h_1)* 1 / 60.**2 * 1 / 1000.) + ' J/mol')
