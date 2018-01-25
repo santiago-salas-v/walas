@@ -181,7 +181,7 @@ g_1 = g(t_aus_rdampfr, h_1)
 k_1 = k(t_aus_rdampfr, g_1)
 
 
-def r_isoterm(x_vec, k):
+def r_isoterm(x_vec, k, n_0):
     n_aus = x_vec[:len(n_0)]
     xi_aus = x_vec[len(n_0):]
 
@@ -253,27 +253,28 @@ def r_entspannung(k_j, n_0, x_mal, temp_0, betrieb='isotherm'):
     """ Entspannungs-Methode (Gmehling Chem. Therm.).
     """
     n = np.copy(n_0)
-    xi_0 = [0 for j in range(nuij.shape[1])]
-    xi_0_accum = [0 for j in range(nuij.shape[1])]
+    xi_j = np.array([0 for j in range(nuij.shape[1])], dtype=float)
+    xi_j_accum = np.array([0 for j in range(nuij.shape[1])], dtype=float)
     h_temp_0 = h(temp_0)
     temp = temp_0
 
     for x in range(x_mal):
         for j in range(nuij.shape[1]):
-            soln_xi = optimize.root(
+            soln_xi_full = optimize.root(
                 lambda xi: gg_abstand(
                     k_j[j], nuij[:, j], n, xi), 1 / len(n) * sum(n))
-            if soln_xi.success:
-                xi_0[j] = soln_xi.x
-                xi_0_accum[j] = xi_0_accum[j] + soln_xi.x
-            elif not soln_xi.success:
-                soln_xi = optimize.bisect(
+            soln_xi = soln_xi_full.x
+            if soln_xi_full.success:
+                xi_j[j] = soln_xi
+            elif not soln_xi_full.success:
+                soln_xi_full = optimize.bisect(
                     lambda xi: gg_abstand(
                         k_j[j], nuij[:, j], n, xi), -1 / len(n) * sum(n), 1 / len(n) * sum(n), full_output=True)
-                if soln_xi[1].converged:
-                    xi_0[j] = soln_xi[0]
-                    xi_0_accum[j] = xi_0_accum[j] + soln_xi[0]
-            n = n + nuij[:, j] * xi_0[j]
+                soln_xi = soln_xi_full[0]
+                if soln_xi_full[1].converged:
+                    xi_j[j] = soln_xi
+            xi_j_accum[j] = xi_j_accum[j] + xi_j[j]
+            n = n + nuij[:, j] * xi_j[j]
             if betrieb == 'adiabat':
                 temp = optimize.root(
                     lambda temp_var:
@@ -281,7 +282,7 @@ def r_entspannung(k_j, n_0, x_mal, temp_0, betrieb='isotherm'):
                     temp
                 ).x
                 k_j = k(temp, g(temp, h(temp)))
-    return (n, xi_0, xi_0_accum, temp)
+    return (n, xi_j, xi_j_accum, temp)
 
 
 naus_0 = np.copy(n_0)
@@ -302,7 +303,7 @@ for item in np.array(xi_accum_1):
 
 print('========================================')
 
-fehler = r_isoterm(np.concatenate([n_1, xi_accum_1]), k_1)
+fehler = r_isoterm(np.concatenate([n_1, xi_accum_1]), k_1, n_0)
 print('Gesamtfehler (Relaxation): ' + str(np.sqrt(fehler.dot(fehler))))
 
 for j in range(5):
@@ -312,7 +313,7 @@ print('========================================')
 print('Dampf-Reformierung: Vorwärmer + Reaktor')
 print('========================================')
 
-q = sum((n_1 * h_1 - n_0 * h_0))  # mol/h * J/mol = J/h
+q = sum(n_1 * h_1 - n_0 * h_0)  # mol/h * J/mol = J/h
 
 # 1h/60^2s * 1kW / 1000W
 print(
@@ -353,8 +354,8 @@ for i, item in enumerate(np.array(n_1 / sum(n_1))):
 print('')
 print('T: ' + '{:g}'.format(t_aus_rdampfr) + ' °K')
 print('p: ' + '{:g}'.format(p) + ' bar')
-print('H: ' + '{:g}'.format(
-    sum(n_1 * h_1) * 1 / 60. ** 2 * 1 / 1000.) + ' J/mol')
+print('H: ' + '{0:0.6f}'.format(
+    sum(n_1 * h_1) / sum(n_1) * 1000.) + ' J/kmol')
 
 print('========================================')
 print('Wassergashift: Vorkühler + Reaktor')
@@ -371,7 +372,15 @@ n_2 = n_1
 q = sum(n_2 * (h_2 - h_1))  # mol/h * J/mol = J/h
 
 # 4-Mal Relaxation-Methode (Entspannung)
-n_1, _, xi_accum_1, temp = r_entspannung(k_2, naus_0, 4, t_ein_rwgs, 'adiabat')
+n_2, _, xi_accum_2, temp = r_entspannung(k_2, n_1, 4, t_ein_rwgs, 'isotherm')
+
+x0 = np.concatenate([
+    n_2,
+    xi_accum_2
+])
+
+soln = optimize.root(lambda xvec: r_isoterm(xvec, k_2, n_1), x0)
+print(soln)
 
 # 1h/60^2s * 1kW / 1000W
 print(
@@ -380,3 +389,7 @@ print(
         q * 1 / 60. ** 2 * 1 / 1000.
     ).replace('.', ',') + ' kW'
 )
+
+print(n_2 / 1000.)
+print(temp)
+print(xi_accum_2)
