@@ -150,7 +150,7 @@ def k(t, g_t):
     return np.exp(-delta_g_t / (r * t))
 
 
-n_ein = (ne_dampf + ne_rohgas + ne_luft) * 1000  # mol/h
+n_0 = (ne_dampf + ne_rohgas + ne_luft) * 1000  # mol/h
 h_dampf_ein = h(te_dampf)
 h_rohgas_ein = h(te_rohgas)
 h_luft_ein = h(te_luft)
@@ -179,12 +179,11 @@ h_1 = h(t_aus_rdampfr)
 cp_1 = r * cp_durch_r(t_aus_rdampfr)
 g_1 = g(t_aus_rdampfr, h_1)
 k_1 = k(t_aus_rdampfr, g_1)
-print('T = ' + '{0:.6g}'.format(t_aus_rdampfr))
 
 
-def r_dampf_reformierung(x_vec):
-    n_aus = x_vec[:len(n_ein)]
-    xi_aus = x_vec[len(n_ein):]
+def r_isoterm(x_vec, k):
+    n_aus = x_vec[:len(n_0)]
+    xi_aus = x_vec[len(n_0):]
 
     n_t = np.sum(n_aus)
     delta_h_1 = nuij.T.dot(h_1)  # J/mol
@@ -192,14 +191,14 @@ def r_dampf_reformierung(x_vec):
     f = np.empty_like(x_vec)
 
     # Stoffbilanzen
-    f[:len(n_ein)] = -n_aus + n_ein + np.matrix(nuij.dot(xi_aus))
+    f[:len(n_0)] = -n_aus + n_0 + np.matrix(nuij.dot(xi_aus))
 
     # Gleichgewicht-Verhältnisse
     # 0 = - Kj * n_T^sum_i(nuij) *  prod_i(ni^(nuij*deltaij)) +
     #                               prod_i(ni^(nuij*(1-deltaij)))
     # deltaij = 1 , wenn nuij < 0 ; 0 sonst
-    pir = np.ones_like(k_1)
-    pip = np.ones_like(k_1)
+    pir = np.ones_like(k)
+    pip = np.ones_like(k)
 
     for i in range(nuij.shape[0]):  # Komponente i
         for j in range(nuij.shape[1]):  # Reaktion j
@@ -212,16 +211,16 @@ def r_dampf_reformierung(x_vec):
                 pass
 
     # Substrate, inklusive totale Mengen je Molenbruch
-    k_pir_nt = n_t**sum(+ nuij) * k_1 * pir
+    k_pir_nt = n_t**sum(+ nuij) * k * pir
     # f_val = k_pir_nt - pip
     # Abstand zum Gleichgewicht
-    for i in range(len(f[len(n_ein):])):
+    for i in range(len(f[len(n_0):])):
         if k_pir_nt[i] < pip[i]:
-            f[len(n_ein) + i] = k_pir_nt[i] / pip[i] - 1
+            f[len(n_0) + i] = k_pir_nt[i] / pip[i] - 1
         elif k_pir_nt[i] > pip[i]:
-            f[len(n_ein) + i] = 1 - pip[i] / k_pir_nt[i]
+            f[len(n_0) + i] = 1 - pip[i] / k_pir_nt[i]
         elif k_pir_nt[i] == pip[i]:
-            f[len(n_ein) + i] = 0
+            f[len(n_0) + i] = 0
     # Energiebilanz
     # q = np.sum(
     #    np.multiply(n_ein, (h_0 - h_298)) -
@@ -231,70 +230,79 @@ def r_dampf_reformierung(x_vec):
     return f
 
 
-def r_j(index, n, xi):
+def gg_abstand(k, nuij, n, xi):
     pip = 1.0
     pir = 1.0
     n_t = sum(n)
-    nu_t = sum(nuij[:, index])
+    nu_t = sum(nuij)
     for i in range(nuij.shape[0]):  # Komponente i
-        if nuij[i, index] < 0:
-            pir = pir * np.power(n[i] + xi * nuij[i, index],
-                                 abs(nuij[i, index]))
-        elif nuij[i, index] > 0:
-            pip = pip * np.power(n[i] + xi * nuij[i, index],
-                                 abs(nuij[i, index]))
-        elif nuij[i, index] == 0:
+        if nuij[i] < 0:
+            pir = pir * np.power(n[i] + xi * nuij[i],
+                                 abs(nuij[i]))
+        elif nuij[i] > 0:
+            pip = pip * np.power(n[i] + xi * nuij[i],
+                                 abs(nuij[i]))
+        elif nuij[i] == 0:
             # Mit ni^0 multiplizieren
             pass
-    k_pir_nt = k_1[index] * pir * (n_t + xi * nu_t)**nu_t
-    return +k_1[index] * (n_t + xi * nu_t) ** nu_t * pir - pip
-
-# Relaxations-Methode (Gmehling Chem. Therm.)
+    k_pir_nt = k * (n_t + xi * nu_t)**nu_t * pir
+    return k_pir_nt - pip
 
 
-def relaxation(n_0, x_mal):
+def r_entspannung(k_j, n_0, x_mal, temp_0, betrieb='isotherm'):
+    """ Entspannungs-Methode (Gmehling Chem. Therm.).
+    """
     n = np.copy(n_0)
     xi_0 = [0 for j in range(nuij.shape[1])]
     xi_0_accum = [0 for j in range(nuij.shape[1])]
+    h_temp_0 = h(temp_0)
+    temp = temp_0
 
     for x in range(x_mal):
         for j in range(nuij.shape[1]):
             soln_xi = optimize.root(
-                lambda xi: r_j(
-                    j, n, xi), 1 / len(n) * sum(n))
+                lambda xi: gg_abstand(
+                    k_j[j], nuij[:, j], n, xi), 1 / len(n) * sum(n))
             if soln_xi.success:
                 xi_0[j] = soln_xi.x
                 xi_0_accum[j] = xi_0_accum[j] + soln_xi.x
             elif not soln_xi.success:
                 soln_xi = optimize.bisect(
-                    lambda xi: r_j(
-                        j, n, xi), -1 / len(n) * sum(n), 1 / len(n) * sum(n), full_output=True)
+                    lambda xi: gg_abstand(
+                        k_j[j], nuij[:, j], n, xi), -1 / len(n) * sum(n), 1 / len(n) * sum(n), full_output=True)
                 if soln_xi[1].converged:
                     xi_0[j] = soln_xi[0]
                     xi_0_accum[j] = xi_0_accum[j] + soln_xi[0]
             n = n + nuij[:, j] * xi_0[j]
-    return (n, xi_0, xi_0_accum)
+            if betrieb == 'adiabat':
+                temp = optimize.root(
+                    lambda temp_var:
+                    sum(n * h(temp_var) - n_0 * h_temp_0),
+                    temp
+                ).x
+                k_j = k(temp, g(temp, h(temp)))
+    return (n, xi_0, xi_0_accum, temp)
 
 
-naus_0 = np.copy(n_ein)
+naus_0 = np.copy(n_0)
 xi_0 = np.zeros(nuij.shape[1])
 x0 = np.concatenate([
     naus_0,
     xi_0
 ])
 
-# 4-Mal Relaxation-Methode
-n_aus, _, xi_accum = relaxation(naus_0, 4)
+# 4-Mal Relaxation-Methode (Entspannung)
+n_1, _, xi_accum_1, _ = r_entspannung(k_1, naus_0, 4, t_aus_rdampfr)
 
-for item in n_aus:
+for item in n_1:
     print('{0:0.20g}'.format(item / 1000.).replace('.', ','))
 
-for item in np.array(xi_accum):
+for item in np.array(xi_accum_1):
     print('{0:0.20g}'.format(item / 1000.).replace('.', ','))
 
 print('========================================')
 
-fehler = r_dampf_reformierung(np.concatenate([n_aus, xi_accum]))
+fehler = r_isoterm(np.concatenate([n_1, xi_accum_1]), k_1)
 print('Gesamtfehler (Relaxation): ' + str(np.sqrt(fehler.dot(fehler))))
 
 for j in range(5):
@@ -304,46 +312,71 @@ print('========================================')
 print('Dampf-Reformierung: Vorwärmer + Reaktor')
 print('========================================')
 
-q = sum((n_aus * h_1 - n_ein * h_0))  # mol/h * J/mol = J/h
+q = sum((n_1 * h_1 - n_0 * h_0))  # mol/h * J/mol = J/h
 
 # 1h/60^2s * 1kW / 1000W
 print(
     'Vormärmer (auf T= ' + str(t_aus_rdampfr) + ' °K), Q: ' +
     '{0:0.20g}'.format(
-        sum(n_ein*(h_1 - h_0)) * 1 / 60.**2 * 1 / 1000.
+        sum(n_0 * (h_1 - h_0)) * 1 / 60. ** 2 * 1 / 1000.
     ).replace('.', ',') + ' kW'
 )
 
 print(
     'Isothermisch betriebener Reaktor, Q: ' +
     '{0:0.20g}'.format(
-        sum(nuij.dot(xi_accum)*h_1) * 1 / 60.**2 * 1 / 1000.
+        sum(nuij.dot(xi_accum_1) * h_1) * 1 / 60. ** 2 * 1 / 1000.
     ).replace('.', ',') + ' kW'
 )
 
 print(
     'Totale zu tauschende Energie, Q: ' +
     '{0:0.20g}'.format(
-        sum(n_aus * h_1 - n_ein * h_0) * 1 / 60.**2 * 1 / 1000.
+        q * 1 / 60.**2 * 1 / 1000.
     ).replace('.', ',') + ' kW'
 )
 
 print('')
 
-for i, item in enumerate(np.array(n_aus)):
+for i, item in enumerate(np.array(n_1)):
     print('n_{' + namen[i] + '}=' +
-        '{0:0.20g}'.format(item / 1000.).replace('.', ',') +
-        ' kmol/h')
+          '{0:0.20g}'.format(item / 1000.).replace('.', ',') +
+          ' kmol/h')
 print('n_T' + '=' +
-        '{0:0.20g}'.format(sum(n_aus) / 1000.).replace('.', ',') +
-        ' kmol/h')
+      '{0:0.20g}'.format(sum(n_1) / 1000.).replace('.', ',') +
+      ' kmol/h')
 print('')
-for i, item in enumerate(np.array(n_aus/sum(n_aus))):
+for i, item in enumerate(np.array(n_1 / sum(n_1))):
     print('y_{' + namen[i] + '}=' +
-        '{0:0.20g}'.format(item).replace('.', ',')
-        )
+          '{0:0.20g}'.format(item).replace('.', ',')
+          )
 print('')
 print('T: ' + '{:g}'.format(t_aus_rdampfr) + ' °K')
 print('p: ' + '{:g}'.format(p) + ' bar')
 print('H: ' + '{:g}'.format(
-    sum(n_aus * h_1)* 1 / 60.**2 * 1 / 1000.) + ' J/mol')
+    sum(n_1 * h_1) * 1 / 60. ** 2 * 1 / 1000.) + ' J/mol')
+
+print('========================================')
+print('Wassergashift: Vorkühler + Reaktor')
+print('========================================')
+
+t_ein_rwgs = 210 + 273.15  # °K
+h_2 = h(t_ein_rwgs)
+cp_2 = r * cp_durch_r(t_ein_rwgs)
+g_2 = g(t_ein_rwgs, h_2)
+k_2 = k(t_ein_rwgs, g_2)
+
+n_2 = n_1
+
+q = sum(n_2 * (h_2 - h_1))  # mol/h * J/mol = J/h
+
+# 4-Mal Relaxation-Methode (Entspannung)
+n_1, _, xi_accum_1, temp = r_entspannung(k_2, naus_0, 4, t_ein_rwgs, 'adiabat')
+
+# 1h/60^2s * 1kW / 1000W
+print(
+    'Vorkühler (auf T= ' + str(t_ein_rwgs) + ' °K), Q: ' +
+    '{0:0.20g}'.format(
+        q * 1 / 60. ** 2 * 1 / 1000.
+    ).replace('.', ',') + ' kW'
+)
