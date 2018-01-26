@@ -230,7 +230,7 @@ def r_isoterm(x_vec, k, n_0):
     return f
 
 
-def gg_abstand(k, nuij, n, xi):
+def gg_abstand(k, nuij, n, xi, full_output=False):
     pip = 1.0
     pir = 1.0
     n_t = sum(n)
@@ -246,7 +246,10 @@ def gg_abstand(k, nuij, n, xi):
             # Mit ni^0 multiplizieren
             pass
     k_pir_nt = k * (n_t + xi * nu_t)**nu_t * pir
-    return k_pir_nt - pip
+    if full_output:
+        return (k_pir_nt, pip, k_pir_nt - pip)
+    else:
+        return k_pir_nt - pip
 
 
 def r_entspannung(k_j, n_0, x_mal, temp_0, betrieb='isotherm'):
@@ -257,9 +260,29 @@ def r_entspannung(k_j, n_0, x_mal, temp_0, betrieb='isotherm'):
     xi_j_accum = np.array([0 for j in range(nuij.shape[1])], dtype=float)
     h_temp_0 = h(temp_0)
     temp = temp_0
+    abstaende = np.empty(nuij.shape[1])
+
+    for i in range(nuij.shape[1]):
+        k_pir_nt, pip, diff = gg_abstand(k_j[i], nuij[:, i], n, 0, full_output=True)
+        print(k_pir_nt, pip, diff)
+        if k_pir_nt < pip:
+            abstaende[i] = k_pir_nt / pip - 1
+        elif k_pir_nt > pip:
+            abstaende[i] = 1 - pip / k_pir_nt
+        elif k_pir_nt == pip:
+            abstaende[i] = 0
+
+    s_indexes = np.argsort(-abstaende)
+
+    entspannte_reaktionen = []
 
     for x in range(x_mal):
-        for j in range(nuij.shape[1]):
+        while len(entspannte_reaktionen) < nuij.shape[1]:
+            ind_j = 0
+            j = s_indexes[ind_j]
+            while j in entspannte_reaktionen:
+                ind_j += 1
+                j = s_indexes[ind_j]
             soln_xi_full = optimize.root(
                 lambda xi: gg_abstand(
                     k_j[j], nuij[:, j], n, xi), 1 / len(n) * sum(n))
@@ -275,6 +298,20 @@ def r_entspannung(k_j, n_0, x_mal, temp_0, betrieb='isotherm'):
                     xi_j[j] = soln_xi
             xi_j_accum[j] = xi_j_accum[j] + xi_j[j]
             n = n + nuij[:, j] * xi_j[j]
+
+            entspannte_reaktionen.append(j)
+
+            for i in range(nuij.shape[1]):
+                k_pir_nt, pip, _ = gg_abstand(k_j[i], nuij[:, i], n, 0, full_output=True)
+                print(k_pir_nt, pip, diff)
+                if k_pir_nt < pip:
+                    abstaende[i] = k_pir_nt / pip - 1
+                elif k_pir_nt > pip:
+                    abstaende[i] = 1 - pip / k_pir_nt
+                elif k_pir_nt == pip:
+                    abstaende[i] = 0
+            s_indexes = np.argsort(-abstaende)
+
             if betrieb == 'adiabat':
                 temp = optimize.root(
                     lambda temp_var:
@@ -375,7 +412,7 @@ q = sum(n_2 * (h_2 - h_1))  # mol/h * J/mol = J/h
 n_2, _, xi_accum_2, temp = r_entspannung(k_2, n_1, 4, t_ein_rwgs, 'isotherm')
 
 x0 = np.concatenate([
-    n_2,
+    n_1,
     xi_accum_2
 ])
 
