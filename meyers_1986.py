@@ -14,7 +14,7 @@ temp = 1478.  # °K
 t0_ref = 298.15  # K
 r = 8.314  # J/(mol K)
 
-namen = ['CO2', 'SO2', 'CO', 'H2O', 'COS', 'CS2', 'H2S', 'H2', 'S2']
+namen = ['CO2', 'SO2', 'H2O', 'S2', 'CO', 'COS', 'CS2', 'H2S', 'H2']
 elemente = ['C', 'O', 'S', 'H']
 
 
@@ -22,30 +22,40 @@ c = len(namen)
 e = len(elemente)
 
 atom_m = np.array([
-    [1, 0, 1, 0, 1, 1, 0, 0, 0],
-    [2, 2, 1, 1, 1, 0, 0, 0, 0],
-    [0, 1, 0, 0, 1, 2, 1, 0, 2],
-    [0, 0, 0, 2, 0, 0, 2, 2, 0]
+    [1, 0, 0, 0, 1, 1, 1, 0, 0],
+    [2, 2, 1, 0, 1, 1, 0, 0, 0],
+    [0, 1, 0, 2, 0, 1, 2, 1, 0],
+    [0, 0, 2, 0, 0, 0, 0, 2, 2]
     ])
 
 rho = np.linalg.matrix_rank(atom_m)
 
-print('mögliche Gruppen mit Rang>rho:')
+print('mögliche Gruppen mit Rang>=rho:')
 for comb in combinations(range(9), 4):
     mat = atom_m[:,comb]
     rank = np.linalg.matrix_rank(mat)
-    if rank < rho:
+    if rank >= rho:
         print('rank: ' + str(rank))
         print(np.array(namen)[[comb]])
         print(mat.tolist())
 
 print(np.linalg.matrix_rank(atom_m))
 
-l, r, p, d, da = lrpd(atom_m)
+_, r_atom_m, _, _, _ = lrpd(atom_m)
 
-rref_atom = rref(atom_m)
+rref_atom = rref(r_atom_m)
 
 print(rref_atom)
+
+b = rref_atom[:e, c-rho-1:]
+
+stoich_m = np.concatenate([
+    -b.T, np.eye(c-rho, dtype=float)
+    ], axis=1)
+
+print(stoich_m)
+
+print(atom_m.dot(stoich_m.T))
 
 nuij = np.array([
     [-1, +0.25, +1, ]
@@ -72,8 +82,6 @@ g_t =r * temp * np.array([
     -1.4522,
     0.,
     0.]) # J/mol
-
-
 
 k_t = nuij.T.dot(g_t)
 print(k_t)
