@@ -17,7 +17,7 @@ def lrpd(a):
     for i in range(n):
         d[i, i] = 1 / sum(abs(a[i, :m]))
         # scaling
-        dlr[i] = d[i, i] * a[i] # dlr is just for storage of both l and r
+        dlr[i] = d[i, i] * a[i]  # dlr is just for storage of both l and r
     for j in range(n):
         indexes_r[j] = j + np.argmax(abs(dlr[j:, j]))
         # columns pivoting
@@ -47,19 +47,19 @@ def rref(r):
     rref = np.matrix(np.copy(r))
     # denominators for diagonal 1
     den = [0.0 for i in range(n)]
-    for i in range(n-1, 0-1, -1):
+    for i in range(n - 1, 0 - 1, -1):
         for j in range(m):
-            if i>0 and den[i] == 0.0 and abs(r[i, j]) > np.finfo(float).eps:
+            if i > 0 and den[i] == 0.0 and abs(r[i, j]) > np.finfo(float).eps:
                 # first non-zero element in last rows
                 den[i] = r[i, j]
-                for k in range(i-1, 0-1, -1):
+                for k in range(i - 1, 0 - 1, -1):
                     num = r[k, j]
-                    rref[k, :] = rref[k, :] - num/den[i] * rref[i, :]
-            elif i==0 and j==0:
+                    rref[k, :] = rref[k, :] - num / den[i] * rref[i, :]
+            elif i == 0 and j == 0:
                 den[i] = r[i, j]
             if abs(rref[i, j]) <= np.finfo(float).eps:
                 # Either way make eps 0, avoid propagation of error.
-                rref[i,j] = 0.0
+                rref[i, j] = 0.0
     for i in range(n):
         rref[i] = rref[i] / den[i]
     return rref
@@ -198,43 +198,3 @@ def nr_ls(x0, f, j, tol, max_it, inner_loop_condition,
         inner_it_j, lambda_ls, accum_step,\
         x, diff, f_val, lambda_ls * y,\
         method_loops
-
-mat_a = np.array([
-    [2, -1, -3, 3],
-    [4, 0, -3, 1],
-    [6, 1, -1, 6],
-    [-2, -5, 4, 1]
-    ], dtype=float)
-
-print(lrpd(mat_a))
-
-mat_a = np.array([
-    [0, 3, -6, 6, 4, -5],
-    [3, -7, 8, -5, 8, 9],
-    [3, -9, 12, -9, 6, 15]
-    ], dtype=float)
-
-l, r, p, d, da = lrpd(mat_a)
-
-print(r)
-print(l)
-print(p*d)
-print(rref(r))
-
-print('rank: ' + str(np.linalg.matrix_rank(r)))
-
-atom_m = np.array([
-    [1, 0, 0, 0, 1, 1, 1, 0, 0],
-    [2, 2, 1, 0, 1, 1, 0, 0, 0],
-    [0, 1, 0, 2, 0, 1, 2, 1, 0],
-    [0, 0, 2, 0, 0, 0, 0, 2, 2]
-    ])
-
-print('atom_m')
-
-l, r, p, d, da = lrpd(atom_m)
-
-print(r)
-print(l)
-print(p*d)
-print(rref(r))
