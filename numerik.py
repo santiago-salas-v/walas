@@ -4,34 +4,49 @@ import numpy as np
 def lrpd(a):
     """L,R,P,D,DA from LR = PDA factorization
     Method: Dahmen W., Reusken A.; Numerik fuer Ingenieure und Naturwissenschaeftler; Springer S. 79
-    :param a: numpy.matrix NxN
+    :param a: numpy.matrix NxM
     """
     n = a.shape[0]
-    p = np.matrix(np.eye(n).astype(dtype=float))
-    d = np.matrix(np.eye(n).astype(dtype=float))
-    da = np.matrix(np.zeros_like(p))
-    l = np.matrix(np.eye(n))
-    r = np.matrix(np.zeros_like(p))
+    m = a.shape[1]
+    p = np.matrix(np.eye(n, dtype=float))
+    d = np.matrix(np.eye(n, dtype=float))
+    dlr = np.matrix(np.zeros([n, m], dtype=float))
+    l = np.matrix(np.eye(n, m, dtype=float))
+    r = np.matrix(np.zeros([n, m], dtype=float))
     indexes_r = [item for item in range(n)]
     for i in range(n):
-        d[i, i] = 1 / abs(a[i]).sum()
+        d[i, i] = 1 / sum(abs(a[i, :m]))
         # scaling
-        da[i] = d[i, i] * a[i]
+        dlr[i] = d[i, i] * a[i] # dlr is just for storage of both l and r
     for j in range(n):
-        indexes_r[j] = j + abs(da[j:, j]).argmax()
+        indexes_r[j] = j + np.argmax(abs(dlr[j:, j]))
         # columns pivoting
-        da[[j, indexes_r[j]]] = da[[indexes_r[j], j]]
+        dlr[[j, indexes_r[j]]] = dlr[[indexes_r[j], j]]
         p[[j, indexes_r[j]]] = p[[indexes_r[j], j]]
         for i in range(j + 1, n):
             # new entries in L
-            da[i, j] = da[i, j] / da[j, j]
-            for k in range(j + 1, n):
+            dlr[i, j] = dlr[i, j] / dlr[j, j]
+            for k in range(j + 1, m):
                 # new entries in R
-                da[i, k] = da[i, k] - da[i, j] * da[j, k]
+                dlr[i, k] = dlr[i, k] - dlr[i, j] * dlr[j, k]
+    for i in range(m):
+        l[i + 1:n, i] = dlr[i + 1:n, i]
     for i in range(n):
-        l[i + 1:n, i] = da[i + 1:n, i]
-        r[i, i:n] = da[i, i:n]
-    return l, r, p, d, da
+        r[i, i:m] = dlr[i, i:m]
+    return l, r, p, d, dlr
+
+
+def rref(r):
+    """
+    Reduced echelon form of upper triangular matrix r
+    :param r: numpy.matrix NxM
+    :return: numpy.matrix NxM
+    """
+    n = a.shape[0]
+    m = a.shape[1]
+    rref = np.matrix(np.zeros([n, m], dtype=float))
+
+    return rref
 
 
 def gauss_elimination(a, b):
@@ -167,3 +182,27 @@ def nr_ls(x0, f, j, tol, max_it, inner_loop_condition,
         inner_it_j, lambda_ls, accum_step,\
         x, diff, f_val, lambda_ls * y,\
         method_loops
+
+mat_a = np.array([
+    [2, -1, -3, 3],
+    [4, 0, -3, 1],
+    [6, 1, -1, 6],
+    [-2, -5, 4, 1]
+    ], dtype=float)
+
+print(lrpd(mat_a))
+
+mat_a = np.array([
+    [0, 3, -6, 6, 4, -5],
+    [3, -7, 8, -5, 8, 9],
+    [3, -9, 12, -9, 6, 15]
+    ], dtype=float)
+
+l, r, p, d, da = lrpd(mat_a)
+
+print(r)
+print(l)
+print(p*d)
+
+
+l, r, p, d, da = lrpd(mat_a)

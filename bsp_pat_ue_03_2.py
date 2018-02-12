@@ -227,6 +227,7 @@ def r_isoterm(x_vec, k, n_0):
     #    np.multiply(n_aus, (h_1 - h_298))
     #) + np.dot(xi_aus, -delta_h_1)
 
+    f[len(n_0):] = k_pir_nt - pip
     return f
 
 
@@ -277,12 +278,7 @@ def r_entspannung(k_j, n_0, x_mal, temp_0, betrieb='isotherm'):
     entspannte_reaktionen = []
 
     for x in range(x_mal):
-        while len(entspannte_reaktionen) < nuij.shape[1]:
-            ind_j = 0
-            j = s_indexes[ind_j]
-            while j in entspannte_reaktionen:
-                ind_j += 1
-                j = s_indexes[ind_j]
+        for j in s_indexes:
             soln_xi_full = optimize.root(
                 lambda xi: gg_abstand(
                     k_j[j], nuij[:, j], n, xi), 1 / len(n) * sum(n))
@@ -299,19 +295,6 @@ def r_entspannung(k_j, n_0, x_mal, temp_0, betrieb='isotherm'):
             xi_j_accum[j] = xi_j_accum[j] + xi_j[j]
             n = n + nuij[:, j] * xi_j[j]
 
-            entspannte_reaktionen.append(j)
-
-            for i in range(nuij.shape[1]):
-                k_pir_nt, pip, _ = gg_abstand(k_j[i], nuij[:, i], n, 0, full_output=True)
-                print(k_pir_nt, pip, diff)
-                if k_pir_nt < pip:
-                    abstaende[i] = k_pir_nt / pip - 1
-                elif k_pir_nt > pip:
-                    abstaende[i] = 1 - pip / k_pir_nt
-                elif k_pir_nt == pip:
-                    abstaende[i] = 0
-            s_indexes = np.argsort(-abstaende)
-
             if betrieb == 'adiabat':
                 temp = optimize.root(
                     lambda temp_var:
@@ -320,6 +303,78 @@ def r_entspannung(k_j, n_0, x_mal, temp_0, betrieb='isotherm'):
                 ).x
                 k_j = k(temp, g(temp, h(temp)))
     return (n, xi_j, xi_j_accum, temp)
+
+
+def jac_r_dampf_reformierung(x_vec, k):
+    n_aus = x_vec[:nuij.shape[0]]
+    xi_aus = x_vec[nuij.shape[0]:]
+
+    n_t = sum(n_aus).item()
+
+    sum_nuij = sum(nuij)
+
+    len_n_aus = len(n_aus)
+    len_xi_aus = len(xi_aus)
+
+    jac = np.zeros([len(x_vec), len(x_vec)])
+
+    pir = np.ones_like(k)
+    pip = np.ones_like(k)
+
+    for i in range(nuij.shape[0]):  # Komponente i
+        for j in range(nuij.shape[1]):  # Reaktion j
+            if nuij[i, j] < 0:
+                pir[j] = pir[j] * np.power(n_aus[i], abs(nuij[i, j]))
+            elif nuij[i, j] > 0:
+                pip[j] = pip[j] * np.power(n_aus[i], abs(nuij[i, j]))
+            elif nuij[i, j] == 0:
+                # Mit ni^0 multiplizieren
+                pass
+        # Substrate, inklusive totale Mengen je Molenbruch
+
+    k_pir_nt = n_t ** sum(+ nuij) * k * pir
+
+    for i in range(len_n_aus):
+        jac[i, i] = -1.
+        for j in range(len_xi_aus):
+            jac[i, len_n_aus + j] = nuij[i, j]
+            if k_pir_nt[j] < pip[j]:
+                jac[len_n_aus + j, i] = \
+                    (sum_nuij[j] / n_t - nuij[i, j] / n_aus[i]) * \
+                    k_1[j] * n_t ** sum_nuij[j] * pir[j] / pip[j]
+            elif k_pir_nt[j] > pip[j]:
+                jac[len_n_aus + j, i] = \
+                    -(sum_nuij[j] / n_t - nuij[i, j] / n_aus[i]) * \
+                    1 / k_1[j] * n_t ** -sum_nuij[j] * pip[j] / pir[j]
+            elif k_pir_nt[j] == pip[j]:
+                jac[len_n_aus + j, i] = \
+                    (sum_nuij[j] / n_t - nuij[i, j] / n_aus[i]) * 1.0
+
+    return jac
+
+
+def notify_status_func(progress_k, stop_value, k,
+                       j_it_backtrack, lambda_ls, accum_step,
+                       x, diff, f_val, j_val, lambda_ls_y,
+                       method_loops):
+    g_min = np.nan
+    g1 = np.nan
+    y = lambda_ls_y
+    pr_str = ';k=' + str(k) + \
+        ';backtrack=' + str(j_it_backtrack) + \
+        ';lambda_ls=' + str(lambda_ls) + \
+        ';accum_step=' + str(accum_step) + \
+        ';stop=' + str(stop_value) + \
+        ';X=' + '[' + ','.join(map(str, x.T)) + ']' + \
+        ';||X(k)-X(k-1)||=' + str((diff.T * diff).item()) + \
+        ';f(X)=' + '[' + ','.join(map(str, f_val.T.A1)) + ']' + \
+        ';||f(X)||=' + str(np.sqrt((f_val.T * f_val).item())) + \
+        ';j(X)=' + str(j_val.tolist()) + \
+        ';Y=' + '[' + ','.join(map(str, y.T.A1)) + ']' + \
+        ';||Y||=' + str(np.sqrt((y.T * y).item())) + \
+        ';g=' + str(g_min) + \
+        ';|g-g1|=' + str(abs(g_min - g1))
+    logging.debug(pr_str)
 
 
 naus_0 = np.copy(n_0)
@@ -416,6 +471,20 @@ x0 = np.concatenate([
     xi_accum_2
 ])
 
+
+#==============|
+# SYMPY
+#==============
+
+from sympy import *
+
+n1, n2, n3, n4, n5, n6, n7, n8, n9 = symbols('n1:10')
+xi1, xi2, xi3, xi4, xi5, xi6  = symbols('xi1:7')
+
+
+
+
+
 soln = optimize.root(lambda xvec: r_isoterm(xvec, k_2, n_1), x0)
 print(soln)
 
@@ -430,3 +499,36 @@ print(
 print(n_2 / 1000.)
 print(temp)
 print(xi_accum_2)
+
+x0 = np.concatenate([
+    naus_0,
+    xi_accum_1
+])
+
+soln = optimize.root(lambda xvec: r_isoterm(xvec, k_2, naus_0), x0)
+print(soln)
+for item in soln.x:
+    print('{0:0.10g}'.format(item / 1000.).replace('.', ','))
+
+n_ein = np.matrix(n_ein).T
+
+x0 = np.concatenate([
+    naus_0,
+    np.zeros(len(xi_0))
+])
+
+progress_k, stop, outer_it_k, outer_it_j, \
+    lambda_ls, accum_step, x, \
+    diff, f_val, lambda_ls_y, \
+    method_loops = \
+    nr_ls(x0=np.matrix(x0).T,
+          f=lambda x: np.matrix(r_isoterm(x)),
+          j=lambda x: np.matrix(jac_r_dampf_reformierung(x)),
+          tol=1e-12,
+          max_it=1000,
+          inner_loop_condition=lambda x_vec:
+          all([item >= 0 for item in
+               x_vec[0:len(n_ein)]]),
+          notify_status_func=notify_status_func,
+          method_loops=[0, 0],
+          process_func_handle=None)
