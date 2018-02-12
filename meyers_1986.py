@@ -27,8 +27,13 @@ rho = np.linalg.matrix_rank(atom_m)
 print('mögliche Gruppen mit Rang>rho:')
 for comb in combinations(range(9), 4):
     mat = atom_m[:,comb]
-    if np.linalg.matrix_rank(mat) >= rho:
+    rank = np.linalg.matrix_rank(mat)
+    if rank < rho:
+        print('rank: ' + str(rank))
         print(np.array(namen)[[comb]])
+        print(mat.tolist())
+
+print(np.linalg.matrix_rank(atom_m))
 
 print(scipy.linalg.lu(atom_m))
 

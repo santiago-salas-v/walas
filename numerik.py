@@ -42,10 +42,26 @@ def rref(r):
     :param r: numpy.matrix NxM
     :return: numpy.matrix NxM
     """
-    n = a.shape[0]
-    m = a.shape[1]
-    rref = np.matrix(np.zeros([n, m], dtype=float))
-
+    n = r.shape[0]
+    m = r.shape[1]
+    rref = np.matrix(np.copy(r))
+    # denominators for diagonal 1
+    den = [0.0 for i in range(n)]
+    for i in range(n-1, 0-1, -1):
+        for j in range(m):
+            if i>0 and den[i] == 0.0 and abs(r[i, j]) > np.finfo(float).eps:
+                # first non-zero element in last rows
+                den[i] = r[i, j]
+                for k in range(i-1, 0-1, -1):
+                    num = r[k, j]
+                    rref[k, :] = rref[k, :] - num/den[i] * rref[i, :]
+            elif i==0 and j==0:
+                den[i] = r[i, j]
+            if abs(rref[i, j]) <= np.finfo(float).eps:
+                # Either way make eps 0, avoid propagation of error.
+                rref[i,j] = 0.0
+    for i in range(n):
+        rref[i] = rref[i] / den[i]
     return rref
 
 
@@ -203,6 +219,22 @@ l, r, p, d, da = lrpd(mat_a)
 print(r)
 print(l)
 print(p*d)
+print(rref(r))
 
+print('rank: ' + str(np.linalg.matrix_rank(r)))
 
-l, r, p, d, da = lrpd(mat_a)
+atom_m = np.array([
+    [1, 0, 1, 0, 1, 1, 0, 0, 0],
+    [2, 2, 1, 1, 1, 0, 0, 0, 0],
+    [0, 1, 0, 0, 1, 2, 1, 0, 2],
+    [0, 0, 0, 2, 0, 0, 2, 2, 0]
+    ])
+
+print('atom_m')
+
+l, r, p, d, da = lrpd(atom_m)
+
+print(r)
+print(l)
+print(p*d)
+print(rref(r))
