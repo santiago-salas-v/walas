@@ -2,6 +2,12 @@ from itertools import combinations
 import numpy as np
 from scipy import optimize
 import scipy
+from numerik import lrpd, rref
+
+# REF:
+# MYERS, Andrea K.; MYERS, Alan L. 
+# Numerical solution of chemical equilibria with simultaneous reactions. 
+# The Journal of chemical physics, 1986, 84. Jg., Nr. 10, S. 5787-5795.
 
 p = 0.101325  # MPa
 temp = 1478.  # °K
@@ -35,7 +41,11 @@ for comb in combinations(range(9), 4):
 
 print(np.linalg.matrix_rank(atom_m))
 
-print(scipy.linalg.lu(atom_m))
+l, r, p, d, da = lrpd(atom_m)
+
+rref_atom = rref(atom_m)
+
+print(rref_atom)
 
 nuij = np.array([
     [-1, +0.25, +1, ]
