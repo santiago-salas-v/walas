@@ -35,27 +35,37 @@ for comb in combinations(range(9), 4):
     mat = atom_m[:,comb]
     rank = np.linalg.matrix_rank(mat)
     if rank >= rho:
-        print('rank: ' + str(rank))
+        print('Rang: ' + str(rank))
         print(np.array(namen)[[comb]])
         print(mat.tolist())
 
-print(np.linalg.matrix_rank(atom_m))
+print('Atomische Matrix: A')
+print(atom_m)
+
+print('Rang(A) (rho):')
+print(rho)
+
+print('rho >= E ? :')
+print(rho >= e)
 
 _, r_atom_m, _, _, _ = lrpd(atom_m)
 
 rref_atom = rref(r_atom_m)
 
+print('rref(A):')
 print(rref_atom)
 
 b = rref_atom[:e, c-rho-1:]
 
-stoich_m = np.concatenate([
-    -b.T, np.eye(c-rho, dtype=float)
+stoech_m = np.concatenate([
+    -b.T, np.eye( c - rho, dtype=float)
     ], axis=1)
 
-print(stoich_m)
+print('Stöchiometriche Matrix ((C-rho) X C): N')
+print(stoech_m)
 
-print(atom_m.dot(stoich_m.T))
+print('A N^T = 0')
+print(atom_m.dot(stoech_m.T))
 
 nuij = np.array([
     [-1, +0.25, +1, ]
@@ -64,24 +74,53 @@ nuij = np.array([
 ne = np.array([
     113.15,
     0.0,
+    0.0,
+    18.73,
     -81.25,
     0,
     0,
     0,
-    0,
     89.1,
-    18.73]) # mol
+    ]) # mol
 
 g_t =r * temp * np.array([
     -32.2528,
     -20.4331,
-    -19.7219,
     -13.4872,
+    0.,
+    -19.7219,
     -18.0753,
     -1.9250,
     -1.4522,
-    0.,
-    0.]) # J/mol
+    0.
+    ]) # J/mol
 
-k_t = nuij.T.dot(g_t)
+k_t = np.exp(-stoech_m.dot(g_t/(r*temp)))  
+print('Kj')
 print(k_t)
+print('sum(stoech_m)')
+print(np.sum(stoech_m))
+
+nach_g_sortieren = np.argsort(g_t)
+atom_m = atom_m[:, nach_g_sortieren]
+rho = np.linalg.matrix_rank(atom_m)
+_, r_atom_m, _, _, _ = lrpd(atom_m)
+rref_atom = rref(r_atom_m)
+b = rref_atom[:e, c-rho-1:]
+
+stoech_m = np.concatenate([
+    -b.T, np.eye( c - rho, dtype=float)
+    ], axis=1)
+
+print('Namen, nach g0 sortiert:')
+print([namen[i] for i in nach_g_sortieren])
+print('A, nach g0 sortiert:')
+print(atom_m)
+print('rho:')
+print(rho)
+
+k_t = np.exp(-stoech_m.dot(g_t/(r*temp)))  
+print('Kj')
+print(k_t)
+print('sum(stoech_m)')
+print(np.sum(stoech_m))
