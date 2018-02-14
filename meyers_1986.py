@@ -2,6 +2,7 @@ from itertools import combinations
 import numpy as np
 from scipy import optimize
 import scipy
+import itertools
 from numerik import lrpd, rref
 
 # REF:
@@ -107,10 +108,10 @@ rho = np.linalg.matrix_rank(atom_m)
 _, r_atom_m, _, _, _ = lrpd(atom_m)
 rref_atom = rref(r_atom_m)
 b = rref_atom[:e, c-rho-1:]
-
 stoech_m = np.concatenate([
     -b.T, np.eye( c - rho, dtype=float)
     ], axis=1)
+k_t = np.exp(-stoech_m.dot(g_t/(r*temp)))
 
 print('Namen, nach g0 sortiert:')
 print([namen[i] for i in nach_g_sortieren])
@@ -118,9 +119,43 @@ print('A, nach g0 sortiert:')
 print(atom_m)
 print('rho:')
 print(rho)
-
-k_t = np.exp(-stoech_m.dot(g_t/(r*temp)))  
 print('Kj')
 print(k_t)
 print('sum(stoech_m)')
 print(np.sum(stoech_m))
+
+def comb(c, rho, lst=None, i=0):
+    if lst==None:
+        lst=[]
+    j=i
+    while j in range(i, c):
+        lst.append(j)
+        j+=1
+        if len(lst) > 0 and divmod(len(lst),rho)[1] ==0:
+            return lst
+        else:
+            comb(c, rho, lst, j)
+
+
+comb = itertools.combinations(range(c), rho)
+i = 0
+for item in comb:
+    i+=1
+    indexes = np.concatenate([
+        np.array(item),
+        np.array([index for index in range(c) if index not in item])
+    ])
+    rho = np.linalg.matrix_rank(atom_m[:, indexes])
+    _, r_atom_m, _, _, _ = lrpd(atom_m[:, indexes])
+    rref_atom = rref(r_atom_m)
+    b = rref_atom[:e, c - rho - 1:]
+
+    stoech_m = np.concatenate([
+        -b.T, np.eye(c - rho, dtype=float)
+    ], axis=1)
+    k_t = np.exp(-stoech_m.dot(g_t / (r * temp)))
+    if np.all(k_t<1):
+        print('Bewertete Zusammenstellung: ' + str(i))
+        print(nach_g_sortieren[indexes])
+        print(np.array(namen)[nach_g_sortieren][indexes])
+        print(k_t)
