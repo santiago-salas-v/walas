@@ -156,6 +156,16 @@ for item in comb:
     k_t = np.exp(-stoech_m.dot(g_t / (r * temp)))
     if np.all(k_t<1):
         print('Bewertete Zusammenstellung: ' + str(i))
-        print(nach_g_sortieren[indexes])
+        print('Kombination, der nach g0 sortierten Indexes:')
+        print(nach_g_sortieren[indexes]+1)
+        print('Namen, sortiert:')
         print(np.array(namen)[nach_g_sortieren][indexes])
+        print('A, nach g0 sortiert:')
+        print(atom_m)
+        print('rho:')
+        print(rho)
+        print('Kj')
         print(k_t)
+        print('sum(stoech_m)')
+        print(np.sum(stoech_m))
+        break
