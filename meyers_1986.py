@@ -3,7 +3,7 @@ import numpy as np
 from scipy import optimize
 import scipy
 import itertools
-from numerik import lrpd, rref
+from numerik import lrpd, rref, gauss_elimination
 
 # REF:
 # MYERS, Andrea K.; MYERS, Alan L. 
@@ -100,7 +100,7 @@ k_t = np.exp(-stoech_m.dot(g_t/(r*temp)))
 print('Kj')
 print(k_t)
 print('sum(stoech_m)')
-print(np.sum(stoech_m))
+print(np.sum(stoech_m[:, :(c-rho)-1]))
 
 nach_g_sortieren = np.argsort(g_t)
 atom_m = atom_m[:, nach_g_sortieren]
@@ -122,7 +122,10 @@ print(rho)
 print('Kj')
 print(k_t)
 print('sum(stoech_m)')
-print(np.sum(stoech_m))
+print(np.sum(stoech_m[:, :(c-rho)-1]))
+print('Atomischer Vektor m:')
+print(np.sum(atom_m*(ne[nach_g_sortieren]), axis=1))
+
 
 def comb(c, rho, lst=None, i=0):
     if lst==None:
@@ -155,17 +158,33 @@ for item in comb:
     ], axis=1)
     k_t = np.exp(-stoech_m.dot(g_t / (r * temp)))
     if np.all(k_t<1):
-        print('Bewertete Zusammenstellung: ' + str(i))
-        print('Kombination, der nach g0 sortierten Indexes:')
-        print(nach_g_sortieren[indexes]+1)
-        print('Namen, sortiert:')
-        print(np.array(namen)[nach_g_sortieren][indexes])
-        print('A, nach g0 sortiert:')
-        print(atom_m)
-        print('rho:')
-        print(rho)
-        print('Kj')
-        print(k_t)
-        print('sum(stoech_m)')
-        print(np.sum(stoech_m))
         break
+print('')
+print('Bewertete Zusammenstellung: ' + str(i))
+print('Kj')
+print(k_t)
+print('Alle Kj<0 ?')
+print(np.all(k_t<1))
+print('Kombination, der nach g0 sortierten Indexes:')
+print(nach_g_sortieren[indexes]+1)
+print('Namen, sortiert:')
+print(np.array(namen)[nach_g_sortieren][indexes])
+print('A, nach g0 sortiert:')
+print(atom_m)
+print('rho:')
+print(rho)
+print('Stöchiometrische Matrix:')
+print(stoech_m)
+print('Atomischer Vektor')
+print(np.sum(atom_m[:, indexes]*(ne[nach_g_sortieren][indexes]), axis=1))
+print('sum(stoech_m) (für die (c-rho) Hauptkomponenten)')
+print(np.sum(stoech_m[:, :(c-rho)-1]))
+print('sum(stoech_m)<0 ?')
+print(np.sum(stoech_m[:, :(c-rho)-1])<0)
+print((ne[nach_g_sortieren][indexes][:(c-rho)-1]))
+print(sum(atom_m[:, indexes][:, :(c-rho)-1]*(ne[nach_g_sortieren][indexes][:(c-rho)-1])))
+print(np.matrix(atom_m[:, indexes][:, :(c-rho)-1], dtype=float)**-1*np.matrix(ne[nach_g_sortieren][indexes][:(c-rho)-1]).T)
+print(gauss_elimination(
+    atom_m[:, indexes][:, :(c-rho)-1],
+    ne[nach_g_sortieren][indexes][:(c-rho)-1].reshape([rho,1]))
+)
