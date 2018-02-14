@@ -181,10 +181,9 @@ print('sum(stoech_m) (für die (c-rho) Hauptkomponenten)')
 print(np.sum(stoech_m[:, :(c-rho)-1]))
 print('sum(stoech_m)<0 ?')
 print(np.sum(stoech_m[:, :(c-rho)-1])<0)
-print((ne[nach_g_sortieren][indexes][:(c-rho)-1]))
-print(sum(atom_m[:, indexes][:, :(c-rho)-1]*(ne[nach_g_sortieren][indexes][:(c-rho)-1])))
-print(np.matrix(atom_m[:, indexes][:, :(c-rho)-1], dtype=float)**-1*np.matrix(ne[nach_g_sortieren][indexes][:(c-rho)-1]).T)
-print(gauss_elimination(
+print('Wiederberechnetes Gemisch:')
+# m = A n
+n = gauss_elimination(
     atom_m[:, indexes][:, :(c-rho)-1],
-    ne[nach_g_sortieren][indexes][:(c-rho)-1].reshape([rho,1]))
-)
+    np.sum(atom_m*(ne[nach_g_sortieren]), axis=1).reshape([rho,1]))
+print(n)
