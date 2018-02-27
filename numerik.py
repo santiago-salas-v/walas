@@ -38,13 +38,13 @@ def lrpd(a):
 
 def rref(r):
     """
-    Reduced echelon form of upper triangular matrix r
+    Reduced row echelon form of upper triangular matrix r
     :param r: numpy.matrix NxM
     :return: numpy.matrix NxM
     """
     n = r.shape[0]
     m = r.shape[1]
-    rref = np.matrix(np.copy(r))
+    r_form = np.matrix(np.copy(r))
     # denominators for diagonal 1
     den = [0.0 for i in range(n)]
     for i in range(n - 1, 0 - 1, -1):
@@ -54,15 +54,56 @@ def rref(r):
                 den[i] = r[i, j]
                 for k in range(i - 1, 0 - 1, -1):
                     num = r[k, j]
-                    rref[k, :] = rref[k, :] - num / den[i] * rref[i, :]
+                    r_form[k, :] = r_form[k, :] - num / den[i] * r_form[i, :]
             elif i == 0 and j == 0:
                 den[i] = r[i, j]
-            if abs(rref[i, j]) <= np.finfo(float).eps:
+            if abs(r_form[i, j]) > 0 and abs(
+                    r_form[i, j]) <= np.finfo(float).eps:
                 # Either way make eps 0, avoid propagation of error.
-                rref[i, j] = 0.0
+                r_form[i, j] = 0.0
     for i in range(n):
-        rref[i] = rref[i] / den[i]
-    return rref
+        r_form[i] = r_form[i] / den[i]
+    return r_form
+
+
+def ref(a):
+    """
+    Reduced echelon form of matrix a
+    :param a: numpy.matrix NxM
+    :return: numpy.matrix NxM
+    """
+    n = a.shape[0]
+    m = a.shape[1]
+    p = np.matrix(np.eye(n, dtype=float))
+    d = np.matrix(np.eye(n, dtype=float))
+    dr = np.matrix(np.zeros([n, m], dtype=float))
+    r = np.matrix(np.zeros([n, m], dtype=float))
+    indexes_r = [item for item in range(n)]
+    shift = 0  # diagonal !=0, no shift
+    for i in range(n):
+        d[i, i] = 1 / sum(abs(a[i, :m]))
+        # scaling
+        dr[i] = d[i, i] * a[i]  # dr is just for storage r
+    for j in range(n):
+        while all(abs(dr[j:, j + shift]) == 0):
+            # shift from diagonal
+            shift += 1
+        indexes_r[j] = j + np.argmax(abs(dr[j:, j + shift]))
+        # columns pivoting
+        dr[[j, indexes_r[j]]] = dr[[indexes_r[j], j]]
+        p[[j, indexes_r[j]]] = p[[indexes_r[j], j]]
+        # pivot for row j
+        piv_j = dr[j, j + shift]
+        for i in range(j + 1, n):
+            # numerator for row i
+            num_i = dr[i, j + shift]
+            # k for every element of the row up to diagonal
+            for k in range(m - 1, j - 1, -1):
+                # new entries in R
+                dr[i, k] = dr[i, k] - num_i / piv_j * dr[j, k]
+    for i in range(n):
+        r[i, i:m] = dr[i, i:m]
+    return dr, p, d
 
 
 def gauss_elimination(a, b):
@@ -198,3 +239,20 @@ def nr_ls(x0, f, j, tol, max_it, inner_loop_condition,
         inner_it_j, lambda_ls, accum_step,\
         x, diff, f_val, lambda_ls * y,\
         method_loops
+
+
+a = """
+1	0	1	0	1	0	0	0	0
+1	0	2	1	0	0	0	2	0
+0	0	0	0	0	1	0	0	0
+0	2	0	2	4	3	0	0	2
+0	0	0	0	0	0	1	0	0
+"""
+
+a = np.array(eval(
+    '[' + a.replace('\t', ',').replace('\n', '],[')[2:-2] + ']'
+), dtype=float)
+
+dr, p, d = ref(a)
+
+print(np.array(dr))
