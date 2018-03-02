@@ -4,7 +4,8 @@ from scipy import optimize
 import z_l_v
 import logging
 from numerik import nr_ls
-from numerik import gauss_elimination
+from numerik import gauss_elimination, lrpd, rref, ref
+import itertools
 
 eps = np.finfo(float).eps
 
@@ -18,6 +19,22 @@ t0_ref = 298.15  # K
 r = 8.314  # J/(mol K)
 
 namen = ['CO', 'H2', 'CO2', 'H2O', 'CH4', 'NH3', 'AR', 'O2', 'N2']
+elemente = ['C', 'O', 'N', 'H', 'AR']
+
+atom_m = np.array([
+    [1, 0, 1, 0, 1, 0, 0, 0, 0],
+    [1, 0, 2, 1, 0, 0, 0, 2, 0],
+    [0, 0, 0, 0, 0, 1, 0, 0, 0],
+    [0, 2, 0, 2, 4, 3, 0, 0, 2],
+    [0, 0, 0, 0, 0, 0, 1, 0, 0]
+    ], dtype=float)
+
+red_atom_m = rref(ref(atom_m)[0])
+
+rho = np.linalg.matrix_rank(red_atom_m)
+n_c = len(namen)
+n_e = len(elemente)
+n_r = n_c - rho
 
 ne_dampf = np.array([
     0, 0, 0, 60000, 0, 0, 0, 0, 0
@@ -180,6 +197,32 @@ cp_1 = r * cp_durch_r(t_aus_rdampfr)
 g_1 = g(t_aus_rdampfr, h_1)
 k_1 = k(t_aus_rdampfr, g_1)
 
+# Hauptreaktionen nach Meyers 1986
+# REF:
+# MYERS, Andrea K.; MYERS, Alan L.
+# Numerical solution of chemical equilibria with simultaneous reactions.
+# The Journal of chemical physics, 1986, 84. Jg., Nr. 10, S. 5787-5795.
+pot_gruppen = itertools.combinations(range(n_c), rho)
+i = 0
+for komb in pot_gruppen:
+    i+=1
+    indexes = np.concatenate([
+        np.array(komb),
+        np.array([index for index in range(n_c) if index not in komb])
+    ])
+    rho_gruppe = np.linalg.matrix_rank(atom_m[:, komb])
+    if rho_gruppe >= rho:
+        ref_atom_m = ref(atom_m[:, indexes])[0]
+        rref_atom_m = rref(ref_atom_m)
+        b = rref_atom_m[:n_e, -(n_c - rho_gruppe):]
+
+        stoech_m = np.concatenate([
+            -b.T, np.eye(n_c - rho_gruppe, dtype=float)
+        ], axis=1)
+        k_t = np.exp(-stoech_m.dot(g_1 / (r * t_aus_rdampfr)))
+        if  np.linalg.matrix_rank(b.T) >= rho_gruppe and np.all(k_t<1):
+            break
+print(stoech_m)
 
 def r_isoterm(x_vec, k, n_0):
     n_aus = x_vec[:len(n_0)]
@@ -387,11 +430,11 @@ x0 = np.concatenate([
 # 4-Mal Relaxation-Methode (Entspannung)
 n_1, _, xi_accum_1, _ = r_entspannung(k_1, naus_0, 4, t_aus_rdampfr)
 
-for item in n_1:
-    print('{0:0.20g}'.format(item / 1000.).replace('.', ','))
+for komb in n_1:
+    print('{0:0.20g}'.format(komb / 1000.).replace('.', ','))
 
-for item in np.array(xi_accum_1):
-    print('{0:0.20g}'.format(item / 1000.).replace('.', ','))
+for komb in np.array(xi_accum_1):
+    print('{0:0.20g}'.format(komb / 1000.).replace('.', ','))
 
 print('========================================')
 
@@ -431,17 +474,17 @@ print(
 
 print('')
 
-for i, item in enumerate(np.array(n_1)):
+for i, komb in enumerate(np.array(n_1)):
     print('n_{' + namen[i] + '}=' +
-          '{0:0.20g}'.format(item / 1000.).replace('.', ',') +
+          '{0:0.20g}'.format(komb / 1000.).replace('.', ',') +
           ' kmol/h')
 print('n_T' + '=' +
       '{0:0.20g}'.format(sum(n_1) / 1000.).replace('.', ',') +
       ' kmol/h')
 print('')
-for i, item in enumerate(np.array(n_1 / sum(n_1))):
+for i, komb in enumerate(np.array(n_1 / sum(n_1))):
     print('y_{' + namen[i] + '}=' +
-          '{0:0.20g}'.format(item).replace('.', ',')
+          '{0:0.20g}'.format(komb).replace('.', ',')
           )
 print('')
 print('T: ' + '{:g}'.format(t_aus_rdampfr) + ' °K')
@@ -507,8 +550,8 @@ x0 = np.concatenate([
 
 soln = optimize.root(lambda xvec: r_isoterm(xvec, k_2, naus_0), x0)
 print(soln)
-for item in soln.x:
-    print('{0:0.10g}'.format(item / 1000.).replace('.', ','))
+for komb in soln.x:
+    print('{0:0.10g}'.format(komb / 1000.).replace('.', ','))
 
 n_ein = np.matrix(n_ein).T
 

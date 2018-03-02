@@ -3,7 +3,7 @@ import numpy as np
 from scipy import optimize
 import scipy
 import itertools
-from numerik import lrpd, rref, gauss_elimination
+from numerik import lrpd, rref, ref, gauss_elimination
 
 # REF:
 # MYERS, Andrea K.; MYERS, Alan L. 
@@ -27,49 +27,6 @@ atom_m = np.array([
     [2, 2, 1, 0, 1, 1, 0, 0, 0],
     [0, 1, 0, 2, 0, 1, 2, 1, 0],
     [0, 0, 2, 0, 0, 0, 0, 2, 2]
-    ])
-
-rho = np.linalg.matrix_rank(atom_m)
-
-print('mögliche Gruppen mit Rang>=rho:')
-for comb in combinations(range(9), 4):
-    mat = atom_m[:,comb]
-    rank = np.linalg.matrix_rank(mat)
-    if rank >= rho:
-        print('Rang: ' + str(rank))
-        print(np.array(namen)[[comb]])
-        print(mat.tolist())
-
-print('Atomische Matrix: A')
-print(atom_m)
-
-print('Rang(A) (rho):')
-print(rho)
-
-print('rho >= E ? :')
-print(rho >= e)
-
-_, r_atom_m, _, _, _ = lrpd(atom_m)
-
-rref_atom = rref(r_atom_m)
-
-print('rref(A):')
-print(rref_atom)
-
-b = rref_atom[:e, c-rho-1:]
-
-stoech_m = np.concatenate([
-    -b.T, np.eye( c - rho, dtype=float)
-    ], axis=1)
-
-print('Stöchiometriche Matrix ((C-rho) X C): N')
-print(stoech_m)
-
-print('A N^T = 0')
-print(atom_m.dot(stoech_m.T))
-
-nuij = np.array([
-    [-1, +0.25, +1, ]
     ])
 
 ne = np.array([
@@ -96,9 +53,38 @@ g_t =r * temp * np.array([
     0.
     ]) # J/mol
 
+rho = np.linalg.matrix_rank(atom_m)
+
+print('(1) Eingangsdaten')
+print('Namen:' + str(namen))
+print('Elemente: ' + str(elemente))
+print('g_t^\circ: ' + str(g_t))
+print('n_e: ' + str(ne))
+print('(2) Atomische Matrix \n A = \n' + str(atom_m))
+print('E = ' + str(e) + '; C = ' + str(c))
+print('rho = Rang(A)  = ' + str(rho))
+print('R = (C-rho) = ' + str(c-rho))
+print('rho >= E ? : ' + str(rho >= e))
+
+_, r_atom_m, _, _, _ = lrpd(atom_m)
+
+rref_atom = rref(r_atom_m)
+
+print('')
+print('Reduzierte Stufenform(A): \n rref(A) = \n' + str(rref_atom))
+
+b = rref_atom[:e, c-rho-1:]
+
+stoech_m = np.concatenate([
+    -b.T, np.eye( c - rho, dtype=float)
+    ], axis=1)
 k_t = np.exp(-stoech_m.dot(g_t/(r*temp)))  
-print('Kj')
-print(k_t)
+
+print('Stöchiometriche Matrix ((C-rho) X C): \n N = \n' + str(stoech_m))
+
+print('A N^T = 0')
+print(atom_m.dot(stoech_m.T))
+print('Kj = ' + str(k_t))
 print('sum(stoech_m)')
 print(np.sum(stoech_m[:, :(c-rho)-1]))
 
@@ -127,6 +113,16 @@ print('Atomischer Vektor m:')
 print(np.sum(atom_m*(ne[nach_g_sortieren]), axis=1))
 
 
+print('(4) Schlüsselkomponente')
+print('Mögliche Gruppen mit Rang>=rho:')
+for comb in combinations(range(9), 4):
+    mat = atom_m[:,comb]
+    rank = np.linalg.matrix_rank(mat)
+    if rank >= rho:
+        print('Rang: ' + str(rank))
+        print(np.array(namen)[[comb]])
+        print(mat.tolist())
+
 def comb(c, rho, lst=None, i=0):
     if lst==None:
         lst=[]
@@ -148,17 +144,18 @@ for item in comb:
         np.array(item),
         np.array([index for index in range(c) if index not in item])
     ])
-    rho = np.linalg.matrix_rank(atom_m[:, indexes])
-    _, r_atom_m, _, _, _ = lrpd(atom_m[:, indexes])
-    rref_atom = rref(r_atom_m)
-    b = rref_atom[:e, c - rho - 1:]
+    rho_gruppe = np.linalg.matrix_rank(atom_m[:,indexes][:, item])
+    if rho_gruppe >= rho:
+        r_atom_m = ref(atom_m[:, indexes])[0]
+        rref_atom = rref(r_atom_m)
+        b = rref_atom[:e, -(c - rho_gruppe):]
 
-    stoech_m = np.concatenate([
-        -b.T, np.eye(c - rho, dtype=float)
-    ], axis=1)
-    k_t = np.exp(-stoech_m.dot(g_t / (r * temp)))
-    if np.all(k_t<1):
-        break
+        stoech_m = np.concatenate([
+            -b.T, np.eye(c - rho_gruppe, dtype=float)
+        ], axis=1)
+        k_t = np.exp(-stoech_m.dot(g_t / (r * temp)))
+        if np.all(k_t<1) and np.linalg.matrix_rank(b.T)>= c-rho_gruppe:
+            break
 print('')
 print('Bewertete Zusammenstellung: ' + str(i))
 print('Kj')
@@ -187,3 +184,37 @@ n = gauss_elimination(
     atom_m[:, indexes][:, :(c-rho)-1],
     np.sum(atom_m*(ne[nach_g_sortieren]), axis=1).reshape([rho,1]))
 print(n)
+
+print(ne)
+
+xi_j = np.sum(ne)/(c-rho)*(k_t/(1+k_t))*7.10309/2.47820182
+
+n0 = np.matrix(ne[nach_g_sortieren][indexes][0:(c-rho)-1]).T
+s_xi = stoech_m[:, :(c-rho)-1].T*xi_j.T
+
+n1 = n0 + s_xi
+
+xi_j_k_m_1 = np.copy(xi_j)
+
+for i, n_k in enumerate(n1):
+    for j, item in enumerate(xi_j.T):
+        if n_k < 0 and stoech_m[j, i] != 0:
+            s = np.sum([nuij for nuij in stoech_m[:, i] if nuij != 0])
+            xi_j_k_m_1[0, j] = xi_j[0, j] + (0.01 * np.sum(n0) - (n_k)) / s
+            print((0.01 * np.sum(n0) - (n_k)) / s)
+
+
+stoech_m[abs(stoech_m)<np.finfo(float).eps] = 0
+print(stoech_m)
+print(0**-0)
+
+print(np.sum(ne)**sum(stoech_m))
+print(np.power(ne, -stoech_m))
+for x, item in enumerate(stoech_m):
+    print(np.power(ne, -item))
+print(np.product(np.power(ne, -stoech_m), axis=1))
+print(np.multiply(k_t,
+    np.multiply(
+            np.sum(ne)**sum(stoech_m) ,
+            np.product(np.power(ne, -stoech_m), axis=0),
+            )))

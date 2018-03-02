@@ -239,20 +239,3 @@ def nr_ls(x0, f, j, tol, max_it, inner_loop_condition,
         inner_it_j, lambda_ls, accum_step,\
         x, diff, f_val, lambda_ls * y,\
         method_loops
-
-
-a = """
-1	0	1	0	1	0	0	0	0
-1	0	2	1	0	0	0	2	0
-0	0	0	0	0	1	0	0	0
-0	2	0	2	4	3	0	0	2
-0	0	0	0	0	0	1	0	0
-"""
-
-a = np.array(eval(
-    '[' + a.replace('\t', ',').replace('\n', '],[')[2:-2] + ']'
-), dtype=float)
-
-dr, p, d = ref(a)
-
-print(np.array(dr))
