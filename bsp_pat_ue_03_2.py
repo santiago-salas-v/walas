@@ -24,10 +24,10 @@ elemente = ['C', 'O', 'N', 'H', 'AR']
 atom_m = np.array([
     [1, 0, 1, 0, 1, 0, 0, 0, 0],
     [1, 0, 2, 1, 0, 0, 0, 2, 0],
-    [0, 0, 0, 0, 0, 1, 0, 0, 0],
-    [0, 2, 0, 2, 4, 3, 0, 0, 2],
+    [0, 0, 0, 0, 0, 1, 0, 0, 2],
+    [0, 2, 0, 2, 4, 3, 0, 0, 0],
     [0, 0, 0, 0, 0, 0, 1, 0, 0]
-    ], dtype=float)
+], dtype=float)
 
 red_atom_m = rref(ref(atom_m)[0])
 
@@ -205,7 +205,7 @@ k_1 = k(t_aus_rdampfr, g_1)
 pot_gruppen = itertools.combinations(range(n_c), rho)
 i = 0
 for komb in pot_gruppen:
-    i+=1
+    i += 1
     indexes = np.concatenate([
         np.array(komb),
         np.array([index for index in range(n_c) if index not in komb])
@@ -220,9 +220,35 @@ for komb in pot_gruppen:
             -b.T, np.eye(n_c - rho_gruppe, dtype=float)
         ], axis=1)
         k_t = np.exp(-stoech_m.dot(g_1 / (r * t_aus_rdampfr)))
-        if  np.linalg.matrix_rank(b.T) >= rho_gruppe and np.all(k_t<1):
+
+        sortierte_namen = np.array([namen[i] for i in indexes])
+        ind_sek = [i for i in indexes if i not in komb]
+        a_p = atom_m[:, komb]
+        a_s = atom_m[:, ind_sek]
+        print('Gruppe:' + str(sortierte_namen))
+        print('Primär:' + str(sortierte_namen[:rho]))
+        print('Sekundär:' + str(sortierte_namen[rho:]))
+        print('Ap')
+        print(a_p)
+        print('[Ip, b]')
+        print(rref_atom_m)
+        print('[-b.T, I]')
+        print(stoech_m)
+        print('A N^T')
+        print(rref_atom_m.dot(stoech_m.T))
+        for row in np.array(stoech_m):
+            lhs = '+ '.join([str(abs(row[r])) + ' ' +
+                             sortierte_namen[r] for r in np.where(row < 0)[0]])
+            rhs = '+'.join([str(abs(row[r])) + ' ' +
+                            sortierte_namen[r] for r in np.where(row > 0)[0]])
+            print(lhs + ' <<==>> ' + rhs)
+        print('Kj(T)')
+        print(k_t)
+
+        if np.all(k_t < 1):
             break
 print(stoech_m)
+
 
 def r_isoterm(x_vec, k, n_0):
     n_aus = x_vec[:len(n_0)]
@@ -307,7 +333,8 @@ def r_entspannung(k_j, n_0, x_mal, temp_0, betrieb='isotherm'):
     abstaende = np.empty(nuij.shape[1])
 
     for i in range(nuij.shape[1]):
-        k_pir_nt, pip, diff = gg_abstand(k_j[i], nuij[:, i], n, 0, full_output=True)
+        k_pir_nt, pip, diff = gg_abstand(
+            k_j[i], nuij[:, i], n, 0, full_output=True)
         print(k_pir_nt, pip, diff)
         if k_pir_nt < pip:
             abstaende[i] = k_pir_nt / pip - 1
@@ -329,9 +356,8 @@ def r_entspannung(k_j, n_0, x_mal, temp_0, betrieb='isotherm'):
             if soln_xi_full.success:
                 xi_j[j] = soln_xi
             elif not soln_xi_full.success:
-                soln_xi_full = optimize.bisect(
-                    lambda xi: gg_abstand(
-                        k_j[j], nuij[:, j], n, xi), -1 / len(n) * sum(n), 1 / len(n) * sum(n), full_output=True)
+                soln_xi_full = optimize.bisect(lambda xi: gg_abstand(
+                    k_j[j], nuij[:, j], n, xi), -1 / len(n) * sum(n), 1 / len(n) * sum(n), full_output=True)
                 soln_xi = soln_xi_full[0]
                 if soln_xi_full[1].converged:
                     xi_j[j] = soln_xi
@@ -522,10 +548,7 @@ x0 = np.concatenate([
 from sympy import *
 
 n1, n2, n3, n4, n5, n6, n7, n8, n9 = symbols('n1:10')
-xi1, xi2, xi3, xi4, xi5, xi6  = symbols('xi1:7')
-
-
-
+xi1, xi2, xi3, xi4, xi5, xi6 = symbols('xi1:7')
 
 
 soln = optimize.root(lambda xvec: r_isoterm(xvec, k_2, n_1), x0)
