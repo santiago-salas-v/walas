@@ -5,6 +5,8 @@ import scipy
 import itertools
 from numerik import lrpd, rref, ref, gauss_elimination
 
+np.set_printoptions(linewidth=200)
+
 # REF:
 # MYERS, Andrea K.; MYERS, Alan L. 
 # Numerical solution of chemical equilibria with simultaneous reactions. 
@@ -144,7 +146,7 @@ for item in comb:
         np.array(item),
         np.array([index for index in range(c) if index not in item])
     ])
-    rho_gruppe = np.linalg.matrix_rank(atom_m[:,indexes][:, item])
+    rho_gruppe = np.linalg.matrix_rank(atom_m[:,item])
     if rho_gruppe >= rho:
         r_atom_m = ref(atom_m[:, indexes])[0]
         rref_atom = rref(r_atom_m)
@@ -154,7 +156,41 @@ for item in comb:
             -b.T, np.eye(c - rho_gruppe, dtype=float)
         ], axis=1)
         k_t = np.exp(-stoech_m.dot(g_t / (r * temp)))
-        if np.all(k_t<1) and np.linalg.matrix_rank(b.T)>= c-rho_gruppe:
+
+        sortierte_namen = np.array(namen)[nach_g_sortieren][list(indexes)]
+        a_m_mit_namen = np.concatenate(
+            [[sortierte_namen],
+             [*[np.array(row, dtype=object) for row in atom_m]]]
+        )
+        stoech_m_mit_namen =np.concatenate(
+            [[sortierte_namen],
+             [*[np.array(row, dtype=object) for row in np.array(stoech_m)]]]
+        )
+        ind_sek = [i for i in indexes if i not in item]
+        a_p = atom_m[:, item]
+        a_s = atom_m[:, ind_sek]
+
+        print('Gruppe:' + str(sortierte_namen))
+        print('Primär:' + str(sortierte_namen[:rho]))
+        print('Sekundär:' + str(sortierte_namen[rho:]))
+        print('Ap')
+        print(a_p)
+        print('[Ip, b]')
+        print(rref_atom)
+        print('[-b.T, I]')
+        print(stoech_m)
+        print('A N^T')
+        print(rref_atom.dot(stoech_m.T))
+        for row in np.array(stoech_m):
+            lhs = '+ '.join([str(abs(row[r])) + ' ' +
+                sortierte_namen[r] for r in np.where(row<0)[0]])
+            rhs = '+'.join([str(abs(row[r])) + ' ' +
+                sortierte_namen[r] for r in np.where(row>0)[0]])
+            print(lhs + ' <<==>> ' + rhs)
+        print('Kj(T)')
+        print(k_t)
+
+        if np.all(k_t<1):# and np.linalg.matrix_rank(b.T)>= c-rho_gruppe:
             break
 print('')
 print('Bewertete Zusammenstellung: ' + str(i))
