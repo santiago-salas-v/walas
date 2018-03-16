@@ -8,6 +8,7 @@ from numerik import gauss_elimination, lrpd, rref, ref
 import itertools
 
 eps = np.finfo(float).eps
+np.set_printoptions(linewidth=200)
 
 # Modell feststellen
 z_l_v.use_pr_eos()
@@ -31,7 +32,7 @@ atom_m = np.array([
 
 red_atom_m = rref(ref(atom_m)[0])
 
-rho = np.linalg.matrix_rank(red_atom_m)
+rho = int(np.linalg.matrix_rank(red_atom_m))
 n_c = len(namen)
 n_e = len(elemente)
 n_r = n_c - rho
@@ -52,15 +53,6 @@ ne_luft = np.array([
 te_dampf = 500 + 273.15  # °K
 te_rohgas = 20 + 273.15  # °K
 te_luft = 20 + 273.15  # °K
-
-nuij = np.array([
-    [+1, +2, +0, +0, -1, +0, +0, -1 / 2, +0],
-    [+1, +3, +0, -1, -1, +0, +0, +0, +0],
-    [-1, +1, +1, -1, +0, +0, +0, +0, +0],
-    [-1, -3, +0, +1, +1, +0, +0, +0, +0],
-    [+0, -4, -1, +2, +1, +0, +0, +0, +0],
-    [+0, -3 / 2, 0, 0, +0, +1, +0, +0, -1 / 2]
-]).T
 
 # Thermochemische Daten
 
@@ -162,7 +154,7 @@ def g(t, h_t):
     return freie_energien  # J/mol
 
 
-def k(t, g_t):
+def k(t, g_t, nuij):
     delta_g_t = nuij.T.dot(g_t)
     return np.exp(-delta_g_t / (r * t))
 
@@ -184,24 +176,27 @@ t_ein = optimize.root(lambda temp:
 h_t_ein = h(t_ein)
 cp_t_ein = r * cp_durch_r(t_ein)
 g_t_ein = g(t_ein, h_t_ein)  # J/mol
-k_t_ein = k(t_ein, g_t_ein)  # []
 
 t_aus_rdampfr = 995 + 273.15  # °K
 h_0 = h_t_ein
 cp_0 = cp_t_ein
 g_0 = g_t_ein
-k_0 = k_t_ein
 
 h_1 = h(t_aus_rdampfr)
 cp_1 = r * cp_durch_r(t_aus_rdampfr)
 g_1 = g(t_aus_rdampfr, h_1)
-k_1 = k(t_aus_rdampfr, g_1)
 
 # Hauptreaktionen nach Meyers 1986
 # REF:
 # MYERS, Andrea K.; MYERS, Alan L.
 # Numerical solution of chemical equilibria with simultaneous reactions.
 # The Journal of chemical physics, 1986, 84. Jg., Nr. 10, S. 5787-5795.
+nach_g_sortieren = np.argsort(g_1)
+festgelegte_komponente = [4] # Hauptkomponente festlegen (bei Dampfrerormierung, CH4)
+# in nach g sortierten Koordinaten
+festgelegte_komponente_sortiert = nach_g_sortieren.argsort()[festgelegte_komponente]
+festgelegte_komponente_sortiert.sort()
+# pot_gruppen = itertools.permutations(range(n_c), rho)
 pot_gruppen = itertools.combinations(range(n_c), rho)
 i = 0
 for komb in pot_gruppen:
@@ -210,18 +205,22 @@ for komb in pot_gruppen:
         np.array(komb),
         np.array([index for index in range(n_c) if index not in komb])
     ])
-    rho_gruppe = np.linalg.matrix_rank(atom_m[:, komb])
-    if rho_gruppe >= rho:
-        ref_atom_m = ref(atom_m[:, indexes])[0]
+    # namen = np.array(namen)[nach_g_sortieren][indexes][np.argsort(indexes)][np.argsort(nach_g_sortieren)]
+    # A = [A_p, A_s]
+    a = atom_m[:, nach_g_sortieren]
+    a_p = a[:, komb]
+    rho_gruppe = np.linalg.matrix_rank(a_p)
+    if rho_gruppe >= rho and all([x in komb for x in festgelegte_komponente_sortiert]):
+        ref_atom_m = ref(a[:, indexes])[0]
         rref_atom_m = rref(ref_atom_m)
         b = rref_atom_m[:n_e, -(n_c - rho_gruppe):]
 
         stoech_m = np.concatenate([
             -b.T, np.eye(n_c - rho_gruppe, dtype=float)
         ], axis=1)
-        k_t = np.exp(-stoech_m.dot(g_1 / (r * t_aus_rdampfr)))
+        k_t = np.exp(-stoech_m.dot(g_1[nach_g_sortieren][indexes] / (r * t_aus_rdampfr)))
 
-        sortierte_namen = np.array([namen[i] for i in indexes])
+        sortierte_namen = np.array(namen)[nach_g_sortieren][indexes]
         ind_sek = [i for i in indexes if i not in komb]
         a_p = atom_m[:, komb]
         a_s = atom_m[:, ind_sek]
@@ -247,7 +246,6 @@ for komb in pot_gruppen:
 
         if np.all(k_t < 1):
             break
-print(stoech_m)
 
 
 def r_isoterm(x_vec, k, n_0):
@@ -370,7 +368,7 @@ def r_entspannung(k_j, n_0, x_mal, temp_0, betrieb='isotherm'):
                     sum(n * h(temp_var) - n_0 * h_temp_0),
                     temp
                 ).x
-                k_j = k(temp, g(temp, h(temp)))
+                k_j = k(temp, g(temp, h(temp)), nuij)
     return (n, xi_j, xi_j_accum, temp)
 
 
@@ -445,13 +443,18 @@ def notify_status_func(progress_k, stop_value, k,
         ';|g-g1|=' + str(abs(g_min - g1))
     logging.debug(pr_str)
 
+nuij = np.array(stoech_m[:, np.argsort(indexes)][:, np.argsort(nach_g_sortieren)]).T
+k_1 = k(t_aus_rdampfr, g_1, nuij)
 
 naus_0 = np.copy(n_0)
-xi_0 = np.zeros(nuij.shape[1])
+xi_0 = np.sum(n_0) / (n_c - rho) * (k_t / (1 + k_t))
 x0 = np.concatenate([
     naus_0,
     xi_0
 ])
+s_xi = stoech_m[:, :(n_c - rho) - 1].T * xi_0.T
+
+
 
 # 4-Mal Relaxation-Methode (Entspannung)
 n_1, _, xi_accum_1, _ = r_entspannung(k_1, naus_0, 4, t_aus_rdampfr)
@@ -526,7 +529,7 @@ t_ein_rwgs = 210 + 273.15  # °K
 h_2 = h(t_ein_rwgs)
 cp_2 = r * cp_durch_r(t_ein_rwgs)
 g_2 = g(t_ein_rwgs, h_2)
-k_2 = k(t_ein_rwgs, g_2)
+k_2 = k(t_ein_rwgs, g_2, nuij)
 
 n_2 = n_1
 

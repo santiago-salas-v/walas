@@ -252,6 +252,39 @@ for x, item in enumerate(stoech_m):
 print(np.product(np.power(ne, -stoech_m), axis=1))
 print(np.multiply(k_t,
                   np.multiply(
-                      np.sum(ne)**sum(stoech_m),
-                      np.product(np.power(ne, -stoech_m), axis=0),
+                      np.sum(ne)**np.array(sum(stoech_m.T)),
+                      np.product(np.power(ne, -stoech_m), axis=1),
                   )))
+
+# Test on a given system: ['CO', 'H2', 'CO2', 'H2O', 'CH4', 'NH3', 'AR', 'O2', 'N2']
+nuij = np.array([
+    [+1, +2, +0, +0, -1, +0, +0, -1 / 2, +0],
+    [+1, +3, +0, -1, -1, +0, +0, +0, +0],
+    [-1, +1, +1, -1, +0, +0, +0, +0, +0],
+    [-1, -3, +0, +1, +1, +0, +0, +0, +0],
+    [+0, -4, -1, +2, +1, +0, +0, +0, +0],
+    [+0, -3 / 2, 0, 0, +0, +1, +0, +0, -1 / 2]
+]).T
+
+
+np.set_printoptions(linewidth=200)
+rref_form = np.array(rref(ref(nuij.T)[0]))
+
+for row in rref_form:
+    print(row)
+
+namen = ['CO', 'H2', 'CO2', 'H2O', 'CH4', 'NH3', 'AR', 'O2', 'N2']
+print(namen)
+
+for item in itertools.permutations([0, 1, 2, 3, 7, 8], 6):
+    # force NH3, CH4 as main components
+    order = [*[4, 5], *item, 6]
+    sortierte_namen = np.array(namen)[order]
+    print(sortierte_namen)
+    comb_mat = rref(ref(nuij.T[:, order])[0])
+    for row in np.array(comb_mat):
+        lhs = '+ '.join([str(abs(row[r])) + ' ' +
+                         sortierte_namen[r] for r in np.where(row < 0)[0]])
+        rhs = '+'.join([str(abs(row[r])) + ' ' +
+                        sortierte_namen[r] for r in np.where(row > 0)[0]])
+        print(lhs + ' <<==>> ' + rhs)

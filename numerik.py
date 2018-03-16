@@ -85,9 +85,12 @@ def ref(a):
         # scaling
         dr[i] = d[i, i] * a[i]  # dr is just for storage r
     for j in range(n):
-        while all(abs(dr[j:, j + shift]) == 0):
+        while all(abs(dr[j:, j + shift]) == 0) and j+shift < dr.shape[1]-1:
             # shift from diagonal
             shift += 1
+        if j+shift >= dr.shape[1]-1:
+            # rows below all 0
+            break
         indexes_r[j] = j + np.argmax(abs(dr[j:, j + shift]))
         # columns pivoting
         dr[[j, indexes_r[j]]] = dr[[indexes_r[j], j]]
