@@ -4,7 +4,7 @@ from scipy import optimize
 import z_l_v
 import logging
 from numerik import nr_ls
-from numerik import gauss_elimination, lrpd, rref, ref
+from numerik import gauss_elimination, lrpd, rref, ref, steepest_descent
 import itertools
 
 eps = np.finfo(float).eps
@@ -205,13 +205,16 @@ for komb in pot_gruppen:
         np.array(komb),
         np.array([index for index in range(n_c) if index not in komb])
     ])
+    sortierte_namen = np.array(namen)[nach_g_sortieren][indexes]
+    ind_sek = [i for i in indexes if i not in komb]
     # namen = np.array(namen)[nach_g_sortieren][indexes][np.argsort(indexes)][np.argsort(nach_g_sortieren)]
     # A = [A_p, A_s]
-    a = atom_m[:, nach_g_sortieren]
-    a_p = a[:, komb]
+    a_nach_g_sortiert = atom_m[:, nach_g_sortieren]
+    a_p = a_nach_g_sortiert[:, komb]
+    a_s = a_nach_g_sortiert[:, ind_sek]
     rho_gruppe = np.linalg.matrix_rank(a_p)
     if rho_gruppe >= rho and all([x in komb for x in festgelegte_komponente_sortiert]):
-        ref_atom_m = ref(a[:, indexes])[0]
+        ref_atom_m = ref(a_nach_g_sortiert[:, indexes])[0]
         rref_atom_m = rref(ref_atom_m)
         b = rref_atom_m[:n_e, -(n_c - rho_gruppe):]
 
@@ -219,11 +222,6 @@ for komb in pot_gruppen:
             -b.T, np.eye(n_c - rho_gruppe, dtype=float)
         ], axis=1)
         k_t = np.exp(-stoech_m.dot(g_1[nach_g_sortieren][indexes] / (r * t_aus_rdampfr)))
-
-        sortierte_namen = np.array(namen)[nach_g_sortieren][indexes]
-        ind_sek = [i for i in indexes if i not in komb]
-        a_p = atom_m[:, komb]
-        a_s = atom_m[:, ind_sek]
         print('Gruppe:' + str(sortierte_namen))
         print('Primär:' + str(sortierte_namen[:rho]))
         print('Sekundär:' + str(sortierte_namen[rho:]))
@@ -446,15 +444,61 @@ def notify_status_func(progress_k, stop_value, k,
 nuij = np.array(stoech_m[:, np.argsort(indexes)][:, np.argsort(nach_g_sortieren)]).T
 k_1 = k(t_aus_rdampfr, g_1, nuij)
 
+#n_0[n_0==0]=np.finfo(float).eps
 naus_0 = np.copy(n_0)
-xi_0 = np.sum(n_0) / (n_c - rho) * (k_t / (1 + k_t))
+#xi_0 = np.array(np.sum(n_0) / (n_c - rho) * (k_t / (1 + k_t))).reshape([nuij.shape[1],])
+#xi_0 = np.ones(nuij.shape[1])*eps
+_, _, xi_0, _ = r_entspannung(k_1, naus_0, 1, t_aus_rdampfr)
+#xi_0 = np.zeros(nuij.shape[1])*eps
 x0 = np.concatenate([
     naus_0,
     xi_0
 ])
+
+def fj_0(xi):
+    n = n_0 + nuij.dot(xi)
+    n_t = sum(n_0) + sum(nuij.dot(xi))
+    #f = nuij.T.dot(np.log((n) / (n_t))) - np.log(k_1)
+    pi = np.product(np.power(n / n_t, nuij.T), axis=1)
+    f = pi - k_1
+    print('f')
+    print(f)
+    return f
+
+def jac_fj_0(xi):
+    jac= np.zeros([len(xi), len(xi)])
+    n_k = n_0 + nuij.dot(xi)
+    n_t = sum(n_k)
+    pi = np.product(np.power(n_k / n_t, nuij.T), axis=1)
+    for i in range(n_r):
+        for j in range(n_r):
+            for k in range(n_c):
+                jac[i,j] = jac[i,j] + nuij[k,j]*nuij[k,i]/n_k[k]
+            jac[i,j] = pi[i] * (jac[i,j] - sum(nuij[:, j])*sum(nuij[:, i])/n_t)
+    print('jac')
+    print(jac)
+    return jac
+
+
+soln = optimize.root(
+    fj_0, xi_0,
+    callback=lambda x,f: print('x=' + str(x) + '; f=' + str(f)),
+    #jac=jac_fj_0
+)
+
+print(soln)
+
+soln = optimize.root(
+    fj_0, soln.x,
+    callback=lambda x,f: print('x=' + str(x) + '; f=' + str(f)),
+    jac=jac_fj_0
+)
+
+print(soln)
+
+print(steepest_descent(xi_0, fj_0, jac_fj_0, 1e-8))
+
 s_xi = stoech_m[:, :(n_c - rho) - 1].T * xi_0.T
-
-
 
 # 4-Mal Relaxation-Methode (Entspannung)
 n_1, _, xi_accum_1, _ = r_entspannung(k_1, naus_0, 4, t_aus_rdampfr)

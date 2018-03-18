@@ -282,6 +282,7 @@ for item in itertools.permutations([0, 1, 2, 3, 7, 8], 6):
     sortierte_namen = np.array(namen)[order]
     print(sortierte_namen)
     comb_mat = rref(ref(nuij.T[:, order])[0])
+    print(comb_mat)
     for row in np.array(comb_mat):
         lhs = '+ '.join([str(abs(row[r])) + ' ' +
                          sortierte_namen[r] for r in np.where(row < 0)[0]])

@@ -242,3 +242,52 @@ def nr_ls(x0, f, j, tol, max_it, inner_loop_condition,
         inner_it_j, lambda_ls, accum_step,\
         x, diff, f_val, lambda_ls * y,\
         method_loops
+
+def steepest_descent(x0, f, j, tol):
+    g = lambda x: f(x).T.dot(f(x))
+    x = x0
+    k = 1
+    stop = False
+    max_it = 1000
+    while k < max_it and not stop:
+        z = 2 * j(x).T * f(x)
+        z0 = np.sqrt((z.T * z))
+        if z0 == 0:
+            # Zero gradient
+            stop = True
+            break
+        z = z / z0
+        alpha1 = 0
+        alpha3 = 1
+        g1 = g(x - alpha1 * z)
+        g3 = g(x - alpha3 * z)
+        while g3 >= g1 and alpha3 > tol / 2.0:
+            alpha3 = alpha3 / 2.0
+            g3 = g(x - alpha3 * z)
+        alpha2 = alpha3 / 2.0
+        g2 = g(x - alpha2 * z)
+        """
+        (Note: Newton’s forward divided-difference formula is used to find
+        the quadratic P(α) = g1 + h1α + h3α(α − α2) that interpolates
+        h(α) at α = 0, α = α2, α = α3.)
+        """
+        h1 = (g2 - g1) / alpha2
+        h2 = (g3 - g2) / (alpha3 - alpha2)
+        h3 = (h2 - h1) / alpha3
+        alpha0 = 0.5 * (alpha2 - h1 / h3)  # (The critical point of P occurs at α0.)
+        g0 = g(x - alpha0 * z)
+        if g0 < g3:
+            alpha = alpha0
+            g_min = g0
+        else:
+            alpha = alpha3
+            g_min = g3
+        x = x - alpha * z
+        print("k="+str(k)+"; "+"x= " + np.array2string(x.A1)+
+              "; g="+str(g_min)+"; |g-g1|="+str(abs(g_min - g1)),"stop?",str(stop))
+        if abs(g_min - g1) < tol:
+            stop = True  # Procedure successful
+        k += 1
+    print(k)
+    return x
+
