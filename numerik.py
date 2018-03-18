@@ -243,15 +243,15 @@ def nr_ls(x0, f, j, tol, max_it, inner_loop_condition,
         x, diff, f_val, lambda_ls * y,\
         method_loops
 
-def steepest_descent(x0, f, j, tol):
+def sdm(x0, f, j, tol):
     g = lambda x: f(x).T.dot(f(x))
     x = x0
     k = 1
     stop = False
     max_it = 1000
     while k < max_it and not stop:
-        z = 2 * j(x).T * f(x)
-        z0 = np.sqrt((z.T * z))
+        z = 2 * j(x).dot(f(x))
+        z0 = np.sqrt((z.T.dot(z)))
         if z0 == 0:
             # Zero gradient
             stop = True
@@ -283,10 +283,10 @@ def steepest_descent(x0, f, j, tol):
             alpha = alpha3
             g_min = g3
         x = x - alpha * z
-        print("k="+str(k)+"; "+"x= " + np.array2string(x.A1)+
-              "; g="+str(g_min)+"; |g-g1|="+str(abs(g_min - g1)),"stop?",str(stop))
         if abs(g_min - g1) < tol:
             stop = True  # Procedure successful
+        print("k=" + str(k) + "; " + "x= " + np.array2string(x) +
+              "; g=" + str(g_min) + "; |g-g1|=" + str(abs(g_min - g1)), "stop?", str(stop))
         k += 1
     print(k)
     return x
