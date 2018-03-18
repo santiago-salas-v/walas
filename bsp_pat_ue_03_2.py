@@ -469,6 +469,7 @@ def jac_fj_0(xi):
     jac= np.zeros([len(xi), len(xi)])
     n_k = n_0 + nuij.dot(xi)
     n_t = sum(n_k)
+    n_k[n_k == 0] = eps
     pi = np.product(np.power(n_k / n_t, nuij.T), axis=1)
     for i in range(n_r):
         for j in range(n_r):
