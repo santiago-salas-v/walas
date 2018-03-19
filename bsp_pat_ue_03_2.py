@@ -535,7 +535,7 @@ n_2 = n_1
 q = sum(n_2 * (h_2 - h_1))  # mol/h * J/mol = J/h
 
 print(
-    'Vormärmer (auf T= ' + str(t_aus_rdampfr) + ' °K), Q: ' +
+    'Vormärmer (auf T= ' + str(t_ein_rwgs) + ' °K), Q: ' +
     '{0:0.20g}'.format(
         q * 1 / 60. ** 2 * 1 / 1000.  # 1h/60^2s * 1kW / 1000W
     ).replace('.', ',') + ' kW'
