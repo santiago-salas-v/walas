@@ -9,6 +9,10 @@ import itertools
 
 eps = np.finfo(float).eps
 np.set_printoptions(linewidth=200)
+console = logging.StreamHandler()
+console.setLevel(logging.DEBUG)
+logging.getLogger().addHandler(console)
+logging.getLogger().setLevel(logging.DEBUG)
 
 # Modell feststellen
 z_l_v.use_pr_eos()
@@ -256,7 +260,7 @@ def r_isoterm(x_vec, k, n_0):
     f = np.empty_like(x_vec)
 
     # Stoffbilanzen
-    f[:len(n_0)] = -n_aus + n_0 + np.matrix(nuij.dot(xi_aus))
+    f[:len(n_0)] = -n_aus + n_0 + nuij.dot(xi_aus)
 
     # Gleichgewicht-Verhältnisse
     # 0 = - Kj * n_T^sum_i(nuij) *  prod_i(ni^(nuij*deltaij)) +
@@ -358,37 +362,37 @@ def notify_status_func(progress_k, stop_value, k,
         ';lambda_ls=' + str(lambda_ls) + \
         ';accum_step=' + str(accum_step) + \
         ';stop=' + str(stop_value) + \
-        ';X=' + '[' + ','.join(map(str, x.T)) + ']' + \
-        ';||X(k)-X(k-1)||=' + str((diff.T * diff).item()) + \
-        ';f(X)=' + '[' + ','.join(map(str, f_val.T.A1)) + ']' + \
-        ';||f(X)||=' + str(np.sqrt((f_val.T * f_val).item())) + \
+        ';X=' + '[' + ','.join(map(str, x)) + ']' + \
+        ';||X(k)-X(k-1)||=' + str(diff.T.dot(diff)) + \
+        ';f(X)=' + '[' + ','.join(map(str, f_val)) + ']' + \
+        ';||f(X)||=' + str(np.sqrt(f_val.T.dot(f_val))) + \
         ';j(X)=' + str(j_val.tolist()) + \
-        ';Y=' + '[' + ','.join(map(str, y.T.A1)) + ']' + \
-        ';||Y||=' + str(np.sqrt((y.T * y).item())) + \
+        ';Y=' + '[' + ','.join(map(str, y)) + ']' + \
+        ';||Y||=' + str(np.sqrt(y.T.dot(y))) + \
         ';g=' + str(g_min) + \
         ';|g-g1|=' + str(abs(g_min - g1))
     logging.debug(pr_str)
 
-def fj_0(xi):
+def fj_0(xi, n_0, k_t):
     n = n_0 + nuij.dot(xi)
     n_t = sum(n_0) + sum(nuij.dot(xi))
     #f = nuij.T.dot(np.log((n) / (n_t))) - np.log(k_1)
     pi = np.product(np.power(n / n_t, nuij.T), axis=1)
-    f = pi - k_1
+    f = pi - k_t
     print('f')
     print(f)
     return f
 
-def jac_fj_0(xi):
+def jac_fj_0(xi, n_0):
     jac= np.zeros([len(xi), len(xi)])
-    n_k = n_0 + nuij.dot(xi)
-    n_t = sum(n_k)
-    n_k[n_k == 0] = eps
-    pi = np.product(np.power(n_k / n_t, nuij.T), axis=1)
+    n = n_0 + nuij.dot(xi)
+    n_t = sum(n)
+    n[n == 0] = eps
+    pi = np.product(np.power(n / n_t, nuij.T), axis=1)
     for i in range(n_r):
         for j in range(n_r):
             for k in range(n_c):
-                jac[i,j] = jac[i,j] + nuij[k,j]*nuij[k,i]/n_k[k]
+                jac[i,j] = jac[i,j] + nuij[k,j]*nuij[k,i]/n[k]
             jac[i,j] = pi[i] * (jac[i,j] - sum(nuij[:, j])*sum(nuij[:, i])/n_t)
     print('jac')
     print(jac)
@@ -397,17 +401,33 @@ def jac_fj_0(xi):
 nuij = np.array(stoech_m[:, np.argsort(indexes)][:, np.argsort(nach_g_sortieren)]).T
 k_1 = k(t_aus_rdampfr, g_1, nuij)
 naus_0 = np.copy(n_0)
+# Entspannung
 _, _, xi_0, _ = r_entspannung(k_1, naus_0, 1, t_aus_rdampfr)
+# Steifster Gradient
+xi_sdm = sdm(
+    xi_0,
+    lambda xi: fj_0(xi, n_0, k_1),
+    lambda xi: jac_fj_0(xi, n_0),
+    1e-4)
+# Newton-Raphson
+progress_k, stop, outer_it_k, outer_it_j, \
+    lambda_ls, accum_step, x, \
+    diff, f_val, lambda_ls_y, \
+    method_loops = \
+    nr_ls(x0=xi_sdm,
+          f=lambda xi: fj_0(xi, n_0, k_1),
+          j=lambda xi: jac_fj_0(xi,  n_0),
+          tol=1e-12,
+          max_it=1000,
+          inner_loop_condition=lambda x_vec:
+          all([item >= 0 for item in
+               n_0 + nuij.dot(x_vec)]), # keine Voraussetzung
+          notify_status_func=notify_status_func,
+          method_loops=[0, 0],
+          process_func_handle=None)
 
-xi_sdm = sdm(xi_0, fj_0, jac_fj_0, 1e-4)
 
-soln = optimize.root(
-    fj_0, xi_sdm,
-    callback=lambda x,f: print('x=' + str(x) + '; f=' + str(f)),
-    jac=jac_fj_0
-)
-
-xi_accum_1 = soln.x
+xi_accum_1 = x
 n_1 = n_0 + nuij.dot(xi_accum_1)
 
 for komb in n_1:
@@ -493,19 +513,3 @@ x0 = np.concatenate([
     n_1,
     xi_accum_2
 ])
-
-progress_k, stop, outer_it_k, outer_it_j, \
-    lambda_ls, accum_step, x, \
-    diff, f_val, lambda_ls_y, \
-    method_loops = \
-    nr_ls(x0=np.matrix(x0).T,
-          f=lambda x: np.matrix(r_isoterm(x)),
-          j=lambda x: np.matrix(jac_r_dampf_reformierung(x)),
-          tol=1e-12,
-          max_it=1000,
-          inner_loop_condition=lambda x_vec:
-          all([item >= 0 for item in
-               x_vec[0:len(n_ein)]]),
-          notify_status_func=notify_status_func,
-          method_loops=[0, 0],
-          process_func_handle=None)

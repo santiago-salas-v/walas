@@ -8,11 +8,11 @@ def lrpd(a):
     """
     n = a.shape[0]
     m = a.shape[1]
-    p = np.matrix(np.eye(n, dtype=float))
-    d = np.matrix(np.eye(n, dtype=float))
-    dlr = np.matrix(np.zeros([n, m], dtype=float))
-    l = np.matrix(np.eye(n, m, dtype=float))
-    r = np.matrix(np.zeros([n, m], dtype=float))
+    p = np.eye(n, dtype=float)
+    d = np.eye(n, dtype=float)
+    dlr = np.zeros([n, m], dtype=float)
+    l = np.eye(n, m, dtype=float)
+    r = np.zeros([n, m], dtype=float)
     indexes_r = [item for item in range(n)]
     for i in range(n):
         d[i, i] = 1 / sum(abs(a[i, :m]))
@@ -44,7 +44,7 @@ def rref(r):
     """
     n = r.shape[0]
     m = r.shape[1]
-    r_form = np.matrix(np.copy(r))
+    r_form = np.copy(r)
     # denominators for diagonal 1
     den = [0.0 for i in range(n)]
     for i in range(n - 1, 0 - 1, -1):
@@ -74,10 +74,10 @@ def ref(a):
     """
     n = a.shape[0]
     m = a.shape[1]
-    p = np.matrix(np.eye(n, dtype=float))
-    d = np.matrix(np.eye(n, dtype=float))
-    dr = np.matrix(np.zeros([n, m], dtype=float))
-    r = np.matrix(np.zeros([n, m], dtype=float))
+    p = np.eye(n, dtype=float)
+    d = np.eye(n, dtype=float)
+    dr = np.zeros([n, m], dtype=float)
+    r = np.zeros([n, m], dtype=float)
     indexes_r = [item for item in range(n)]
     shift = 0  # diagonal !=0, no shift
     for i in range(n):
@@ -116,23 +116,23 @@ def gauss_elimination(a, b):
     :param b: numpy.matrix n X 1
     """
     n = a.shape[0]
-    x = np.matrix(np.zeros_like(b, dtype=float))
-    y = np.matrix(np.zeros_like(b, dtype=float))
+    x = np.zeros_like(b, dtype=float)
+    y = np.zeros_like(b, dtype=float)
     l, r, p, d, da = lrpd(a)
-    pdb = p * d * b
+    pdb = (p.dot(d).dot(b))
     sum_lik_xk = 0.
     sum_lik_yk = 0.
     for j in range(0, n, +1):
         # Forward substitution Ly = PDb
         for k in range(0, j, +1):
             sum_lik_yk = sum_lik_yk + l[j, k] * y[k]
-        y[j] = (pdb[j, 0] - sum_lik_yk) / 1.0
+        y[j] = (pdb[j] - sum_lik_yk) / 1.0
         sum_lik_yk = 0
     for j in range(n - 1, -1, -1):
         # Backward substitution Rx = y
         for k in range(n - 1, j, -1):
             sum_lik_xk = sum_lik_xk + r[j, k] * x[k]
-        x[j] = (y[j, 0] - sum_lik_xk) / r[j, j]
+        x[j] = (y[j] - sum_lik_xk) / r[j, j]
         sum_lik_xk = 0
     return x
 
@@ -146,8 +146,8 @@ def nr_ls(x0, f, j, tol, max_it, inner_loop_condition,
     inner_it_j = 0
     j_val = j(x)
     f_val = f(x)
-    y = np.matrix(np.ones(len(x))).T * tol / (np.sqrt(len(x)) * tol)
-    magnitude_f = np.sqrt((f_val.T * f_val).item())
+    y = np.ones(len(x)).T * tol / (np.sqrt(len(x)) * tol)
+    magnitude_f = np.sqrt((f_val.dot(f_val)).item())
     # Line search variable lambda
     lambda_ls = 0.0
     accum_step = 0.0
@@ -155,7 +155,7 @@ def nr_ls(x0, f, j, tol, max_it, inner_loop_condition,
     log10_to_o_max_magnitude_f = np.log10(tol / magnitude_f)
     progress_k = (1.0 - np.log10(tol / magnitude_f) /
                   log10_to_o_max_magnitude_f) * 100.0
-    diff = np.matrix(np.empty([len(x), 1]))
+    diff = np.empty([len(x), 1])
     diff.fill(np.nan)
     stop = False
     divergent = False
@@ -179,7 +179,7 @@ def nr_ls(x0, f, j, tol, max_it, inner_loop_condition,
         diff = x - x_k_m_1
         j_val = j(x)
         f_val = f(x)
-        magnitude_f = np.sqrt((f_val.T * f_val).item())
+        magnitude_f = np.sqrt(f_val.T.dot(f_val))
         if magnitude_f < tol and inner_loop_condition(x):
             stop = True  # Procedure successful
         else:
