@@ -2,9 +2,12 @@ import numpy as np
 
 
 def lrpd(a):
-    """L,R,P,D,DA from LR = PDA factorization
+    """
+    L,R,P,D,DA from LR = PDA factorization
     Method: Dahmen W., Reusken A.; Numerik fuer Ingenieure und Naturwissenschaeftler; Springer S. 79
-    :param a: numpy.matrix NxM
+
+    :param a: array N x M
+    :returns: l, r, p, d, dlr
     """
     n = a.shape[0]
     m = a.shape[1]
@@ -39,8 +42,9 @@ def lrpd(a):
 def rref(r):
     """
     Reduced row echelon form of upper triangular matrix r
-    :param r: numpy.matrix NxM
-    :return: numpy.matrix NxM
+
+    :param r: array N x M
+    :return: array N x M
     """
     n = r.shape[0]
     m = r.shape[1]
@@ -69,8 +73,9 @@ def rref(r):
 def ref(a):
     """
     Reduced echelon form of matrix a
-    :param a: numpy.matrix NxM
-    :return: numpy.matrix NxM
+
+    :param a: array N x M
+    :return: array N x M
     """
     n = a.shape[0]
     m = a.shape[1]
@@ -85,10 +90,10 @@ def ref(a):
         # scaling
         dr[i] = d[i, i] * a[i]  # dr is just for storage r
     for j in range(n):
-        while all(abs(dr[j:, j + shift]) == 0) and j+shift < dr.shape[1]-1:
+        while all(abs(dr[j:, j + shift]) == 0) and j + shift < dr.shape[1] - 1:
             # shift from diagonal
             shift += 1
-        if j+shift >= dr.shape[1]-1:
+        if j + shift >= dr.shape[1] - 1:
             # rows below all 0
             break
         indexes_r[j] = j + np.argmax(abs(dr[j:, j + shift]))
@@ -110,10 +115,12 @@ def ref(a):
 
 
 def gauss_elimination(a, b):
-    """Solution of the system Ax = b (LRx=PDb) through forward substitution of Ly = Pb, and then
+    """
+    Solution of the system Ax = b (LRx=PDb) through forward substitution of Ly = Pb, and then
     backward substitution of Rx = y
-    :param a: numpy.matrix n X n
-    :param b: numpy.matrix n X 1
+
+    :param a: array n X n
+    :param b: array n X 1
     """
     n = a.shape[0]
     x = np.zeros_like(b, dtype=float)
@@ -140,8 +147,24 @@ def gauss_elimination(a, b):
 # noinspection PyAugmentAssignment
 def nr_ls(x0, f, j, tol, max_it, inner_loop_condition,
           notify_status_func, method_loops, process_func_handle):
+    """
+    Newton method: G(x) = J(x)^-1 * F(x)
+
+    :param x0: initial estimate. array of length N.
+    :param f: function. Returns array same size as x0, length N.
+    :param j: jacobian. Returns squared array array N X N.
+    :param tol: absolute tolerance.
+    :param max_it: maximum number of iterations.
+    :param inner_loop_condition: inner loop condition. Function to activate line search.
+    :param notify_status_func: logging function.
+    :param method_loops: starting loop number.
+    :param process_func_handle: function handle to exit process.
+    :return: progress_k, stop, outer_it_k,\
+        inner_it_j, lambda_ls, accum_step,\
+        x, diff, f_val, lambda_ls * y,\
+        method_loops
+    """
     x = x0
-    # Newton method: G(x) = J(x)^-1 * F(x)
     outer_it_k = 0
     inner_it_j = 0
     j_val = j(x)
@@ -243,8 +266,20 @@ def nr_ls(x0, f, j, tol, max_it, inner_loop_condition,
         x, diff, f_val, lambda_ls * y,\
         method_loops
 
+
 def sdm(x0, f, j, tol):
-    g = lambda x: f(x).T.dot(f(x))
+    """
+    Steepest descent method.
+    Burden, Richard L. / Faires, J. Douglas / Burden, Annette M. (2015):
+    Numerical Analysis. Clifton Park, NY (Cengage Learning).
+
+    :param x0: initial estimate. Array length N.
+    :param f: function. Returns array length N.
+    :param j: jacobian. Returns array N X N.
+    :param tol: absolute tolerance.
+    :return: x, array with reduced gradient to tol level.
+    """
+    def g(x): return f(x).T.dot(f(x))
     x = x0
     k = 1
     stop = False
@@ -274,7 +309,8 @@ def sdm(x0, f, j, tol):
         h1 = (g2 - g1) / alpha2
         h2 = (g3 - g2) / (alpha3 - alpha2)
         h3 = (h2 - h1) / alpha3
-        alpha0 = 0.5 * (alpha2 - h1 / h3)  # (The critical point of P occurs at α0.)
+        # (The critical point of P occurs at α0.)
+        alpha0 = 0.5 * (alpha2 - h1 / h3)
         g0 = g(x - alpha0 * z)
         if g0 < g3:
             alpha = alpha0
@@ -285,9 +321,8 @@ def sdm(x0, f, j, tol):
         x = x - alpha * z
         if abs(g_min - g1) < tol:
             stop = True  # Procedure successful
-        print("k=" + str(k) + "; " + "x= " + np.array2string(x) +
-              "; g=" + str(g_min) + "; |g-g1|=" + str(abs(g_min - g1)), "stop?", str(stop))
+        print("k=" + str(k) + "; " + "x= " + np.array2string(x) + "; g=" + \
+              str(g_min) + "; |g-g1|=" + str(abs(g_min - g1)), "stop?", str(stop))
         k += 1
     print(k)
     return x
-

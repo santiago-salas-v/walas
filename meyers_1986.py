@@ -233,30 +233,8 @@ n1 = n0 + s_xi
 
 xi_j_k_m_1 = np.copy(xi_j)
 
-for i, n_k in enumerate(n1):
-    for j, item in enumerate(xi_j.T):
-        if n_k < 0 and stoech_m[j, i] != 0:
-            s = np.sum([nuij for nuij in stoech_m[:, i] if nuij != 0])
-            xi_j_k_m_1[0, j] = xi_j[0, j] + (0.01 * np.sum(n0) - (n_k)) / s
-            print((0.01 * np.sum(n0) - (n_k)) / s)
-
-
-stoech_m[abs(stoech_m) < np.finfo(float).eps] = 0
-print(stoech_m)
-print(0**-0)
-
-print(np.sum(ne)**sum(stoech_m))
-print(np.power(ne, -stoech_m))
-for x, item in enumerate(stoech_m):
-    print(np.power(ne, -item))
-print(np.product(np.power(ne, -stoech_m), axis=1))
-print(np.multiply(k_t,
-                  np.multiply(
-                      np.sum(ne)**np.array(sum(stoech_m.T)),
-                      np.product(np.power(ne, -stoech_m), axis=1),
-                  )))
-
-# Test on a given system: ['CO', 'H2', 'CO2', 'H2O', 'CH4', 'NH3', 'AR', 'O2', 'N2']
+# Test on a given system: ['CO', 'H2', 'CO2', 'H2O', 'CH4', 'NH3', 'AR',
+# 'O2', 'N2']
 nuij = np.array([
     [+1, +2, +0, +0, -1, +0, +0, -1 / 2, +0],
     [+1, +3, +0, -1, -1, +0, +0, +0, +0],

@@ -196,10 +196,11 @@ g_1 = g(t_aus_rdampfr, h_1)
 # Numerical solution of chemical equilibria with simultaneous reactions.
 # The Journal of chemical physics, 1986, 84. Jg., Nr. 10, S. 5787-5795.
 nach_g_sortieren = np.argsort(g_1)
-festgelegte_komponente = [4] # Hauptkomponente festlegen (bei Dampfrerormierung, CH4)
+# Hauptkomponente festlegen (bei Dampfrerormierung, CH4)
+festgelegte_komponente = [4]
 # in nach g sortierten Koordinaten
-festgelegte_komponente_sortiert = nach_g_sortieren.argsort()[festgelegte_komponente]
-festgelegte_komponente_sortiert.sort()
+festgelegte_komponente_sortiert = sorted(
+    nach_g_sortieren.argsort()[festgelegte_komponente])
 # pot_gruppen = itertools.permutations(range(n_c), rho)
 pot_gruppen = itertools.combinations(range(n_c), rho)
 i = 0
@@ -217,7 +218,8 @@ for komb in pot_gruppen:
     a_p = a_nach_g_sortiert[:, komb]
     a_s = a_nach_g_sortiert[:, ind_sek]
     rho_gruppe = np.linalg.matrix_rank(a_p)
-    if rho_gruppe >= rho and all([x in komb for x in festgelegte_komponente_sortiert]):
+    if rho_gruppe >= rho and all(
+            [x in komb for x in festgelegte_komponente_sortiert]):
         ref_atom_m = ref(a_nach_g_sortiert[:, indexes])[0]
         rref_atom_m = rref(ref_atom_m)
         b = rref_atom_m[:n_e, -(n_c - rho_gruppe):]
@@ -225,7 +227,8 @@ for komb in pot_gruppen:
         stoech_m = np.concatenate([
             -b.T, np.eye(n_c - rho_gruppe, dtype=float)
         ], axis=1)
-        k_t = np.exp(-stoech_m.dot(g_1[nach_g_sortieren][indexes] / (r * t_aus_rdampfr)))
+        k_t = np.exp(-stoech_m.dot(g_1[nach_g_sortieren]
+                                   [indexes] / (r * t_aus_rdampfr)))
         print('Gruppe:' + str(sortierte_namen))
         print('Primär:' + str(sortierte_namen[:rho]))
         print('Sekundär:' + str(sortierte_namen[rho:]))
@@ -373,18 +376,18 @@ def notify_status_func(progress_k, stop_value, k,
         ';|g-g1|=' + str(abs(g_min - g1))
     logging.debug(pr_str)
 
+
 def fj_0(xi, n_0, k_t):
     n = n_0 + nuij.dot(xi)
     n_t = sum(n_0) + sum(nuij.dot(xi))
     #f = nuij.T.dot(np.log((n) / (n_t))) - np.log(k_1)
     pi = np.product(np.power(n / n_t, nuij.T), axis=1)
     f = pi - k_t
-    print('f')
-    print(f)
     return f
 
+
 def jac_fj_0(xi, n_0):
-    jac= np.zeros([len(xi), len(xi)])
+    jac = np.zeros([len(xi), len(xi)])
     n = n_0 + nuij.dot(xi)
     n_t = sum(n)
     n[n == 0] = eps
@@ -392,13 +395,14 @@ def jac_fj_0(xi, n_0):
     for i in range(n_r):
         for j in range(n_r):
             for k in range(n_c):
-                jac[i,j] = jac[i,j] + nuij[k,j]*nuij[k,i]/n[k]
-            jac[i,j] = pi[i] * (jac[i,j] - sum(nuij[:, j])*sum(nuij[:, i])/n_t)
-    print('jac')
-    print(jac)
+                jac[i, j] = jac[i, j] + nuij[k, j] * nuij[k, i] / n[k]
+            jac[i, j] = pi[i] * (jac[i, j] - sum(nuij[:, j]) *
+                                 sum(nuij[:, i]) / n_t)
     return jac
 
-nuij = np.array(stoech_m[:, np.argsort(indexes)][:, np.argsort(nach_g_sortieren)]).T
+
+nuij = np.array(stoech_m[:, np.argsort(indexes)]
+                [:, np.argsort(nach_g_sortieren)]).T
 k_1 = k(t_aus_rdampfr, g_1, nuij)
 naus_0 = np.copy(n_0)
 # Entspannung
@@ -416,12 +420,12 @@ progress_k, stop, outer_it_k, outer_it_j, \
     method_loops = \
     nr_ls(x0=xi_sdm,
           f=lambda xi: fj_0(xi, n_0, k_1),
-          j=lambda xi: jac_fj_0(xi,  n_0),
+          j=lambda xi: jac_fj_0(xi, n_0),
           tol=1e-12,
           max_it=1000,
           inner_loop_condition=lambda x_vec:
           all([item >= 0 for item in
-               n_0 + nuij.dot(x_vec)]), # keine Voraussetzung
+               n_0 + nuij.dot(x_vec)]),  # keine Voraussetzung
           notify_status_func=notify_status_func,
           method_loops=[0, 0],
           process_func_handle=None)
