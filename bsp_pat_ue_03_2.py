@@ -190,67 +190,83 @@ h_1 = h(t_aus_rdampfr)
 cp_1 = r * cp_durch_r(t_aus_rdampfr)
 g_1 = g(t_aus_rdampfr, h_1)
 
-# Hauptreaktionen nach Meyers 1986
-# REF:
-# MYERS, Andrea K.; MYERS, Alan L.
-# Numerical solution of chemical equilibria with simultaneous reactions.
-# The Journal of chemical physics, 1986, 84. Jg., Nr. 10, S. 5787-5795.
-nach_g_sortieren = np.argsort(g_1)
-# Hauptkomponente festlegen (bei Dampfrerormierung, CH4)
-festgelegte_komponente = [4]
-# in nach g sortierten Koordinaten
-festgelegte_komponente_sortiert = sorted(
-    nach_g_sortieren.argsort()[festgelegte_komponente])
-# pot_gruppen = itertools.permutations(range(n_c), rho)
-pot_gruppen = itertools.combinations(range(n_c), rho)
-i = 0
-for komb in pot_gruppen:
-    i += 1
-    indexes = np.concatenate([
-        np.array(komb),
-        np.array([index for index in range(n_c) if index not in komb])
-    ])
-    sortierte_namen = np.array(namen)[nach_g_sortieren][indexes]
-    ind_sek = [i for i in indexes if i not in komb]
-    # namen = np.array(namen)[nach_g_sortieren][indexes][np.argsort(indexes)][np.argsort(nach_g_sortieren)]
-    # A = [A_p, A_s]
-    a_nach_g_sortiert = atom_m[:, nach_g_sortieren]
-    a_p = a_nach_g_sortiert[:, komb]
-    a_s = a_nach_g_sortiert[:, ind_sek]
-    rho_gruppe = np.linalg.matrix_rank(a_p)
-    if rho_gruppe >= rho and all(
-            [x in komb for x in festgelegte_komponente_sortiert]):
-        ref_atom_m = ref(a_nach_g_sortiert[:, indexes])[0]
-        rref_atom_m = rref(ref_atom_m)
-        b = rref_atom_m[:n_e, -(n_c - rho_gruppe):]
+def stoech_matrix(atom_m, g_t, namen, festgelegte_komponente=None):
+    """
+    Hauptreaktionen nach Meyers 1986
+    REF:
+    MYERS, Andrea K.; MYERS, Alan L.
+    Numerical solution of chemical equilibria with simultaneous reactions.
+    The Journal of chemical physics, 1986, 84. Jg., Nr. 10, S. 5787-5795.
 
-        stoech_m = np.concatenate([
-            -b.T, np.eye(n_c - rho_gruppe, dtype=float)
-        ], axis=1)
-        k_t = np.exp(-stoech_m.dot(g_1[nach_g_sortieren]
-                                   [indexes] / (r * t_aus_rdampfr)))
-        print('Gruppe:' + str(sortierte_namen))
-        print('Primär:' + str(sortierte_namen[:rho]))
-        print('Sekundär:' + str(sortierte_namen[rho:]))
-        print('Ap')
-        print(a_p)
-        print('[Ip, b]')
-        print(rref_atom_m)
-        print('[-b.T, I]')
-        print(stoech_m)
-        print('A N^T')
-        print(rref_atom_m.dot(stoech_m.T))
-        for row in np.array(stoech_m):
-            lhs = '+ '.join([str(abs(row[r])) + ' ' +
-                             sortierte_namen[r] for r in np.where(row < 0)[0]])
-            rhs = '+'.join([str(abs(row[r])) + ' ' +
-                            sortierte_namen[r] for r in np.where(row > 0)[0]])
-            print(lhs + ' <<==>> ' + rhs)
-        print('Kj(T)')
-        print(k_t)
+    :param atom_m: atomic matrix. Unsorted. E by C.
+    :param g_t: Gibbs free energy of formation of species in atom matrix at T.
+    :param namen: names of compounds in atomic matrix.
+    :return: stoech_m, indexes, nach_g_sortieren, k_t, nuij
+    """
+    nach_g_sortieren = np.argsort(g_t)
+    # Hauptkomponente festlegen (bei Dampfrerormierung, CH4)
+    # festgelegte_komponente = [4]
+    # in nach g sortierten Koordinaten
+    if festgelegte_komponente is None:
+        festgelegte_komponente_sortiert = None
+    else:
+        festgelegte_komponente_sortiert = sorted(
+            nach_g_sortieren.argsort()[festgelegte_komponente])
+    pot_gruppen = itertools.combinations(range(n_c), rho)
+    i = 0
+    for komb in pot_gruppen:
+        i += 1
+        indexes = np.concatenate([
+            np.array(komb),
+            np.array([index for index in range(n_c) if index not in komb])
+        ])
+        sortierte_namen = np.array(namen)[nach_g_sortieren][indexes]
+        ind_sek = [i for i in indexes if i not in komb]
+        # A = [A_p, A_s]
+        a_nach_g_sortiert = atom_m[:, nach_g_sortieren]
+        a_p = a_nach_g_sortiert[:, komb]
+        a_s = a_nach_g_sortiert[:, ind_sek]
+        rho_gruppe = np.linalg.matrix_rank(a_p)
+        cond_1 = rho_gruppe >= rho
+        if festgelegte_komponente_sortiert is None:
+            cond_2 = True
+        else:
+            cond_2 = all([x in komb for x in festgelegte_komponente_sortiert])
+        if cond_1 and cond_2:
+            ref_atom_m = ref(a_nach_g_sortiert[:, indexes])[0]
+            rref_atom_m = rref(ref_atom_m)
+            b = rref_atom_m[:n_e, -(n_c - rho_gruppe):]
 
-        if np.all(k_t < 1):
-            break
+            stoech_m = np.concatenate([
+                -b.T, np.eye(n_c - rho_gruppe, dtype=float)
+            ], axis=1)
+            k_t = np.exp(-stoech_m.dot(g_t[nach_g_sortieren]
+                                       [indexes] / (r * t_aus_rdampfr)))
+            print('Gruppe:' + str(sortierte_namen))
+            print('Primär:' + str(sortierte_namen[:rho]))
+            print('Sekundär:' + str(sortierte_namen[rho:]))
+            print('Ap')
+            print(a_p)
+            print('[Ip, b]')
+            print(rref_atom_m)
+            print('[-b.T, I]')
+            print(stoech_m)
+            print('A N^T')
+            print(rref_atom_m.dot(stoech_m.T))
+            for row in np.array(stoech_m):
+                lhs = '+ '.join([str(abs(row[r])) + ' ' +
+                                 sortierte_namen[r] for r in np.where(row < 0)[0]])
+                rhs = '+'.join([str(abs(row[r])) + ' ' +
+                                sortierte_namen[r] for r in np.where(row > 0)[0]])
+                print(lhs + ' <<==>> ' + rhs)
+            print('Kj(T)')
+            print(k_t)
+
+            if np.all(k_t < 1):
+                break
+    nuij = np.array(stoech_m[:, np.argsort(indexes)]
+                    [:, np.argsort(nach_g_sortieren)]).T
+    return stoech_m, indexes, nach_g_sortieren, k_t, nuij
 
 
 def r_isoterm(x_vec, k, n_0):
@@ -400,10 +416,7 @@ def jac_fj_0(xi, n_0):
                                  sum(nuij[:, i]) / n_t)
     return jac
 
-
-nuij = np.array(stoech_m[:, np.argsort(indexes)]
-                [:, np.argsort(nach_g_sortieren)]).T
-k_1 = k(t_aus_rdampfr, g_1, nuij)
+stoech_m, indexes, nach_g_sortieren, k_1, nuij = stoech_matrix(atom_m, g_1, namen, [4])
 naus_0 = np.copy(n_0)
 # Entspannung
 _, _, xi_0, _ = r_entspannung(k_1, naus_0, 1, t_aus_rdampfr)
@@ -510,10 +523,31 @@ n_2 = n_1
 
 q = sum(n_2 * (h_2 - h_1))  # mol/h * J/mol = J/h
 
-# 4-Mal Relaxation-Methode (Entspannung)
-n_2, _, xi_accum_2, temp = r_entspannung(k_2, n_1, 4, t_ein_rwgs, 'isotherm')
-
-x0 = np.concatenate([
-    n_1,
-    xi_accum_2
-])
+# Koeffizienten neu bestimmen
+stoech_m, indexes, nach_g_sortieren, k_2, nuij = stoech_matrix(atom_m, g_2, namen, None)
+naus_2 = np.copy(n_2)
+# Entspannung
+# man könnte diesen Schritt überspringen.
+_, _, xi_0, _ = r_entspannung(k_2, naus_2, 1, t_ein_rwgs)
+# Steifster Gradient
+xi_sdm = sdm(
+    xi_0,
+    lambda xi: fj_0(xi, n_1, k_2),
+    lambda xi: jac_fj_0(xi, n_1),
+    1e-4)
+# Newton-Raphson
+progress_k, stop, outer_it_k, outer_it_j, \
+    lambda_ls, accum_step, x, \
+    diff, f_val, lambda_ls_y, \
+    method_loops = \
+    nr_ls(x0=xi_sdm,
+          f=lambda xi: fj_0(xi, n_1, k_2),
+          j=lambda xi: jac_fj_0(xi, n_1),
+          tol=1e-12,
+          max_it=1000,
+          inner_loop_condition=lambda x_vec:
+          all([item >= 0 for item in
+               n_1 + nuij.dot(x_vec)]),  # keine Voraussetzung
+          notify_status_func=notify_status_func,
+          method_loops=[0, 0],
+          process_func_handle=None)

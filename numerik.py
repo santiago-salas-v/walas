@@ -7,7 +7,7 @@ def lrpd(a):
     Method: Dahmen W., Reusken A.; Numerik fuer Ingenieure und Naturwissenschaeftler; Springer S. 79
 
     :param a: array N x M
-    :returns: l, r, p, d, dlr
+    :return: l, r, p, d, dlr
     """
     n = a.shape[0]
     m = a.shape[1]
@@ -50,7 +50,7 @@ def rref(r):
     m = r.shape[1]
     r_form = np.copy(r)
     # denominators for diagonal 1
-    den = [0.0 for i in range(n)]
+    den = [0.0]*n
     for i in range(n - 1, 0 - 1, -1):
         for j in range(m):
             if i > 0 and den[i] == 0.0 and abs(r[i, j]) > np.finfo(float).eps:
@@ -279,7 +279,7 @@ def sdm(x0, f, j, tol):
     :param tol: absolute tolerance.
     :return: x, array with reduced gradient to tol level.
     """
-    def g(x): return f(x).T.dot(f(x))
+    def g(x_var): return f(x_var).T.dot(f(x_var))
     x = x0
     k = 1
     stop = False
@@ -289,7 +289,7 @@ def sdm(x0, f, j, tol):
         z0 = np.sqrt((z.T.dot(z)))
         if z0 == 0:
             # Zero gradient
-            stop = True
+            # stop = True
             break
         z = z / z0
         alpha1 = 0
@@ -321,7 +321,7 @@ def sdm(x0, f, j, tol):
         x = x - alpha * z
         if abs(g_min - g1) < tol:
             stop = True  # Procedure successful
-        print("k=" + str(k) + "; " + "x= " + np.array2string(x) + "; g=" + \
+        print("k=" + str(k) + "; " + "x= " + np.array2string(x) + "; g=" +
               str(g_min) + "; |g-g1|=" + str(abs(g_min - g1)), "stop?", str(stop))
         k += 1
     print(k)
