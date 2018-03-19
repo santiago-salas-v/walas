@@ -20,6 +20,7 @@ logging.basicConfig(
     filemode='w')
 console = logging.StreamHandler()
 console.setLevel(logging.DEBUG)
+logging.getLogger('').addHandler(console)
 
 # Modell feststellen
 z_l_v.use_pr_eos()
@@ -362,6 +363,11 @@ def r_entspannung(k_j, n_0, x_mal, temp_0, betrieb='isotherm'):
         for j in range(nuij.shape[1]):
             soln_xi = optimize.newton(lambda xi: gg_abstand(
                 k_j[j], nuij[:, j], n, xi), -eps)
+            #soln_xi = optimize.newton(
+            #    lambda xi: fj_0(xi, n, k_j[j], nuij[:, j]),
+            #    -eps,
+            #    fprime=lambda xi: jac_fj_0(xi, n, nuij[:, j])
+            #)
             xi_j[j] = soln_xi
 
             xi_j_accum[j] = xi_j_accum[j] + xi_j[j]
@@ -399,40 +405,85 @@ def notify_status_func(progress_k, stop_value, k,
     logging.debug(pr_str)
 
 
-def fj_0(xi, n_0, k_t):
+def fj_0(xi, n_0, k_t, nuij):
     n = n_0 + nuij.dot(xi)
     n_t = sum(n_0) + sum(nuij.dot(xi))
     #f = nuij.T.dot(np.log((n) / (n_t))) - np.log(k_1)
-    pi = np.product(np.power(n / n_t, nuij.T), axis=1)
+    pi = np.product(
+        np.power(n / n_t, nuij.T),
+        axis=nuij.ndim - 1
+    )
     f = pi - k_t
+    logging.debug('x=' + str(xi))
+    logging.debug('f=' + str(f))
     return f
 
 
-def jac_fj_0(xi, n_0):
-    jac = np.zeros([len(xi), len(xi)])
+def jac_fj_0(xi, n_0, nuij):
+    n_c = nuij.shape[0]
     n = n_0 + nuij.dot(xi)
     n_t = sum(n)
     n[n == 0] = eps
-    pi = np.product(np.power(n / n_t, nuij.T), axis=1)
+    pi = np.product(
+        np.power(n / n_t, nuij.T),
+        axis=nuij.ndim - 1
+    )
+    if np.ndim(xi)>0:
+        jac = np.zeros([len(xi), len(xi)])
+        n_r = nuij.shape[1]
+    else:
+        jac = np.zeros([1,1])
+        n_r = 1
+    if np.ndim(nuij)<2:
+        nujk = nuij.reshape([nuij.shape[0],1])
+    else:
+        nujk = np.copy(nuij)
+    if np.ndim(pi)<1:
+        pi = np.array([pi])
     for i in range(n_r):
         for j in range(n_r):
             for k in range(n_c):
-                jac[i, j] = jac[i, j] + nuij[k, j] * nuij[k, i] / n[k]
-            jac[i, j] = pi[i] * (jac[i, j] - sum(nuij[:, j]) *
-                                 sum(nuij[:, i]) / n_t)
+                jac[i, j] = jac[i, j] + nujk[k, j] * nujk[k, i] / n[k]
+            jac[i, j] = pi[i] * (jac[i, j] - sum(nujk[:, j]) *
+                                 sum(nujk[:, i]) / n_t)
+    if n_r==1:
+        # 1 R: return scalar
+        jac = jac.item()
+    logging.debug('j=' + str(jac))
     return jac
 
+def fj_adiab(x_vec, n_0, h_0):
+    xi = x_vec[:-1]
+    temp = x_vec[-1]
+    f = np.empty_like(x_vec)
+    h_t = h(temp)
+    g_t = g(temp, h_t)
+    k_t = k(temp, g_t, nuij)
+    delta_h_t = nuij.T.dot(h_t)
+    n = n_0 + nuij.dot(xi)
+    n_t = sum(n_0) + sum(nuij.dot(xi))
+    pi = np.product(np.power(n / n_t, nuij.T), axis=1)
+    # Energiebilanz
+    q =  np.sum(
+        np.multiply(n_0, (h_0 - h_298)) -
+        np.multiply(n, (h_t - h_298))) + \
+        np.dot(xi, -delta_h_t)
+    f[:-1] = pi - k_t
+    f[-1] = q
+    logging.debug('f='+str(f)+'; x=' + str(x_vec))
+    return f
 
 stoech_m, indexes, nach_g_sortieren, k_1, nuij = stoech_matrix(
     atom_m, g_1, namen, [4])
 naus_0 = np.copy(n_0)
+naus_0[naus_0==0] = eps
 # Entspannung
 _, _, xi_0, _ = r_entspannung(k_1, naus_0, 1, t_aus_rdampfr)
 # Steifster Gradient
 xi_sdm = sdm(
     xi_0,
-    lambda xi: fj_0(xi, n_0, k_1),
-    lambda xi: jac_fj_0(xi, n_0),
+    lambda xi: fj_0(xi, naus_0, k_1, nuij),
+    lambda xi: jac_fj_0(xi, naus_0, nuij),
     1e-4,
     notify_status_func=notify_status_func
 )
@@ -442,8 +493,8 @@ progress_k, stop, outer_it_k, outer_it_j, \
     diff, f_val, lambda_ls_y, \
     method_loops = \
     nr_ls(x0=xi_sdm,
-          f=lambda xi: fj_0(xi, n_0, k_1),
-          j=lambda xi: jac_fj_0(xi, n_0),
+          f=lambda xi: fj_0(xi, n_0, k_1, nuij),
+          j=lambda xi: jac_fj_0(xi, n_0, nuij),
           tol=1e-12,
           max_it=1000,
           inner_loop_condition=lambda x_vec:
@@ -542,8 +593,22 @@ print(
 )
 
 # Koeffizienten neu bestimmen
+print(namen)
 stoech_m, indexes, nach_g_sortieren, k_2, nuij = stoech_matrix(
     atom_m, g_2, namen, None)
+nuij = np.array([
+    [+1, +2, +0, +0, -1, +0, +0, -1 / 2, +0],
+    [+1, +3, +0, -1, -1, +0, +0, +0, +0],
+    [-1, +1, +1, -1, +0, +0, +0, +0, +0],
+    [-1, -3, +0, +1, +1, +0, +0, +0, +0],
+    [+0, -4, -1, +2, +1, +0, +0, +0, +0],
+    [+0, -3 / 2, 0, 0, +0, +1, +0, +0, -1 / 2]
+]).T
+k_2 = k(t_ein_rwgs,g_2,nuij)
+for index, item in enumerate(k_2):
+    if item > 1:
+        nuij[:, index] = -nuij[:, index]
+k_2 = k(t_ein_rwgs,g_2,nuij)
 naus_2 = np.copy(n_2)
 # Entspannung
 # man könnte diesen Schritt überspringen.
@@ -551,8 +616,8 @@ _, _, xi_0, _ = r_entspannung(k_2, naus_2, 1, t_ein_rwgs)
 # Steifster Gradient
 xi_sdm = sdm(
     xi_0,
-    lambda xi: fj_0(xi, n_1, k_2),
-    lambda xi: jac_fj_0(xi, n_1),
+    lambda xi: fj_0(xi, n_1, k_2, nuij),
+    lambda xi: jac_fj_0(xi, n_1, nuij),
     1e-4,
     notify_status_func=notify_status_func
 )
@@ -562,8 +627,8 @@ progress_k, stop, outer_it_k, outer_it_j, \
     diff, f_val, lambda_ls_y, \
     method_loops = \
     nr_ls(x0=xi_sdm,
-          f=lambda xi: fj_0(xi, n_1, k_2),
-          j=lambda xi: jac_fj_0(xi, n_1),
+          f=lambda xi: fj_0(xi, n_1, k_2, nuij),
+          j=lambda xi: jac_fj_0(xi, n_1, nuij),
           tol=1e-12,
           max_it=1000,
           inner_loop_condition=lambda x_vec:
@@ -572,3 +637,12 @@ progress_k, stop, outer_it_k, outer_it_j, \
           notify_status_func=notify_status_func,
           method_loops=[0, 0],
           process_func_handle=None)
+
+for item in (n_1 + nuij.dot(x))/1000.:
+    print(item)
+
+#soln = optimize.root(
+#    lambda x_vec: fj_adiab(x_vec, n_1, h_1),
+#    np.concatenate([x, [t_ein_rwgs]])
+#)
+

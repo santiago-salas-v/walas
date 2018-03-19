@@ -280,17 +280,17 @@ def sdm(x0, f, j, tol, notify_status_func):
     :param notify_status_func: logging function.
     :return: x, array with reduced gradient to tol level.
     """
-    def g(x_var): return f(x_var).T.dot(f(x_var))
+    def g(x_var): return np.asarray(f(x_var)).T.dot(np.asarray(f(x_var)))
     x = x0
     k = 1
     stop = False
     max_it = 1000
     while k < max_it and not stop:
         x_n_m_1 = x
-        f_x = f(x)
-        j_x = j(x)
-        z = 2 * j_x.dot(f_x)
-        z0 = np.sqrt(z.T.dot(z))
+        f_x = np.asarray(f(x))
+        j_x = np.asarray(j(x))
+        z = np.asarray(2 * j_x.dot(f_x))
+        z0 = np.asarray(np.sqrt(z.T.dot(z)))
         if z0 == 0:
             # Zero gradient
             # stop = True
