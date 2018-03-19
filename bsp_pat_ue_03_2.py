@@ -6,13 +6,20 @@ import logging
 from numerik import nr_ls
 from numerik import gauss_elimination, lrpd, rref, ref, sdm
 import itertools
+import os
 
 eps = np.finfo(float).eps
 np.set_printoptions(linewidth=200)
+if not os.path.exists('./logs'):
+    os.mkdir('./logs')
+logging.basicConfig(
+    level=logging.DEBUG,
+    format='%(asctime)s %(name)-12s %(levelname)-8s %(message)s',
+    datefmt='%m-%d %H:%M',
+    filename='./logs/log_bsp_pat_ue_03_2.log',
+    filemode='w')
 console = logging.StreamHandler()
 console.setLevel(logging.DEBUG)
-logging.getLogger().addHandler(console)
-logging.getLogger().setLevel(logging.DEBUG)
 
 # Modell feststellen
 z_l_v.use_pr_eos()
@@ -190,6 +197,7 @@ h_1 = h(t_aus_rdampfr)
 cp_1 = r * cp_durch_r(t_aus_rdampfr)
 g_1 = g(t_aus_rdampfr, h_1)
 
+
 def stoech_matrix(atom_m, g_t, namen, festgelegte_komponente=None):
     """
     Hauptreaktionen nach Meyers 1986
@@ -242,25 +250,25 @@ def stoech_matrix(atom_m, g_t, namen, festgelegte_komponente=None):
             ], axis=1)
             k_t = np.exp(-stoech_m.dot(g_t[nach_g_sortieren]
                                        [indexes] / (r * t_aus_rdampfr)))
-            print('Gruppe:' + str(sortierte_namen))
-            print('Primär:' + str(sortierte_namen[:rho]))
-            print('Sekundär:' + str(sortierte_namen[rho:]))
-            print('Ap')
-            print(a_p)
-            print('[Ip, b]')
-            print(rref_atom_m)
-            print('[-b.T, I]')
-            print(stoech_m)
-            print('A N^T')
-            print(rref_atom_m.dot(stoech_m.T))
+            logging.debug('Gruppe:' + str(sortierte_namen))
+            logging.debug('Primär:' + str(sortierte_namen[:rho]))
+            logging.debug('Sekundär:' + str(sortierte_namen[rho:]))
+            logging.debug('Ap')
+            logging.debug(str(a_p.tolist()))
+            logging.debug('[Ip, b]')
+            logging.debug(str(rref_atom_m.tolist()))
+            logging.debug('[-b.T, I]')
+            logging.debug(str(stoech_m.tolist()))
+            logging.debug('A N^T')
+            logging.debug(str(rref_atom_m.dot(stoech_m.T).tolist()))
             for row in np.array(stoech_m):
-                lhs = '+ '.join([str(abs(row[r])) + ' ' +
-                                 sortierte_namen[r] for r in np.where(row < 0)[0]])
-                rhs = '+'.join([str(abs(row[r])) + ' ' +
-                                sortierte_namen[r] for r in np.where(row > 0)[0]])
-                print(lhs + ' <<==>> ' + rhs)
-            print('Kj(T)')
-            print(k_t)
+                lhs = '+ '.join([str(abs(row[r])) + ' ' + sortierte_namen[r]
+                                 for r in np.where(row < 0)[0]])
+                rhs = '+'.join([str(abs(row[r])) + ' ' + sortierte_namen[r]
+                                for r in np.where(row > 0)[0]])
+                logging.debug(lhs + ' <<==>> ' + rhs)
+            logging.debug('Kj(T)')
+            logging.debug(str(k_t.tolist()))
 
             if np.all(k_t < 1):
                 break
@@ -372,9 +380,7 @@ def r_entspannung(k_j, n_0, x_mal, temp_0, betrieb='isotherm'):
 def notify_status_func(progress_k, stop_value, k,
                        j_it_backtrack, lambda_ls, accum_step,
                        x, diff, f_val, j_val, lambda_ls_y,
-                       method_loops):
-    g_min = np.nan
-    g1 = np.nan
+                       method_loops, g_min=np.nan, g1=np.nan):
     y = lambda_ls_y
     pr_str = ';k=' + str(k) + \
         ';backtrack=' + str(j_it_backtrack) + \
@@ -382,7 +388,7 @@ def notify_status_func(progress_k, stop_value, k,
         ';accum_step=' + str(accum_step) + \
         ';stop=' + str(stop_value) + \
         ';X=' + '[' + ','.join(map(str, x)) + ']' + \
-        ';||X(k)-X(k-1)||=' + str(diff.T.dot(diff)) + \
+        ';||X(k)-X(k-1)||=' + str(np.sqrt(diff.T.dot(diff))) + \
         ';f(X)=' + '[' + ','.join(map(str, f_val)) + ']' + \
         ';||f(X)||=' + str(np.sqrt(f_val.T.dot(f_val))) + \
         ';j(X)=' + str(j_val.tolist()) + \
@@ -416,7 +422,9 @@ def jac_fj_0(xi, n_0):
                                  sum(nuij[:, i]) / n_t)
     return jac
 
-stoech_m, indexes, nach_g_sortieren, k_1, nuij = stoech_matrix(atom_m, g_1, namen, [4])
+
+stoech_m, indexes, nach_g_sortieren, k_1, nuij = stoech_matrix(
+    atom_m, g_1, namen, [4])
 naus_0 = np.copy(n_0)
 # Entspannung
 _, _, xi_0, _ = r_entspannung(k_1, naus_0, 1, t_aus_rdampfr)
@@ -425,7 +433,9 @@ xi_sdm = sdm(
     xi_0,
     lambda xi: fj_0(xi, n_0, k_1),
     lambda xi: jac_fj_0(xi, n_0),
-    1e-4)
+    1e-4,
+    notify_status_func=notify_status_func
+)
 # Newton-Raphson
 progress_k, stop, outer_it_k, outer_it_j, \
     lambda_ls, accum_step, x, \
@@ -448,10 +458,10 @@ xi_accum_1 = x
 n_1 = n_0 + nuij.dot(xi_accum_1)
 
 for komb in n_1:
-    print('{0:0.20g}'.format(komb / 1000.).replace('.', ','))
+    logging.debug('{0:0.20g}'.format(komb / 1000.).replace('.', ','))
 
 for komb in np.array(xi_accum_1):
-    print('{0:0.20g}'.format(komb / 1000.).replace('.', ','))
+    logging.debug('{0:0.20g}'.format(komb / 1000.).replace('.', ','))
 
 print('========================================')
 
@@ -467,11 +477,12 @@ print('========================================')
 
 q = sum(n_1 * h_1 - n_0 * h_0)  # mol/h * J/mol = J/h
 
-# 1h/60^2s * 1kW / 1000W
+
 print(
     'Vormärmer (auf T= ' + str(t_aus_rdampfr) + ' °K), Q: ' +
     '{0:0.20g}'.format(
-        sum(n_0 * (h_1 - h_0)) * 1 / 60. ** 2 * 1 / 1000.
+        sum(n_0 * (h_1 - h_0)) * 1 / 60. ** 2 *
+        1 / 1000.  # 1h/60^2s * 1kW / 1000W
     ).replace('.', ',') + ' kW'
 )
 
@@ -523,8 +534,16 @@ n_2 = n_1
 
 q = sum(n_2 * (h_2 - h_1))  # mol/h * J/mol = J/h
 
+print(
+    'Vormärmer (auf T= ' + str(t_aus_rdampfr) + ' °K), Q: ' +
+    '{0:0.20g}'.format(
+        q * 1 / 60. ** 2 * 1 / 1000.  # 1h/60^2s * 1kW / 1000W
+    ).replace('.', ',') + ' kW'
+)
+
 # Koeffizienten neu bestimmen
-stoech_m, indexes, nach_g_sortieren, k_2, nuij = stoech_matrix(atom_m, g_2, namen, None)
+stoech_m, indexes, nach_g_sortieren, k_2, nuij = stoech_matrix(
+    atom_m, g_2, namen, None)
 naus_2 = np.copy(n_2)
 # Entspannung
 # man könnte diesen Schritt überspringen.
@@ -534,7 +553,9 @@ xi_sdm = sdm(
     xi_0,
     lambda xi: fj_0(xi, n_1, k_2),
     lambda xi: jac_fj_0(xi, n_1),
-    1e-4)
+    1e-4,
+    notify_status_func=notify_status_func
+)
 # Newton-Raphson
 progress_k, stop, outer_it_k, outer_it_j, \
     lambda_ls, accum_step, x, \

@@ -50,7 +50,7 @@ def rref(r):
     m = r.shape[1]
     r_form = np.copy(r)
     # denominators for diagonal 1
-    den = [0.0]*n
+    den = [0.0] * n
     for i in range(n - 1, 0 - 1, -1):
         for j in range(m):
             if i > 0 and den[i] == 0.0 and abs(r[i, j]) > np.finfo(float).eps:
@@ -267,7 +267,7 @@ def nr_ls(x0, f, j, tol, max_it, inner_loop_condition,
         method_loops
 
 
-def sdm(x0, f, j, tol):
+def sdm(x0, f, j, tol, notify_status_func):
     """
     Steepest descent method.
     Burden, Richard L. / Faires, J. Douglas / Burden, Annette M. (2015):
@@ -277,6 +277,7 @@ def sdm(x0, f, j, tol):
     :param f: function. Returns array length N.
     :param j: jacobian. Returns array N X N.
     :param tol: absolute tolerance.
+    :param notify_status_func: logging function.
     :return: x, array with reduced gradient to tol level.
     """
     def g(x_var): return f(x_var).T.dot(f(x_var))
@@ -285,8 +286,11 @@ def sdm(x0, f, j, tol):
     stop = False
     max_it = 1000
     while k < max_it and not stop:
-        z = 2 * j(x).dot(f(x))
-        z0 = np.sqrt((z.T.dot(z)))
+        x_n_m_1 = x
+        f_x = f(x)
+        j_x = j(x)
+        z = 2 * j_x.dot(f_x)
+        z0 = np.sqrt(z.T.dot(z))
         if z0 == 0:
             # Zero gradient
             # stop = True
@@ -319,10 +323,20 @@ def sdm(x0, f, j, tol):
             alpha = alpha3
             g_min = g3
         x = x - alpha * z
-        if abs(g_min - g1) < tol:
+        g_min_minus_g1 = g_min - g1
+        if abs(g_min_minus_g1) < tol:
             stop = True  # Procedure successful
-        print("k=" + str(k) + "; " + "x= " + np.array2string(x) + "; g=" +
-              str(g_min) + "; |g-g1|=" + str(abs(g_min - g1)), "stop?", str(stop))
+
+        # Non-functional status notification
+        diff = x - x_n_m_1
+        outer_it_k = k
+        inner_it_j, accum_step, lambda_ls = k, k, np.nan
+        progress_k = (-g_min_minus_g1 / tol) * 100.
+        notify_status_func(progress_k, stop, outer_it_k,
+                           inner_it_j, lambda_ls, accum_step,
+                           x, diff, f_x, j_x, z,
+                           np.nan, g_min=g_min, g1=g1)
+        # End non-functional notification
+
         k += 1
-    print(k)
     return x
