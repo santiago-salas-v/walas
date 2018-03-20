@@ -186,7 +186,7 @@ def nr_ls(x0, f, j, tol, max_it, inner_loop_condition,
     log10_to_o_max_magnitude_f = np.log10(tol / magnitude_f)
     progress_k = (1.0 - np.log10(tol / magnitude_f) /
                   log10_to_o_max_magnitude_f) * 100.0
-    stop = magnitude_f < tol # stop if already fulfilling condition
+    stop = magnitude_f < tol  # stop if already fulfilling condition
     divergent = False
     # Non-functional status notification
     notify_status_func(progress_k, stop, outer_it_k,
@@ -202,9 +202,9 @@ def nr_ls(x0, f, j, tol, max_it, inner_loop_condition,
         accum_step += lambda_ls
         x_k_m_1 = x
         progress_k_m_1 = progress_k
-        if np.ndim(x) > 0:
+        if np.ndim(x) >= 1 and len(x) > 1:
             y = gauss_elimination(j_val, -f_val)
-        elif np.ndim(x) == 0:
+        elif np.ndim(x) < 1 or np.size(x) == 1:
             y = 1/j_val * -f_val
         # First attempt without backtracking
         x = x + lambda_ls * y
@@ -279,12 +279,13 @@ def nr_ls(x0, f, j, tol, max_it, inner_loop_condition,
         method_loops
 
 
-def sdm(x0, f, j, tol, notify_status_func):
+def sdm(x0, f, j, tol, notify_status_func, inner_loop_condition=None):
     """
     Steepest descent method.
     Burden, Richard L. / Faires, J. Douglas / Burden, Annette M. (2015):
     Numerical Analysis. Clifton Park, NY (Cengage Learning).
 
+    :param inner_loop_condition: line search condition
     :param x0: initial estimate. Array length N.
     :param f: function. Returns array length N.
     :param j: jacobian. Returns array N X N.
@@ -310,6 +311,13 @@ def sdm(x0, f, j, tol, notify_status_func):
         z = z / z0
         alpha1 = 0
         alpha3 = 1
+        if inner_loop_condition is not None:
+            # external restriction for alpha 3 (backtracking)
+            inner_it_j = 0
+            while inner_it_j <= max_it and \
+                    not inner_loop_condition(x - alpha3 * z):
+                inner_it_j += 1
+                alpha3 = alpha3 / 2.0
         g1 = g(x - alpha1 * z)
         g3 = g(x - alpha3 * z)
         while g3 >= g1 and alpha3 > tol / 2.0:

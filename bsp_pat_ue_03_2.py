@@ -328,25 +328,6 @@ def r_isoterm(x_vec, k, n_0):
     return f
 
 
-def gg_abstand(k, nuij, n_0, xi, full_output=False):
-    nu_t = sum(nuij)
-    n = n_0 + xi * nuij
-    n_t = sum(n)
-    pir = np.product(
-        [n[k] ** abs(nu_k) for k, nu_k in enumerate(nuij) if nu_k < 0]
-    )
-    pip = np.product(
-        [n[k] ** abs(nu_k) for k, nu_k in enumerate(nuij) if nu_k > 0]
-    )
-    k_pir_nt = k * pir * np.power(n_t, nu_t)
-    logging.debug('xi=' + str(xi))
-    logging.debug('f(xi)=' + str(k_pir_nt - pip))
-    if full_output:
-        return (k_pir_nt, pip, k_pir_nt - pip)
-    else:
-        return k_pir_nt - pip
-
-
 def d_gg_abstand_d_xi(k, nuij, n_0, xi):
     nu_t = sum(nuij)
     n = n_0 + xi * nuij
@@ -368,6 +349,71 @@ def d_gg_abstand_d_xi(k, nuij, n_0, xi):
 
     return d_gga_d_xi
 
+def jac_gg_abstaende(k, nuij, n_0, xi):
+    if np.ndim(nuij) > 1:
+        n_r = nuij.shape[1]
+        nuji = nuij.T
+        n = n_0 + nuij.dot(xi)
+        jac = np.zeros([len(xi), len(xi)])
+    else:
+        n_r = 1
+        nuji = nuij.reshape([1,nuij.shape[0]])
+        n = n_0 + nuij * xi
+        jac = np.zeros([1, 1])
+    nu_t = sum(nuij)
+    n_t = np.sum(n)
+    k_pir_nt, pir, pip = gg_abstaende(k, nuij, n_0, xi, full_output=True)
+    s_nujknuik_nk_r = np.zeros(n_r)
+    s_nujknuik_nk_p = np.zeros(n_r)
+    for j in range(n_r):
+        for i in range(n_r):
+            for k_st, n_k in enumerate(n):
+                if nuji[j, k_st] < 0 and abs(n_k) > eps:
+                    s_nujknuik_nk_r = s_nujknuik_nk_r + nuji[j, k_st] * nuji[i, k_st] / n_k
+                elif nuji[j, k_st] > 0 and abs(n_k) > eps:
+                    s_nujknuik_nk_p = s_nujknuik_nk_p + nuji[j, k_st] * nuji[i, k_st] / n_k
+                elif nuji[j, k_st] == 0:
+                    # add 0
+                    pass
+            jac[j, i] = -pip[j] * s_nujknuik_nk_p[j] - k_pir_nt[j] * (
+                    s_nujknuik_nk_r[j] + sum(nuji[j, :]) * sum(nuji[i, :]) / n_t
+            )
+    logging.debug('j=' + ','.join(map(str,jac.tolist())))
+    if n_r == 1:
+        return jac[0]
+    else:
+        return jac
+
+def gg_abstaende(k, nuij, n_0, xi, full_output=False):
+    if np.ndim(nuij) > 1:
+        n_r = nuij.shape[1]
+        nuji = nuij.T
+        n = n_0 + nuij.dot(xi)
+    else:
+        n_r = 1
+        nuji = nuij.reshape([1,nuij.shape[0]])
+        n = n_0 + nuij * xi
+    nu_t = sum(nuij)
+    n_t = np.sum(n)
+    pir = np.ones(n_r)
+    pip = np.ones(n_r)
+    for j in range(n_r):
+        for k_st, nujk in enumerate(nuji[j]):
+            if nujk < 0:
+                pir[j] = pir[j] * np.power(n[k_st], abs(nujk))
+            elif nujk > 0:
+                pip[j] = pip[j] * np.power(n[k_st], abs(nujk))
+            elif nujk == 0:
+                # multiply by 1
+                pass
+    k_pir_nt = np.multiply(k , pir) * np.power(n_t, nu_t)
+    logging.debug('xi=' + str(xi))
+    logging.debug('f(xi)=' + str(k_pir_nt - pip))
+    if full_output:
+        return (k_pir_nt, pir, pip)
+    else:
+        return k_pir_nt - pip
+
 
 def r_entspannung(k_j, n_0, x_mal, temp_0, betrieb='isotherm'):
     """ Entspannungs-Methode (Gmehling Chem. Therm.).
@@ -385,7 +431,7 @@ def r_entspannung(k_j, n_0, x_mal, temp_0, betrieb='isotherm'):
             # nach Spannung sortieren, gespannteste Reaktion zunächst
             # entspannen.
             order = np.argsort(
-                [-abs(gg_abstand(k_j[i], nuij[:, i], n, 0)) for i in r_to_relax])
+                [-abs(gg_abstaende(k_j[i], nuij[:, i], n, 0).item()) for i in r_to_relax])
             j = r_to_relax[order[0]]
 
             progress_k, stop, outer_it_k, outer_it_j, \
@@ -393,13 +439,13 @@ def r_entspannung(k_j, n_0, x_mal, temp_0, betrieb='isotherm'):
                 diff, f_val, lambda_ls_y, \
                 method_loops = \
                 nr_ls(x0=-eps,
-                      f=lambda xi: gg_abstand(k_j[j], nuij[:, j], n, xi),
-                      j=lambda xi: d_gg_abstand_d_xi(k_j[j], nuij[:, j], n, xi),
-                      tol=1e-7,
+                      f=lambda xi: gg_abstaende(k_j[j], nuij[:, j], n, xi),
+                      j=lambda xi: jac_gg_abstaende(k_j[j], nuij[:, j], n, xi),
+                      tol=1e-9,
                       max_it=1000,
                       inner_loop_condition=lambda xi:
                       all([item >= 0 for item in
-                           n + nuij[:, j].dot(xi)]),
+                           n + nuij[:, j] * xi]),
                       notify_status_func=notify_status_func,
                       method_loops=[0, 0],
                       process_func_handle=lambda: logging.debug('no progress'))
@@ -429,11 +475,11 @@ def notify_status_func(progress_k, stop_value, k,
     y = lambda_ls_y
     if np.ndim(x) > 0:
         diff_str = str(np.sqrt(diff.T.dot(diff)))
-        x_str = ','.join(map(str, x))
-        f_val_str = ','.join(map(str, f_val))
+        x_str = '[' + ','.join(map(str, x)) + ']'
+        f_val_str =  '[' +','.join(map(str, f_val)) + ']'
         f_mag_str = str(np.sqrt(f_val.T.dot(f_val)))
-        j_val_str = str(j_val.tolist())
-        y_str = str(np.sqrt(y.T.dot(y)))
+        j_val_str = ','.join(map(str,j_val.tolist()))
+        y_str = '[' + str(np.sqrt(y.T.dot(y)))+ ']'
     else:
         diff_str = str(diff)
         x_str = str(x)
@@ -447,12 +493,12 @@ def notify_status_func(progress_k, stop_value, k,
         ';lambda_ls=' + str(lambda_ls) + \
         ';accum_step=' + str(accum_step) + \
         ';stop=' + str(stop_value) + \
-        ';X=' + '[' + x_str + ']' + \
+        ';X=' + x_str + \
         ';||X(k)-X(k-1)||=' + diff_str + \
-        ';f(X)=' + '[' + f_val_str + ']' + \
+        ';f(X)=' + f_val_str + \
         ';||f(X)||=' + f_mag_str + \
         ';j(X)=' + j_val_str + \
-        ';Y=' + '[' + y_str + ']' + \
+        ';Y=' + y_str + \
         ';||Y||=' + y_str + \
         ';g=' + str(g_min) + \
         ';|g-g1|=' + str(abs(g_min - g1))
@@ -503,7 +549,7 @@ def jac_fj_0(xi, n_0, nuij):
     if n_r == 1:
         # 1 R: return scalar
         jac = jac.item()
-    logging.debug('j=' + str(jac))
+    logging.debug('j=' + ','.join(map(str, jac.tolist())))
     return jac
 
 
@@ -536,20 +582,35 @@ naus_0[naus_0 == 0] = eps
 naus_0_norm = naus_0 / sum(naus_0)  # Normalisieren
 # Entspannung
 _, _, xi_0, _ = r_entspannung(k_1, naus_0_norm, 1, t_aus_rdampfr)
-xi_0[abs(xi_0) <= eps] = 0  # values indistinguishible from 0 remain 0
+#xi_0[abs(xi_0) <= eps] = 0  # values indistinguishible from 0 remain 0
 # Normalisierung beheben
-xi_0 = xi_0 * sum(naus_0)
+#xi_0 = xi_0 * sum(naus_0)
 #xi_0 = sum(naus_0) / n_r * (k_1 / (k_1 + 1))
 #xi_0 = k_1*sum(naus_0)**sum(nuij)*np.product(naus_0**-nuij.T,axis=1)
 # Steifster Gradient
 xi_sdm = sdm(
     xi_0,
-    lambda xi: fj_0(xi, naus_0, k_1, nuij),
-    lambda xi: jac_fj_0(xi, naus_0, nuij),
+    lambda xi: gg_abstaende(k_1, nuij, naus_0_norm, xi),
+    lambda xi: jac_gg_abstaende(k_1, nuij, naus_0_norm, xi),
     1e-4,
     notify_status_func=notify_status_func
 )
 # Newton-Raphson
+progress_k, stop, outer_it_k, outer_it_j, \
+    lambda_ls, accum_step, x, \
+    diff, f_val, lambda_ls_y, \
+    method_loops = \
+    nr_ls(x0=xi_sdm,
+          f=lambda xi: gg_abstaende(k_1, nuij, naus_0, xi),
+          j=lambda xi: jac_gg_abstaende(k_1, nuij, naus_0, xi),
+          tol=1e-12,
+          max_it=1000,
+          inner_loop_condition=lambda xi:
+          all([item >= 0 for item in
+               naus_0 + nuij[:, j] * xi]),
+          notify_status_func=notify_status_func,
+          method_loops=[0, 0],
+          process_func_handle=lambda: logging.debug('no progress'))
 progress_k, stop, outer_it_k, outer_it_j, \
     lambda_ls, accum_step, x, \
     diff, f_val, lambda_ls_y, \
@@ -676,16 +737,19 @@ naus_2_norm = naus_2 / sum(naus_2)  # Normalisieren
 # Entspannung
 # man könnte diesen Schritt überspringen.
 _, _, xi_0, _ = r_entspannung(k_2, naus_2_norm, 1, t_ein_rwgs)
-xi_0[abs(xi_0) <= eps] = 0  # values indistinguishible from 0 remain 0
+#xi_0[abs(xi_0) <= eps] = 0  # values indistinguishible from 0 remain 0
 # Normalisierung beheben
-xi_0 = xi_0 * sum(naus_2)
+#xi_0 = xi_0 * sum(naus_2)
 # Steifster Gradient
 xi_sdm = sdm(
     xi_0,
-    lambda xi: fj_0(xi, n_1, k_2, nuij),
-    lambda xi: jac_fj_0(xi, n_1, nuij),
+    lambda xi: fj_0(xi, n_1/sum(n_1), k_2, nuij),
+    lambda xi: jac_fj_0(xi, n_1/sum(n_1), nuij),
     1e-4,
-    notify_status_func=notify_status_func
+    notify_status_func=notify_status_func,
+    inner_loop_condition=lambda xi:
+    all([item >= 0 for item in
+         n_1/sum(n_1) + nuij.dot(xi)])
 )
 # Newton-Raphson
 progress_k, stop, outer_it_k, outer_it_j, \
@@ -699,7 +763,7 @@ progress_k, stop, outer_it_k, outer_it_j, \
           max_it=1000,
           inner_loop_condition=lambda x_vec:
           all([item >= 0 for item in
-               n_1 + nuij.dot(x_vec)]),  # keine Voraussetzung
+               n_1 + nuij.dot(x_vec)]),
           notify_status_func=notify_status_func,
           method_loops=[0, 0],
           process_func_handle=None)
