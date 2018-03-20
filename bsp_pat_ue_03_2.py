@@ -328,22 +328,21 @@ def r_isoterm(x_vec, k, n_0):
     return f
 
 
-def gg_abstand(k, nuij, n, xi, full_output=False):
+def gg_abstand(k, nuij, n_0, xi, full_output=False):
     pip = 1.0
     pir = 1.0
-    n_t = sum(n)
     nu_t = sum(nuij)
+    n = n_0 + xi * nuij
+    n_t = sum(n)
     for i in range(nuij.shape[0]):  # Komponente i
         if nuij[i] < 0:
-            pir = pir * np.power(n[i] + xi * nuij[i],
-                                 abs(nuij[i]))
+            pir = pir * np.power(n[i],abs(nuij[i]))
         elif nuij[i] > 0:
-            pip = pip * np.power(n[i] + xi * nuij[i],
-                                 abs(nuij[i]))
+            pip = pip * np.power(n[i],abs(nuij[i]))
         elif nuij[i] == 0:
             # Mit ni^0 multiplizieren
             pass
-    k_pir_nt = k * (n_t + xi * nu_t)**nu_t * pir
+    k_pir_nt = k * pir * np.power(n_t, nu_t)
     if full_output:
         return (k_pir_nt, pip, k_pir_nt - pip)
     else:
@@ -358,20 +357,46 @@ def r_entspannung(k_j, n_0, x_mal, temp_0, betrieb='isotherm'):
     xi_j_accum = np.array([0 for j in range(nuij.shape[1])], dtype=float)
     h_temp_0 = h(temp_0)
     temp = temp_0
+    #xi_0 = sum(n_0) / n_r * (k_j / (k_j + 1))
+    r_to_relax = [j for j in range(nuij.shape[1])]
 
     for x in range(x_mal):
-        for j in range(nuij.shape[1]):
+        while r_to_relax:
+            # nach Spannung sortieren, gespannteste Reaktion zunächst entspannen.
+            order = np.argsort([-abs(gg_abstand(k_j[k], nuij[:, k], n, 0)) for k in r_to_relax])
+            j = r_to_relax[order[0]]
             soln_xi = optimize.newton(lambda xi: gg_abstand(
-                k_j[j], nuij[:, j], n, xi), -eps)
-            #soln_xi = optimize.newton(
+                k_j[j], nuij[:, j], n, xi),-eps)
+
+            # soln_xi = optimize.newton(
             #    lambda xi: fj_0(xi, n, k_j[j], nuij[:, j]),
-            #    -eps,
+            #    xi_0[j],
             #    fprime=lambda xi: jac_fj_0(xi, n, nuij[:, j])
-            #)
+            # )
+
+            # progress_k, stop, outer_it_k, outer_it_j, \
+            # lambda_ls, accum_step, x, \
+            # diff, f_val, lambda_ls_y, \
+            # method_loops = \
+            #     nr_ls(x0=-eps,
+            #           f=lambda xi: fj_0(xi, n, k_j[j], nuij[:, j]),
+            #           j=lambda xi: jac_fj_0(xi, n, nuij[:, j]),
+            #           tol=1e-12,
+            #           max_it=1000,
+            #           inner_loop_condition=lambda x_vec:
+            #           all([item >= 0 for item in
+            #                n + nuij[:, j].dot(x_vec)]),
+            #           notify_status_func=notify_status_func,
+            #           method_loops=[0, 0],
+            #           process_func_handle=None)
+            #soln_xi = x
+
             xi_j[j] = soln_xi
 
             xi_j_accum[j] = xi_j_accum[j] + xi_j[j]
             n = n + nuij[:, j] * xi_j[j]
+
+            r_to_relax.pop(order[0])
 
             if betrieb == 'adiabat':
                 temp = optimize.root(
@@ -388,18 +413,33 @@ def notify_status_func(progress_k, stop_value, k,
                        x, diff, f_val, j_val, lambda_ls_y,
                        method_loops, g_min=np.nan, g1=np.nan):
     y = lambda_ls_y
+    if np.ndim(x) > 0:
+        diff_str = str(np.sqrt(diff.T.dot(diff)))
+        x_str = ','.join(map(str, x))
+        f_val_str = ','.join(map(str, f_val))
+        f_mag_str = str(np.sqrt(f_val.T.dot(f_val)))
+        j_val_str =  str(j_val.tolist())
+        y_str = str(np.sqrt(y.T.dot(y)))
+    else:
+        diff_str = str(diff)
+        x_str = str(x)
+        f_val_str = str(f_val)
+        f_mag_str = str(f_val)
+        j_val_str = str(j_val)
+        y_str = str(y)
+
     pr_str = ';k=' + str(k) + \
         ';backtrack=' + str(j_it_backtrack) + \
         ';lambda_ls=' + str(lambda_ls) + \
         ';accum_step=' + str(accum_step) + \
         ';stop=' + str(stop_value) + \
-        ';X=' + '[' + ','.join(map(str, x)) + ']' + \
-        ';||X(k)-X(k-1)||=' + str(np.sqrt(diff.T.dot(diff))) + \
-        ';f(X)=' + '[' + ','.join(map(str, f_val)) + ']' + \
-        ';||f(X)||=' + str(np.sqrt(f_val.T.dot(f_val))) + \
-        ';j(X)=' + str(j_val.tolist()) + \
-        ';Y=' + '[' + ','.join(map(str, y)) + ']' + \
-        ';||Y||=' + str(np.sqrt(y.T.dot(y))) + \
+        ';X=' + '[' + x_str + ']' + \
+        ';||X(k)-X(k-1)||=' + diff_str + \
+        ';f(X)=' + '[' +f_val_str + ']' + \
+        ';||f(X)||=' + f_mag_str + \
+        ';j(X)=' + j_val_str + \
+        ';Y=' + '[' + y_str + ']' + \
+        ';||Y||=' + y_str + \
         ';g=' + str(g_min) + \
         ';|g-g1|=' + str(abs(g_min - g1))
     logging.debug(pr_str)
@@ -479,6 +519,8 @@ naus_0 = np.copy(n_0)
 naus_0[naus_0==0] = eps
 # Entspannung
 _, _, xi_0, _ = r_entspannung(k_1, naus_0, 1, t_aus_rdampfr)
+#xi_0 = sum(naus_0) / n_r * (k_1 / (k_1 + 1))
+#xi_0 = k_1*sum(naus_0)**sum(nuij)*np.product(naus_0**-nuij.T,axis=1)
 # Steifster Gradient
 xi_sdm = sdm(
     xi_0,
@@ -596,19 +638,19 @@ print(
 print(namen)
 stoech_m, indexes, nach_g_sortieren, k_2, nuij = stoech_matrix(
     atom_m, g_2, namen, None)
-nuij = np.array([
-    [+1, +2, +0, +0, -1, +0, +0, -1 / 2, +0],
-    [+1, +3, +0, -1, -1, +0, +0, +0, +0],
-    [-1, +1, +1, -1, +0, +0, +0, +0, +0],
-    [-1, -3, +0, +1, +1, +0, +0, +0, +0],
-    [+0, -4, -1, +2, +1, +0, +0, +0, +0],
-    [+0, -3 / 2, 0, 0, +0, +1, +0, +0, -1 / 2]
-]).T
-k_2 = k(t_ein_rwgs,g_2,nuij)
-for index, item in enumerate(k_2):
-    if item > 1:
-        nuij[:, index] = -nuij[:, index]
-k_2 = k(t_ein_rwgs,g_2,nuij)
+#nuij = np.array([
+#    [+1, +2, +0, +0, -1, +0, +0, -1 / 2, +0],
+#    [+1, +3, +0, -1, -1, +0, +0, +0, +0],
+#    [-1, +1, +1, -1, +0, +0, +0, +0, +0],
+#    [-1, -3, +0, +1, +1, +0, +0, +0, +0],
+#    [+0, -4, -1, +2, +1, +0, +0, +0, +0],
+#    [+0, -3 / 2, 0, 0, +0, +1, +0, +0, -1 / 2]
+#]).T
+#k_2 = k(t_ein_rwgs,g_2,nuij)
+#for index, item in enumerate(k_2):
+#    if item > 1:
+#        nuij[:, index] = -nuij[:, index]
+#k_2 = k(t_ein_rwgs,g_2,nuij)
 naus_2 = np.copy(n_2)
 # Entspannung
 # man könnte diesen Schritt überspringen.

@@ -169,8 +169,16 @@ def nr_ls(x0, f, j, tol, max_it, inner_loop_condition,
     inner_it_j = 0
     j_val = j(x)
     f_val = f(x)
-    y = np.ones(len(x)).T * tol / (np.sqrt(len(x)) * tol)
-    magnitude_f = np.sqrt((f_val.dot(f_val)).item())
+    y = 1
+    magnitude_f = f_val
+    diff = np.nan
+    if np.ndim(x) > 0:
+        y = np.ones(len(x)).T * tol / (np.sqrt(len(x)) * tol)
+        magnitude_f = np.sqrt((f_val.dot(f_val)).item())
+        diff = np.empty([len(x), 1])
+        diff.fill(np.nan)
+    elif np.ndim(x) == 0:
+        pass  # defined above
     # Line search variable lambda
     lambda_ls = 0.0
     accum_step = 0.0
@@ -178,8 +186,6 @@ def nr_ls(x0, f, j, tol, max_it, inner_loop_condition,
     log10_to_o_max_magnitude_f = np.log10(tol / magnitude_f)
     progress_k = (1.0 - np.log10(tol / magnitude_f) /
                   log10_to_o_max_magnitude_f) * 100.0
-    diff = np.empty([len(x), 1])
-    diff.fill(np.nan)
     stop = False
     divergent = False
     # Non-functional status notification
@@ -196,13 +202,19 @@ def nr_ls(x0, f, j, tol, max_it, inner_loop_condition,
         accum_step += lambda_ls
         x_k_m_1 = x
         progress_k_m_1 = progress_k
-        y = gauss_elimination(j_val, -f_val)
+        if np.ndim(x) > 0:
+            y = gauss_elimination(j_val, -f_val)
+        elif np.ndim(x) == 0:
+            y = 1/j_val * -f_val
         # First attempt without backtracking
         x = x + lambda_ls * y
         diff = x - x_k_m_1
         j_val = j(x)
         f_val = f(x)
-        magnitude_f = np.sqrt(f_val.T.dot(f_val))
+        if np.ndim(x) > 0:
+            magnitude_f = np.sqrt(f_val.T.dot(f_val))
+        elif np.ndim(x) == 0:
+            magnitude_f = f_val
         if magnitude_f < tol and inner_loop_condition(x):
             stop = True  # Procedure successful
         else:
