@@ -170,7 +170,7 @@ def nr_ls(x0, f, j, tol, max_it, inner_loop_condition,
     j_val = j(x)
     f_val = f(x)
     y = 1
-    magnitude_f = f_val
+    magnitude_f = np.sqrt(f_val**2)
     diff = np.nan
     if np.ndim(x) > 0:
         y = np.ones(len(x)).T * tol / (np.sqrt(len(x)) * tol)
@@ -186,7 +186,7 @@ def nr_ls(x0, f, j, tol, max_it, inner_loop_condition,
     log10_to_o_max_magnitude_f = np.log10(tol / magnitude_f)
     progress_k = (1.0 - np.log10(tol / magnitude_f) /
                   log10_to_o_max_magnitude_f) * 100.0
-    stop = False
+    stop = magnitude_f < tol # stop if already fulfilling condition
     divergent = False
     # Non-functional status notification
     notify_status_func(progress_k, stop, outer_it_k,
@@ -214,7 +214,7 @@ def nr_ls(x0, f, j, tol, max_it, inner_loop_condition,
         if np.ndim(x) > 0:
             magnitude_f = np.sqrt(f_val.T.dot(f_val))
         elif np.ndim(x) == 0:
-            magnitude_f = f_val
+            magnitude_f = np.sqrt(f_val**2)
         if magnitude_f < tol and inner_loop_condition(x):
             stop = True  # Procedure successful
         else:

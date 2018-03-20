@@ -263,10 +263,10 @@ def stoech_matrix(atom_m, g_t, namen, festgelegte_komponente=None):
             logging.debug('A N^T')
             logging.debug(str(rref_atom_m.dot(stoech_m.T).tolist()))
             for row in np.array(stoech_m):
-                lhs = '+ '.join([str(abs(row[r])) + ' ' + sortierte_namen[r]
-                                 for r in np.where(row < 0)[0]])
-                rhs = '+'.join([str(abs(row[r])) + ' ' + sortierte_namen[r]
-                                for r in np.where(row > 0)[0]])
+                lhs = '+ '.join([str(abs(row[i])) + ' ' + sortierte_namen[i]
+                                 for i in np.where(row < 0)[0]])
+                rhs = '+'.join([str(abs(row[i])) + ' ' + sortierte_namen[i]
+                                for i in np.where(row > 0)[0]])
                 logging.debug(lhs + ' <<==>> ' + rhs)
             logging.debug('Kj(T)')
             logging.debug(str(k_t.tolist()))
@@ -329,24 +329,44 @@ def r_isoterm(x_vec, k, n_0):
 
 
 def gg_abstand(k, nuij, n_0, xi, full_output=False):
-    pip = 1.0
-    pir = 1.0
     nu_t = sum(nuij)
     n = n_0 + xi * nuij
     n_t = sum(n)
-    for i in range(nuij.shape[0]):  # Komponente i
-        if nuij[i] < 0:
-            pir = pir * np.power(n[i],abs(nuij[i]))
-        elif nuij[i] > 0:
-            pip = pip * np.power(n[i],abs(nuij[i]))
-        elif nuij[i] == 0:
-            # Mit ni^0 multiplizieren
-            pass
+    pir = np.product(
+        [n[k] ** abs(nu_k) for k, nu_k in enumerate(nuij) if nu_k < 0]
+    )
+    pip = np.product(
+        [n[k] ** abs(nu_k) for k, nu_k in enumerate(nuij) if nu_k > 0]
+    )
     k_pir_nt = k * pir * np.power(n_t, nu_t)
+    logging.debug('xi=' + str(xi))
+    logging.debug('f(xi)=' + str(k_pir_nt - pip))
     if full_output:
         return (k_pir_nt, pip, k_pir_nt - pip)
     else:
         return k_pir_nt - pip
+
+
+def d_gg_abstand_d_xi(k, nuij, n_0, xi):
+    nu_t = sum(nuij)
+    n = n_0 + xi * nuij
+    n_t = sum(n)
+    pir = np.product(
+        [n[k] ** abs(nu_k) for k, nu_k in enumerate(nuij) if nu_k < 0]
+    )
+    pip = np.product(
+        [n[k] ** abs(nu_k) for k, nu_k in enumerate(nuij) if nu_k > 0]
+    )
+    k_pir_nt = k * pir * np.power(n_t, nu_t)
+    s_nujknuik_nk_r = sum([nu_k * nu_k / n[k] for k,
+                           nu_k in enumerate(nuij) if nu_k < 0 and abs(n[k]) > eps])
+    s_nujknuik_nk_p = sum([nu_k * nu_k / n[k] for k,
+                           nu_k in enumerate(nuij) if nu_k > 0 and abs(n[k]) > eps])
+    d_gga_d_xi = -pip * s_nujknuik_nk_p - k_pir_nt * \
+        (s_nujknuik_nk_r + nu_t * nu_t / n_t)
+    logging.debug('dgga_dxi=' + str(d_gga_d_xi))
+
+    return d_gga_d_xi
 
 
 def r_entspannung(k_j, n_0, x_mal, temp_0, betrieb='isotherm'):
@@ -362,34 +382,28 @@ def r_entspannung(k_j, n_0, x_mal, temp_0, betrieb='isotherm'):
 
     for x in range(x_mal):
         while r_to_relax:
-            # nach Spannung sortieren, gespannteste Reaktion zunächst entspannen.
-            order = np.argsort([-abs(gg_abstand(k_j[k], nuij[:, k], n, 0)) for k in r_to_relax])
+            # nach Spannung sortieren, gespannteste Reaktion zunächst
+            # entspannen.
+            order = np.argsort(
+                [-abs(gg_abstand(k_j[i], nuij[:, i], n, 0)) for i in r_to_relax])
             j = r_to_relax[order[0]]
-            soln_xi = optimize.newton(lambda xi: gg_abstand(
-                k_j[j], nuij[:, j], n, xi),-eps)
 
-            # soln_xi = optimize.newton(
-            #    lambda xi: fj_0(xi, n, k_j[j], nuij[:, j]),
-            #    xi_0[j],
-            #    fprime=lambda xi: jac_fj_0(xi, n, nuij[:, j])
-            # )
-
-            # progress_k, stop, outer_it_k, outer_it_j, \
-            # lambda_ls, accum_step, x, \
-            # diff, f_val, lambda_ls_y, \
-            # method_loops = \
-            #     nr_ls(x0=-eps,
-            #           f=lambda xi: fj_0(xi, n, k_j[j], nuij[:, j]),
-            #           j=lambda xi: jac_fj_0(xi, n, nuij[:, j]),
-            #           tol=1e-12,
-            #           max_it=1000,
-            #           inner_loop_condition=lambda x_vec:
-            #           all([item >= 0 for item in
-            #                n + nuij[:, j].dot(x_vec)]),
-            #           notify_status_func=notify_status_func,
-            #           method_loops=[0, 0],
-            #           process_func_handle=None)
-            #soln_xi = x
+            progress_k, stop, outer_it_k, outer_it_j, \
+                lambda_ls, accum_step, x, \
+                diff, f_val, lambda_ls_y, \
+                method_loops = \
+                nr_ls(x0=-eps,
+                      f=lambda xi: gg_abstand(k_j[j], nuij[:, j], n, xi),
+                      j=lambda xi: d_gg_abstand_d_xi(k_j[j], nuij[:, j], n, xi),
+                      tol=1e-7,
+                      max_it=1000,
+                      inner_loop_condition=lambda xi:
+                      all([item >= 0 for item in
+                           n + nuij[:, j].dot(xi)]),
+                      notify_status_func=notify_status_func,
+                      method_loops=[0, 0],
+                      process_func_handle=lambda: logging.debug('no progress'))
+            soln_xi = x
 
             xi_j[j] = soln_xi
 
@@ -418,13 +432,13 @@ def notify_status_func(progress_k, stop_value, k,
         x_str = ','.join(map(str, x))
         f_val_str = ','.join(map(str, f_val))
         f_mag_str = str(np.sqrt(f_val.T.dot(f_val)))
-        j_val_str =  str(j_val.tolist())
+        j_val_str = str(j_val.tolist())
         y_str = str(np.sqrt(y.T.dot(y)))
     else:
         diff_str = str(diff)
         x_str = str(x)
         f_val_str = str(f_val)
-        f_mag_str = str(f_val)
+        f_mag_str = str(np.sqrt(f_val**2))
         j_val_str = str(j_val)
         y_str = str(y)
 
@@ -435,7 +449,7 @@ def notify_status_func(progress_k, stop_value, k,
         ';stop=' + str(stop_value) + \
         ';X=' + '[' + x_str + ']' + \
         ';||X(k)-X(k-1)||=' + diff_str + \
-        ';f(X)=' + '[' +f_val_str + ']' + \
+        ';f(X)=' + '[' + f_val_str + ']' + \
         ';||f(X)||=' + f_mag_str + \
         ';j(X)=' + j_val_str + \
         ';Y=' + '[' + y_str + ']' + \
@@ -468,17 +482,17 @@ def jac_fj_0(xi, n_0, nuij):
         np.power(n / n_t, nuij.T),
         axis=nuij.ndim - 1
     )
-    if np.ndim(xi)>0:
+    if np.ndim(xi) > 0:
         jac = np.zeros([len(xi), len(xi)])
         n_r = nuij.shape[1]
     else:
-        jac = np.zeros([1,1])
+        jac = np.zeros([1, 1])
         n_r = 1
-    if np.ndim(nuij)<2:
-        nujk = nuij.reshape([nuij.shape[0],1])
+    if np.ndim(nuij) < 2:
+        nujk = nuij.reshape([nuij.shape[0], 1])
     else:
         nujk = np.copy(nuij)
-    if np.ndim(pi)<1:
+    if np.ndim(pi) < 1:
         pi = np.array([pi])
     for i in range(n_r):
         for j in range(n_r):
@@ -486,11 +500,12 @@ def jac_fj_0(xi, n_0, nuij):
                 jac[i, j] = jac[i, j] + nujk[k, j] * nujk[k, i] / n[k]
             jac[i, j] = pi[i] * (jac[i, j] - sum(nujk[:, j]) *
                                  sum(nujk[:, i]) / n_t)
-    if n_r==1:
+    if n_r == 1:
         # 1 R: return scalar
         jac = jac.item()
     logging.debug('j=' + str(jac))
     return jac
+
 
 def fj_adiab(x_vec, n_0, h_0):
     xi = x_vec[:-1]
@@ -504,21 +519,26 @@ def fj_adiab(x_vec, n_0, h_0):
     n_t = sum(n_0) + sum(nuij.dot(xi))
     pi = np.product(np.power(n / n_t, nuij.T), axis=1)
     # Energiebilanz
-    q =  np.sum(
+    q = np.sum(
         np.multiply(n_0, (h_0 - h_298)) -
         np.multiply(n, (h_t - h_298))) + \
         np.dot(xi, -delta_h_t)
     f[:-1] = pi - k_t
     f[-1] = q
-    logging.debug('f='+str(f)+'; x=' + str(x_vec))
+    logging.debug('f=' + str(f) + '; x=' + str(x_vec))
     return f
+
 
 stoech_m, indexes, nach_g_sortieren, k_1, nuij = stoech_matrix(
     atom_m, g_1, namen, [4])
 naus_0 = np.copy(n_0)
-naus_0[naus_0==0] = eps
+naus_0[naus_0 == 0] = eps
+naus_0_norm = naus_0 / sum(naus_0)  # Normalisieren
 # Entspannung
-_, _, xi_0, _ = r_entspannung(k_1, naus_0, 1, t_aus_rdampfr)
+_, _, xi_0, _ = r_entspannung(k_1, naus_0_norm, 1, t_aus_rdampfr)
+xi_0[abs(xi_0) <= eps] = 0  # values indistinguishible from 0 remain 0
+# Normalisierung beheben
+xi_0 = xi_0 * sum(naus_0)
 #xi_0 = sum(naus_0) / n_r * (k_1 / (k_1 + 1))
 #xi_0 = k_1*sum(naus_0)**sum(nuij)*np.product(naus_0**-nuij.T,axis=1)
 # Steifster Gradient
@@ -638,23 +658,27 @@ print(
 print(namen)
 stoech_m, indexes, nach_g_sortieren, k_2, nuij = stoech_matrix(
     atom_m, g_2, namen, None)
-#nuij = np.array([
-#    [+1, +2, +0, +0, -1, +0, +0, -1 / 2, +0],
-#    [+1, +3, +0, -1, -1, +0, +0, +0, +0],
-#    [-1, +1, +1, -1, +0, +0, +0, +0, +0],
-#    [-1, -3, +0, +1, +1, +0, +0, +0, +0],
-#    [+0, -4, -1, +2, +1, +0, +0, +0, +0],
-#    [+0, -3 / 2, 0, 0, +0, +1, +0, +0, -1 / 2]
-#]).T
-#k_2 = k(t_ein_rwgs,g_2,nuij)
-#for index, item in enumerate(k_2):
-#    if item > 1:
-#        nuij[:, index] = -nuij[:, index]
-#k_2 = k(t_ein_rwgs,g_2,nuij)
+nuij = np.array([
+    [+1, +2, +0, +0, -1, +0, +0, -1 / 2, +0],
+    [+1, +3, +0, -1, -1, +0, +0, +0, +0],
+    [-1, +1, +1, -1, +0, +0, +0, +0, +0],
+    [-1, -3, +0, +1, +1, +0, +0, +0, +0],
+    [+0, -4, -1, +2, +1, +0, +0, +0, +0],
+    [+0, -3 / 2, 0, 0, +0, +1, +0, +0, -1 / 2]
+]).T
+k_2 = k(t_ein_rwgs, g_2, nuij)
+for index, item in enumerate(k_2):
+    if item > 1:
+        nuij[:, index] = -nuij[:, index]
+k_2 = k(t_ein_rwgs, g_2, nuij)
 naus_2 = np.copy(n_2)
+naus_2_norm = naus_2 / sum(naus_2)  # Normalisieren
 # Entspannung
 # man könnte diesen Schritt überspringen.
-_, _, xi_0, _ = r_entspannung(k_2, naus_2, 1, t_ein_rwgs)
+_, _, xi_0, _ = r_entspannung(k_2, naus_2_norm, 1, t_ein_rwgs)
+xi_0[abs(xi_0) <= eps] = 0  # values indistinguishible from 0 remain 0
+# Normalisierung beheben
+xi_0 = xi_0 * sum(naus_2)
 # Steifster Gradient
 xi_sdm = sdm(
     xi_0,
@@ -680,11 +704,10 @@ progress_k, stop, outer_it_k, outer_it_j, \
           method_loops=[0, 0],
           process_func_handle=None)
 
-for item in (n_1 + nuij.dot(x))/1000.:
+for item in (n_1 + nuij.dot(x)) / 1000.:
     print(item)
 
-#soln = optimize.root(
+# soln = optimize.root(
 #    lambda x_vec: fj_adiab(x_vec, n_1, h_1),
 #    np.concatenate([x, [t_ein_rwgs]])
 #)
-
