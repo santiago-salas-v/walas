@@ -380,7 +380,7 @@ def jac_gg_abstaende(k, nuij, n_0, xi):
             )
     logging.debug('j=' + ','.join(map(str,jac.tolist())))
     if n_r == 1:
-        return jac[0]
+        return jac[0] # avoid embedded array
     else:
         return jac
 
@@ -438,10 +438,10 @@ def r_entspannung(k_j, n_0, x_mal, temp_0, betrieb='isotherm'):
                 lambda_ls, accum_step, x, \
                 diff, f_val, lambda_ls_y, \
                 method_loops = \
-                nr_ls(x0=-eps,
+                nr_ls(x0=0,
                       f=lambda xi: gg_abstaende(k_j[j], nuij[:, j], n, xi),
                       j=lambda xi: jac_gg_abstaende(k_j[j], nuij[:, j], n, xi),
-                      tol=1e-9,
+                      tol=1e-5,
                       max_it=1000,
                       inner_loop_condition=lambda xi:
                       all([item >= 0 for item in
@@ -506,8 +506,11 @@ def notify_status_func(progress_k, stop_value, k,
 
 
 def fj_0(xi, n_0, k_t, nuij):
-    n = n_0 + nuij.dot(xi)
-    n_t = sum(n_0) + sum(nuij.dot(xi))
+    if np.ndim(nuij) > 1:
+        n = n_0 + nuij.dot(xi)
+    else:
+        n = n_0 + nuij * xi
+    n_t = sum(n)
     #f = nuij.T.dot(np.log((n) / (n_t))) - np.log(k_1)
     pi = np.product(
         np.power(n / n_t, nuij.T),
@@ -546,10 +549,10 @@ def jac_fj_0(xi, n_0, nuij):
                 jac[i, j] = jac[i, j] + nujk[k, j] * nujk[k, i] / n[k]
             jac[i, j] = pi[i] * (jac[i, j] - sum(nujk[:, j]) *
                                  sum(nujk[:, i]) / n_t)
+    logging.debug('j=' + ','.join(map(str, jac.tolist())))
     if n_r == 1:
         # 1 R: return scalar
         jac = jac.item()
-    logging.debug('j=' + ','.join(map(str, jac.tolist())))
     return jac
 
 
@@ -578,7 +581,7 @@ def fj_adiab(x_vec, n_0, h_0):
 stoech_m, indexes, nach_g_sortieren, k_1, nuij = stoech_matrix(
     atom_m, g_1, namen, [4])
 naus_0 = np.copy(n_0)
-naus_0[naus_0 == 0] = eps
+#naus_0[naus_0 == 0] = eps
 naus_0_norm = naus_0 / sum(naus_0)  # Normalisieren
 # Entspannung
 _, _, xi_0, _ = r_entspannung(k_1, naus_0_norm, 1, t_aus_rdampfr)
@@ -611,13 +614,15 @@ progress_k, stop, outer_it_k, outer_it_j, \
           notify_status_func=notify_status_func,
           method_loops=[0, 0],
           process_func_handle=None)
+# Normalize
+xi_0 = xi_sdm/sum(naus_0)
 progress_k, stop, outer_it_k, outer_it_j, \
     lambda_ls, accum_step, x, \
     diff, f_val, lambda_ls_y, \
     method_loops = \
-    nr_ls(x0=xi_sdm,
-          f=lambda xi: gg_abstaende(k_1, nuij, naus_0, xi),
-          j=lambda xi: jac_gg_abstaende(k_1, nuij, naus_0, xi),
+    nr_ls(x0=xi_0,
+          f=lambda xi: gg_abstaende(k_1, nuij, naus_0_norm, xi),
+          j=lambda xi: jac_gg_abstaende(k_1, nuij, naus_0_norm, xi),
           tol=1e-12,
           max_it=1000,
           inner_loop_condition=lambda xi:
@@ -627,9 +632,9 @@ progress_k, stop, outer_it_k, outer_it_j, \
           method_loops=[0, 0],
           process_func_handle=lambda: logging.debug('no progress'))
 
-
+# denormalize
 xi_accum_1 = x
-n_1 = n_0 + nuij.dot(xi_accum_1)
+n_1 = (n_0/sum(naus_0) + nuij.dot(xi_accum_1))*sum(naus_0)
 
 for komb in n_1:
     logging.debug('{0:0.20g}'.format(komb / 1000.).replace('.', ','))
