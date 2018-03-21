@@ -363,20 +363,20 @@ def jac_gg_abstaende(k, nuij, n_0, xi):
     nu_t = sum(nuij)
     n_t = np.sum(n)
     k_pir_nt, pir, pip = gg_abstaende(k, nuij, n_0, xi, full_output=True)
-    s_nujknuik_nk_r = np.zeros(n_r)
-    s_nujknuik_nk_p = np.zeros(n_r)
+    s_nujknuik_nk_r = np.zeros_like(jac)
+    s_nujknuik_nk_p = np.zeros_like(jac)
     for j in range(n_r):
         for i in range(n_r):
             for k_st, n_k in enumerate(n):
                 if nuji[j, k_st] < 0 and abs(n_k) > eps:
-                    s_nujknuik_nk_r = s_nujknuik_nk_r + nuji[j, k_st] * nuji[i, k_st] / n_k
+                    s_nujknuik_nk_r[j, i] = s_nujknuik_nk_r[j, i] + nuji[j, k_st] * nuji[i, k_st] / n_k
                 elif nuji[j, k_st] > 0 and abs(n_k) > eps:
-                    s_nujknuik_nk_p = s_nujknuik_nk_p + nuji[j, k_st] * nuji[i, k_st] / n_k
+                    s_nujknuik_nk_p[j, i] = s_nujknuik_nk_p[j, i] + nuji[j, k_st] * nuji[i, k_st] / n_k
                 elif nuji[j, k_st] == 0:
                     # add 0
                     pass
-            jac[j, i] = -pip[j] * s_nujknuik_nk_p[j] - k_pir_nt[j] * (
-                    s_nujknuik_nk_r[j] + sum(nuji[j, :]) * sum(nuji[i, :]) / n_t
+            jac[j, i] = -pip[j] * s_nujknuik_nk_p[j, i] - k_pir_nt[j] * (
+                    s_nujknuik_nk_r[j, i] - sum(nuji[j, :]) * sum(nuji[i, :]) / n_t
             )
     logging.debug('j=' + ','.join(map(str,jac.tolist())))
     if n_r == 1:
@@ -400,13 +400,13 @@ def gg_abstaende(k, nuij, n_0, xi, full_output=False):
     for j in range(n_r):
         for k_st, nujk in enumerate(nuji[j]):
             if nujk < 0:
-                pir[j] = pir[j] * np.power(n[k_st], abs(nujk))
+                pir[j] = pir[j] * n[k_st]**abs(nujk)
             elif nujk > 0:
-                pip[j] = pip[j] * np.power(n[k_st], abs(nujk))
+                pip[j] = pip[j] * n[k_st]**abs(nujk)
             elif nujk == 0:
                 # multiply by 1
                 pass
-    k_pir_nt = np.multiply(k , pir) * np.power(n_t, nu_t)
+    k_pir_nt = k * pir * n_t**nu_t
     logging.debug('xi=' + str(xi))
     logging.debug('f(xi)=' + str(k_pir_nt - pip))
     if full_output:
@@ -584,33 +584,18 @@ naus_0_norm = naus_0 / sum(naus_0)  # Normalisieren
 _, _, xi_0, _ = r_entspannung(k_1, naus_0_norm, 1, t_aus_rdampfr)
 #xi_0[abs(xi_0) <= eps] = 0  # values indistinguishible from 0 remain 0
 # Normalisierung beheben
-#xi_0 = xi_0 * sum(naus_0)
+xi_0 = xi_0 * sum(naus_0)
 #xi_0 = sum(naus_0) / n_r * (k_1 / (k_1 + 1))
 #xi_0 = k_1*sum(naus_0)**sum(nuij)*np.product(naus_0**-nuij.T,axis=1)
 # Steifster Gradient
 xi_sdm = sdm(
     xi_0,
-    lambda xi: gg_abstaende(k_1, nuij, naus_0_norm, xi),
-    lambda xi: jac_gg_abstaende(k_1, nuij, naus_0_norm, xi),
+    lambda xi: fj_0(xi, naus_0, k_1, nuij),
+    lambda xi: jac_fj_0(xi, naus_0, nuij),
     1e-4,
     notify_status_func=notify_status_func
 )
 # Newton-Raphson
-progress_k, stop, outer_it_k, outer_it_j, \
-    lambda_ls, accum_step, x, \
-    diff, f_val, lambda_ls_y, \
-    method_loops = \
-    nr_ls(x0=xi_sdm,
-          f=lambda xi: gg_abstaende(k_1, nuij, naus_0, xi),
-          j=lambda xi: jac_gg_abstaende(k_1, nuij, naus_0, xi),
-          tol=1e-12,
-          max_it=1000,
-          inner_loop_condition=lambda xi:
-          all([item >= 0 for item in
-               naus_0 + nuij[:, j] * xi]),
-          notify_status_func=notify_status_func,
-          method_loops=[0, 0],
-          process_func_handle=lambda: logging.debug('no progress'))
 progress_k, stop, outer_it_k, outer_it_j, \
     lambda_ls, accum_step, x, \
     diff, f_val, lambda_ls_y, \
@@ -626,6 +611,21 @@ progress_k, stop, outer_it_k, outer_it_j, \
           notify_status_func=notify_status_func,
           method_loops=[0, 0],
           process_func_handle=None)
+progress_k, stop, outer_it_k, outer_it_j, \
+    lambda_ls, accum_step, x, \
+    diff, f_val, lambda_ls_y, \
+    method_loops = \
+    nr_ls(x0=xi_sdm,
+          f=lambda xi: gg_abstaende(k_1, nuij, naus_0, xi),
+          j=lambda xi: jac_gg_abstaende(k_1, nuij, naus_0, xi),
+          tol=1e-12,
+          max_it=1000,
+          inner_loop_condition=lambda xi:
+          all([item >= 0 for item in
+               n_0 + nuij.dot(xi)]),
+          notify_status_func=notify_status_func,
+          method_loops=[0, 0],
+          process_func_handle=lambda: logging.debug('no progress'))
 
 
 xi_accum_1 = x
