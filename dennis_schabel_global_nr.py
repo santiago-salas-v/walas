@@ -44,11 +44,11 @@ def log_var_by_name(var_name):
         log_line(var_name + '= ' + str(globals()[var_name]))
 
 
+alpha = 1e-4
 x_0 = np.array([2., 0.5])
 f_0 = f(x_0)
 j_0 = j(x_0)
 inv_j_val = np.linalg.matrix_power(j_0, -1)
-s_0_n = -(inv_j_val).dot(f_0)
 # alt. to inv(J): solution of system J(X) Y = -F(X)
 s_0_n = gauss_elimination(j_0, -f_0)
 log_var_by_name('inv_j_val')
@@ -66,8 +66,9 @@ log_var_by_name('f_plus_1')
 g_0 = 1 / 2. * f_0.dot(f_0)
 g_plus_1 = 1 / 2. * f_plus_1.dot(f_plus_1)
 g_plus_minus_g_0 = g_plus_1 - g_0
-satisfactory = g_plus_minus_g_0 < 0
 nabla_f_t_s_0_n = -f_0.dot(f_0)
+# criterion g(x_k+1) < g(x_k) + alpha * lambda_k * nabla_f_t_s_k_n
+satisfactory = g_plus_minus_g_0 < alpha * lambda_k * nabla_f_t_s_0_n
 log_var_by_name('g_0')
 log_var_by_name('g_plus_1')
 log_var_by_name('g_plus_minus_g_0')
@@ -85,7 +86,8 @@ x_plus_2 = x_0 + lambda_k * s_0_n
 f_plus_2 = f(x_plus_2)
 g_plus_2 = 1 / 2. * f_plus_2.dot(f_plus_2)
 g_plus_minus_g_0 = g_plus_2 - g_0
-satisfactory = g_plus_minus_g_0 < 0
+# criterion g(x_k+1) < g(x_k) + alpha * lambda_k * nabla_f_t_s_k_n
+satisfactory = g_plus_minus_g_0 < alpha * lambda_k * nabla_f_t_s_0_n
 log_var_by_name('x_plus_2')
 log_var_by_name('f_plus_2')
 log_var_by_name('g_plus_2')
@@ -109,7 +111,8 @@ x_plus_3 = x_0 + lambda_k * s_0_n
 f_plus_3 = f(x_plus_3)
 g_plus_3 = 1 / 2. * f_plus_3.dot(f_plus_3)
 g_plus_minus_g_0 = g_plus_3 - g_0
-satisfactory = g_plus_minus_g_0 < 0
+# criterion g(x_k+1) < g(x_k) + alpha * lambda_k * nabla_f_t_s_k_n
+satisfactory = g_plus_minus_g_0 < alpha * lambda_k * nabla_f_t_s_0_n
 log_var_by_name('x_plus_3')
 log_var_by_name('x_plus_3')
 log_var_by_name('f_plus_3')
@@ -134,10 +137,13 @@ x_plus_4 = x_0 + lambda_k * s_0_n
 f_plus_4 = f(x_plus_4)
 g_plus_4 = 1 / 2. * f_plus_4.dot(f_plus_4)
 g_plus_minus_g_0 = g_plus_4 - g_0
-satisfactory = g_plus_minus_g_0 < 0
+ineq_rhs_criterion = g_0 + alpha * lambda_k * nabla_f_t_s_0_n
+# criterion g(x_k+1) < g(x_k) + alpha * lambda_k * nabla_f_t_s_k_n
+satisfactory = g_plus_minus_g_0 < alpha * lambda_k * nabla_f_t_s_0_n
 log_var_by_name('x_plus_4')
 log_var_by_name('f_plus_4')
 log_var_by_name('g_plus_4')
+log_var_by_name('ineq_rhs_criterion')
 log_var_by_name('g_plus_minus_g_0')
 log_var_by_name('satisfactory')
 x_1 = x_plus_4
@@ -151,7 +157,6 @@ lambda_0 = 1.0
 lambda_k = lambda_0
 x_plus_1 = x_1 + lambda_k * s_1_n
 f_plus_1 = f(x_plus_1)
-f_plus_minus_f_0 = (f_plus_1 - f_1).dot(f_plus_1 - f_1)
 log_var_by_name('x_plus_1')
 log_var_by_name('f_plus_1')
 # in book: [small] f(x+): f(x+)=1/2*sum_i(f_i(x)**2)
@@ -159,12 +164,13 @@ log_var_by_name('f_plus_1')
 # in Burden-Faires: g(x)
 g_1 = 1 / 2. * f_1.dot(f_1)
 g_plus_1 = 1 / 2. * f_plus_1.dot(f_plus_1)
-g_plus_minus_g_1 = g_plus_1 - g_1
-satisfactory = g_plus_minus_g_1 < 0
 nabla_f_t_s_1_n = -f_1.dot(f_1)
+# criterion g(x_k+1) < g(x_k) + alpha * lambda_k * nabla_f_t_s_k_n
+ineq_rhs_criterion = g_1 + alpha * lambda_k * nabla_f_t_s_1_n
+satisfactory = g_plus_1 < ineq_rhs_criterion
 log_var_by_name('g_1')
 log_var_by_name('g_plus_1')
-log_var_by_name('g_plus_minus_g_1')
+log_var_by_name('ineq_rhs_criterion')
 log_var_by_name('satisfactory')
 log_var_by_name('nabla_f_t_s_1_n')
 # quadratic backtrack
@@ -178,12 +184,13 @@ lambda_k = lambda_1
 x_plus_2 = x_1 + lambda_k * s_1_n
 f_plus_2 = f(x_plus_2)
 g_plus_2 = 1 / 2. * f_plus_2.dot(f_plus_2)
-g_plus_minus_g_0 = g_plus_2 - g_0
-satisfactory = g_plus_minus_g_0 < 0
+# criterion g(x_k+1) < g(x_k) + alpha * lambda_k * nabla_f_t_s_k_n
+ineq_rhs_criterion = g_1 + alpha * lambda_k * nabla_f_t_s_1_n
+satisfactory = g_plus_2 < ineq_rhs_criterion
 log_var_by_name('x_plus_2')
 log_var_by_name('f_plus_2')
 log_var_by_name('g_plus_2')
-log_var_by_name('g_plus_minus_g_0')
+log_var_by_name('ineq_rhs_criterion')
 log_var_by_name('satisfactory')
 x_k = x_plus_2
 
@@ -204,18 +211,86 @@ log_var_by_name('f_k_plus_1')
 g_k = 1 / 2. * f_k.dot(f_k)
 g_k_plus_1 = 1 / 2. * f_k_plus_1.dot(f_k_plus_1)
 g_k_plus_1_minus_g_k = g_k_plus_1 - g_k
-satisfactory = g_k_plus_1_minus_g_k < 0
 nabla_f_t_s_k_n = -f_k.dot(f_k)
+# criterion g(x_k+1) < g(x_k) + alpha * lambda_k * nabla_f_t_s_k_n
+ineq_rhs_criterion = g_k + alpha * lambda_k * nabla_f_t_s_k_n
+satisfactory = g_k_plus_1 < ineq_rhs_criterion
 log_var_by_name('g_k')
 log_var_by_name('g_k_plus_1')
-log_var_by_name('g_k_plus_1_minus_g_k')
+log_var_by_name('ineq_rhs_criterion')
 log_var_by_name('satisfactory')
-log_var_by_name('nabla_f_t_s_k_n')
-# quadratic backtrack
-lambda_1 = -nabla_f_t_s_k_n / (2 * (g_k_plus_1 - g_k - nabla_f_t_s_k_n))
-log_var_by_name('lambda_0')
-log_var_by_name('lambda_1')
-# guaranteed: lambda_1 < 0.5
-if lambda_1 < 0.1:
-    lambda_1 = 0.1
-lambda_k = lambda_1
+
+
+def linesearch(fun, jac, x_0, max_iter=50, alpha=1e-4):
+    f_0 = f(x_0)
+    j_0 = j(x_0)
+    g_0 = 1 / 2. * f_0.dot(f_0)
+    # $\nabla f(x_c)^T s^N = -F(x_c)^T F(x_c)$
+    # initslope: expressed (p344) $g^T p$ as gradient . direction
+    g_prime_t_s = -f_0.dot(f_0)
+    # p in the Newton-direction: $s_N = -J(x_c)^{-1} F(x_c)$
+    s_0_n = gauss_elimination(j_0, -f_0)
+
+    # attempt Newton step
+    lambda_ls = 1.0
+    x_1 = x_0 + lambda_ls * s_0_n
+    f_1 = f(x_1)
+    g_1 = 1 / 2. * f_1.dot(f_1)
+    descent = alpha * lambda_ls * g_prime_t_s
+    satisfactory = g_1 <= g_0 + descent
+    if satisfactory:
+        # return full Newton step
+        return x_1
+
+    it_k = 0
+    while it_k < max_iter and not satisfactory:
+        # reduce lambda
+        it_k += 1
+        if lambda_ls == 1:
+            # first backtrack: quadratic fit
+            lambda_ls_prev = lambda_ls
+            lambda_temp = lambda_ls
+            lambda_ls = -g_prime_t_s / (
+                2 * (g_1 - g_0 - g_prime_t_s)
+            )
+            # guaranteed: lambda_ls < 0.5
+            if lambda_ls < 0.1:
+                lambda_ls = 0.1
+        elif lambda_ls < 1:
+            # subsequent backtrack: cubic fit
+            a, b = 1 / (lambda_ls - lambda_ls_prev) * np.array(
+                [[+1 / lambda_ls ** 2, - 1 / lambda_ls_prev ** 2],
+                 [- lambda_ls_prev / lambda_ls ** 2, +lambda_ls / lambda_ls_prev ** 2]]
+            ).dot(np.array(
+                [[g_2 - g_0 - g_prime_t_s * lambda_ls],
+                 [g_1 - g_0 - g_prime_t_s * lambda_ls_prev]]))
+            disc = b ** 2 - 3 * a * g_prime_t_s
+            if a == 0:
+                # actually quadratic
+                lambda_temp = -g_prime_t_s / (2 * b)
+            else:
+                # legitimate cubic
+                lambda_temp = (-b + np.sqrt(disc)) / (3 * a)
+            if lambda_temp > 1 / 2 * lambda_ls:
+                lambda_temp = 1 / 2 * lambda_ls
+            lambda_ls_prev = lambda_ls
+            f_1 = f_2
+            g_1 = g_2
+            if lambda_temp <= 0.1 * lambda_ls:
+                lambda_ls = 0.1 * lambda_ls
+            else:
+                lambda_ls = lambda_temp
+        x_2 = x_0 + lambda_ls * s_0_n
+        f_2 = f(x_2)
+        g_2 = 1 / 2. * f_2.dot(f_2)
+        descent = alpha * lambda_ls * g_prime_t_s
+        satisfactory = g_2 <= g_0 + descent
+    return x_2
+
+
+print('')
+x_0 = np.array([2., 0.5])
+x_1 = x_0
+for iteration in range(7):
+    x_1 = linesearch(f, j, x_1)
+    print(x_1)
