@@ -7,20 +7,11 @@ from numerik import nr_ls
 from numerik import gauss_elimination, lrpd, rref, ref, sdm
 import itertools
 import os
+from setup_results_log import notify_status_func, setup_log_file
 
 eps = np.finfo(float).eps
 np.set_printoptions(linewidth=200)
-if not os.path.exists('./logs'):
-    os.mkdir('./logs')
-logging.basicConfig(
-    level=logging.DEBUG,
-    format='%(asctime)s %(name)-12s %(levelname)-8s %(message)s',
-    datefmt='%m-%d %H:%M',
-    filename='./logs/log_bsp_pat_ue_03_2.log',
-    filemode='w')
-console = logging.StreamHandler()
-console.setLevel(logging.DEBUG)
-logging.getLogger('').addHandler(console)
+setup_log_file('log_bsp_pat_ue_03_2.log')
 
 # Modell feststellen
 z_l_v.use_pr_eos()
@@ -724,18 +715,6 @@ print(
 print(namen)
 stoech_m, indexes, nach_g_sortieren, k_2, nuij = stoech_matrix(
     atom_m, g_2, namen, None)
-nuij = np.array([
-    [+1, +2, +0, +0, -1, +0, +0, -1 / 2, +0],
-    [+1, +3, +0, -1, -1, +0, +0, +0, +0],
-    [-1, +1, +1, -1, +0, +0, +0, +0, +0],
-    [-1, -3, +0, +1, +1, +0, +0, +0, +0],
-    [+0, -4, -1, +2, +1, +0, +0, +0, +0],
-    [+0, -3 / 2, 0, 0, +0, +1, +0, +0, -1 / 2]
-]).T
-k_2 = k(t_ein_rwgs, g_2, nuij)
-for index, item in enumerate(k_2):
-    if item > 1:
-        nuij[:, index] = -nuij[:, index]
 k_2 = k(t_ein_rwgs, g_2, nuij)
 naus_2 = np.copy(n_2)
 naus_2_norm = naus_2 / sum(naus_2)  # Normalisieren

@@ -201,6 +201,7 @@ def nr_ls(x0, f, j, tol, max_it, inner_loop_condition,
         lambda_ls = 1.0
         accum_step += lambda_ls
         x_k_m_1 = x
+        f_val_k_m_1 = f_val
         progress_k_m_1 = progress_k
         if np.ndim(x) >= 1 and len(x) > 1:
             y = gauss_elimination(j_val, -f_val)
@@ -211,11 +212,13 @@ def nr_ls(x0, f, j, tol, max_it, inner_loop_condition,
         diff = x - x_k_m_1
         j_val = j(x)
         f_val = f(x)
+        restrictions_met = inner_loop_condition(x)
+        start_ls = f_val > f_val_k_m_1
         if np.ndim(x) > 0:
             magnitude_f = np.sqrt(f_val.T.dot(f_val))
         elif np.ndim(x) == 0:
             magnitude_f = np.sqrt(f_val**2)
-        if magnitude_f < tol and inner_loop_condition(x):
+        if magnitude_f < tol and restrictions_met:
             stop = True  # Procedure successful
         else:
             # Non-functional status notification
@@ -243,7 +246,7 @@ def nr_ls(x0, f, j, tol, max_it, inner_loop_condition,
                 # if form.progress_var.wasCanceled():
                 # stop = True
         while inner_it_j <= max_it and \
-                not inner_loop_condition(x) and \
+                not restrictions_met and \
                 not stop:
             # Backtrack if any conc < 0. Line search method.
             # Ref. http://dx.doi.org/10.1016/j.compchemeng.2013.06.013
@@ -263,6 +266,7 @@ def nr_ls(x0, f, j, tol, max_it, inner_loop_condition,
                                method_loops)
             # End non-functional notification
             method_loops[0] += 1
+            restrictions_met = inner_loop_condition(x)
     if stop and not divergent:
         progress_k = 100.0
     elif divergent:
@@ -293,7 +297,9 @@ def sdm(x0, f, j, tol, notify_status_func, inner_loop_condition=None):
     :param notify_status_func: logging function.
     :return: x, array with reduced gradient to tol level.
     """
-    def g(x_var): return np.asarray(f(x_var)).T.dot(np.asarray(f(x_var)))
+    def g(x_var):
+        f_val = np.asarray(f(x_var))
+        return f_val.T.dot(f_val)
     x = x0
     k = 1
     stop = False
