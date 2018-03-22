@@ -5,7 +5,7 @@ Optimization and Nonlinear Equations. Philadelphia: SIAM, 1996.
 
 """
 import numpy as np
-from numerik import gauss_elimination
+from numerik import line_search, gauss_elimination
 from setup_results_log import setup_log_file, notify_status_func, log_line
 import logging
 
@@ -221,76 +221,9 @@ log_var_by_name('ineq_rhs_criterion')
 log_var_by_name('satisfactory')
 
 
-def linesearch(fun, jac, x_0, max_iter=50, alpha=1e-4):
-    f_0 = f(x_0)
-    j_0 = j(x_0)
-    g_0 = 1 / 2. * f_0.dot(f_0)
-    # $\nabla f(x_c)^T s^N = -F(x_c)^T F(x_c)$
-    # initslope: expressed (p344) $g^T p$ as gradient . direction
-    g_prime_t_s = -f_0.dot(f_0)
-    # p in the Newton-direction: $s_N = -J(x_c)^{-1} F(x_c)$
-    s_0_n = gauss_elimination(j_0, -f_0)
-
-    # attempt Newton step
-    lambda_ls = 1.0
-    x_1 = x_0 + lambda_ls * s_0_n
-    f_1 = f(x_1)
-    g_1 = 1 / 2. * f_1.dot(f_1)
-    descent = alpha * lambda_ls * g_prime_t_s
-    satisfactory = g_1 <= g_0 + descent
-    if satisfactory:
-        # return full Newton step
-        return x_1
-
-    it_k = 0
-    while it_k < max_iter and not satisfactory:
-        # reduce lambda
-        it_k += 1
-        if lambda_ls == 1:
-            # first backtrack: quadratic fit
-            lambda_ls_prev = lambda_ls
-            lambda_temp = lambda_ls
-            lambda_ls = -g_prime_t_s / (
-                2 * (g_1 - g_0 - g_prime_t_s)
-            )
-            # guaranteed: lambda_ls < 0.5
-            if lambda_ls < 0.1:
-                lambda_ls = 0.1
-        elif lambda_ls < 1:
-            # subsequent backtrack: cubic fit
-            a, b = 1 / (lambda_ls - lambda_ls_prev) * np.array(
-                [[+1 / lambda_ls ** 2, - 1 / lambda_ls_prev ** 2],
-                 [- lambda_ls_prev / lambda_ls ** 2, +lambda_ls / lambda_ls_prev ** 2]]
-            ).dot(np.array(
-                [[g_2 - g_0 - g_prime_t_s * lambda_ls],
-                 [g_1 - g_0 - g_prime_t_s * lambda_ls_prev]]))
-            disc = b ** 2 - 3 * a * g_prime_t_s
-            if a == 0:
-                # actually quadratic
-                lambda_temp = -g_prime_t_s / (2 * b)
-            else:
-                # legitimate cubic
-                lambda_temp = (-b + np.sqrt(disc)) / (3 * a)
-            if lambda_temp > 1 / 2 * lambda_ls:
-                lambda_temp = 1 / 2 * lambda_ls
-            lambda_ls_prev = lambda_ls
-            f_1 = f_2
-            g_1 = g_2
-            if lambda_temp <= 0.1 * lambda_ls:
-                lambda_ls = 0.1 * lambda_ls
-            else:
-                lambda_ls = lambda_temp
-        x_2 = x_0 + lambda_ls * s_0_n
-        f_2 = f(x_2)
-        g_2 = 1 / 2. * f_2.dot(f_2)
-        descent = alpha * lambda_ls * g_prime_t_s
-        satisfactory = g_2 <= g_0 + descent
-    return x_2
-
-
 print('')
 x_0 = np.array([2., 0.5])
 x_1 = x_0
 for iteration in range(7):
-    x_1 = linesearch(f, j, x_1)
+    x_1 = line_search(f, j, x_1)
     print(x_1)
