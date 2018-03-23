@@ -173,7 +173,7 @@ def nr_ls(x0, f, j, tol, max_it, inner_loop_condition,
     inner_it_j = 0
     j_val = j(x)
     f_val = f(x)
-    y = 1
+    y = np.empty_like(f_val)
     magnitude_f = np.sqrt(f_val**2)
     diff = np.nan
     if np.ndim(x) > 0:
@@ -184,7 +184,7 @@ def nr_ls(x0, f, j, tol, max_it, inner_loop_condition,
     elif np.ndim(x) == 0:
         pass  # defined above
     # Line search variable lambda
-    lambda_ls = 0.0
+    lambda_ls = 1.0
     accum_step = 0.0
     # For progress bar, use log scale to compensate for quadratic convergence
     log10_to_o_max_magnitude_f = np.log10(tol / magnitude_f)
@@ -206,20 +206,17 @@ def nr_ls(x0, f, j, tol, max_it, inner_loop_condition,
         accum_step += lambda_ls
         x_k_m_1 = x
         progress_k_m_1 = progress_k
-        if np.ndim(x) >= 1 and len(x) > 1:
-            y = gauss_elimination(j_val, -f_val)
-        elif np.ndim(x) < 1 or np.size(x) == 1:
-            y = 1 / j_val * -f_val
-        # First attempt without backtracking
-        x = x + lambda_ls * y
+        # First attempt without backtracking. Continue line search
+        # until satisfactory descent.
+        x, f_val, g_val, y, j_val, \
+            ls_it, lambda_ls = line_search(
+            f, j, x, known_f_c=f_val, known_j_c=j_val,
+            max_iter=max_it, alpha=1e-4,
+            additional_restrictions=inner_loop_condition)
+        magnitude_f = np.sqrt(2 * g_val)
+        inner_it_j += ls_it
         diff = x - x_k_m_1
-        j_val = j(x)
-        f_val = f(x)
         restrictions_met = inner_loop_condition(x)
-        if np.ndim(x) > 0:
-            magnitude_f = np.sqrt(f_val.T.dot(f_val))
-        elif np.ndim(x) == 0:
-            magnitude_f = np.sqrt(f_val**2)
         if magnitude_f < tol and restrictions_met:
             stop = True  # Procedure successful
         else:
@@ -235,7 +232,6 @@ def nr_ls(x0, f, j, tol, max_it, inner_loop_condition,
             progress_k = (1.0 - np.log10(tol / magnitude_f) /
                           log10_to_o_max_magnitude_f) * 100.0
             if np.isnan(magnitude_f) or np.isinf(magnitude_f):
-                # TODO: Re-implement steepest descent
                 stop = True  # Divergent method
                 divergent = True
                 progress_k = 0.0
@@ -253,14 +249,17 @@ def nr_ls(x0, f, j, tol, max_it, inner_loop_condition,
             # Backtrack if any conc < 0. Line search method.
             # Ref. http://dx.doi.org/10.1016/j.compchemeng.2013.06.013
             inner_it_j += 1
-            lambda_ls = lambda_ls / 2.0
             accum_step += -lambda_ls
             x = x_k_m_1
             progress_k = progress_k_m_1
-            x = x + lambda_ls * y
+            x, f_val, g_val, y, j_val, \
+                ls_it, lambda_ls = line_search(
+                    f, j, x, known_f_c=f_val, known_j_c=j_val,
+                    max_iter=max_it, alpha=1e-4,
+                    additional_restrictions=inner_loop_condition)
+            magnitude_f = np.sqrt(2 * g_val)
+            inner_it_j += ls_it
             diff = x - x_k_m_1
-            j_val = j(x)
-            f_val = f(x)
             # Non-functional status notification
             notify_status_func(progress_k, stop, outer_it_k,
                                inner_it_j, lambda_ls, accum_step,
@@ -370,7 +369,8 @@ def sdm(x0, f, j, tol, notify_status_func, inner_loop_condition=None):
     return x
 
 
-def line_search(fun, jac, x_c, max_iter=50, alpha=1e-4):
+def line_search(fun, jac, x_c, known_f_c=None, known_j_c=None,
+                max_iter=50, alpha=1e-4, additional_restrictions=None):
     """Line search algorithm
 
     Jr., J. E. Dennis ; Schnabel, Robert B.: Numerical Methods for Unconstrained
@@ -381,52 +381,75 @@ def line_search(fun, jac, x_c, max_iter=50, alpha=1e-4):
     :param x_c: initial estimate for x+
     :param max_iter: maximum iterations
     :param alpha: stringence constant in (0,1/2)
-    :return: x+ value = x_c + lambda p  that satisfies
+    :return: x+, f(x+), g(x+), s_0_n, it_k, lambda_ls such that
+    x+ = x_c + lambda p  satisfies
     f(x+) <= f(xc) + alpha lambda (nabla f(x_0))^T s_0^N
     """
-    f_0 = fun(x_c)
-    j_0 = jac(x_c)
-    g_0 = 1 / 2. * f_0.dot(f_0)
+    if known_f_c is not None:
+        f_0 = known_f_c
+    else:
+        f_0 = fun(x_c)
+    if known_j_c is not None:
+        j_0 = known_j_c
+    else:
+        j_0 = jac(x_c)
+
+    def multiply(factor_a, factor_b):
+        if np.ndim(x_c) >= 1 and len(x_c) > 1:
+            return factor_a.dot(factor_b)
+        elif np.ndim(x_c) < 1 or np.size(x_c) == 1:
+            return factor_a * factor_b
+
+    def solve_ax_equal_b(factor_a, term_b):
+        if np.ndim(x_c) >= 1 and len(x_c) > 1:
+            return gauss_elimination(factor_a, term_b)
+        elif np.ndim(x_c) < 1 or np.size(x_c) == 1:
+            return 1 / factor_a * term_b
+
+    # p in the Newton-direction: $s_N = -J(x_c)^{-1} F(x_c)$
+    s_0_n = solve_ax_equal_b(j_0, -f_0)
     # $\nabla f(x_c)^T s^N = -F(x_c)^T F(x_c)$
     # initslope: expressed (p344) $g^T p$ as gradient . direction
-    g_prime_t_s = -f_0.dot(f_0)
-    # p in the Newton-direction: $s_N = -J(x_c)^{-1} F(x_c)$
-    s_0_n = gauss_elimination(j_0, -f_0)
+    g_0 = 1 / 2. * multiply(f_0, f_0)
+    g_prime_t_s = -multiply(f_0, f_0)
 
     # attempt Newton step
+    it_k = 0
     lambda_ls = 1.0
     lambda_ls_prev = lambda_ls
     x_1 = x_c + lambda_ls * s_0_n
     f_1 = fun(x_1)
-    g_1 = 1 / 2. * f_1.dot(f_1)
+    g_1 = 1 / 2. * multiply(f_1, f_1)
     descent = alpha * lambda_ls * g_prime_t_s
-    satisfactory = g_1 <= g_0 + descent
+    satisfactory = g_1 < g_0 + descent
+    if additional_restrictions is not None:
+        satisfactory = satisfactory and additional_restrictions(x_1)
     if satisfactory:
         # return full Newton step
-        return x_1
+        j_1 = jac(x_1)
+        return x_1, f_1, g_1, s_0_n, j_1, it_k, lambda_ls
 
-    it_k = 0
     x_2 = np.empty_like(x_1)
+    f_2 = np.empty_like(f_1)
     g_2 = np.empty_like(g_1)
     while it_k < max_iter and not satisfactory:
         # reduce lambda
         it_k += 1
         if lambda_ls == 1:
             # first backtrack: quadratic fit
-            lambda_ls = -g_prime_t_s / (
+            lambda_temp = -g_prime_t_s / (
                 2 * (g_1 - g_0 - g_prime_t_s)
             )
-            # guaranteed: lambda_ls < 0.5
-            if lambda_ls < 0.1:
-                lambda_ls = 0.1
         elif lambda_ls < 1:
-            # subsequent backtrack: cubic fit
+            # subsequent backtracks: cubic fit
             a, b = 1 / (lambda_ls - lambda_ls_prev) * np.array(
                 [[+1 / lambda_ls ** 2, - 1 / lambda_ls_prev ** 2],
                  [- lambda_ls_prev / lambda_ls ** 2, +lambda_ls / lambda_ls_prev ** 2]]
             ).dot(np.array(
                 [[g_2 - g_0 - g_prime_t_s * lambda_ls],
                  [g_1 - g_0 - g_prime_t_s * lambda_ls_prev]]))
+            a = a.item()
+            b = b.item()
             disc = b ** 2 - 3 * a * g_prime_t_s
             if a == 0:
                 # actually quadratic
@@ -436,15 +459,18 @@ def line_search(fun, jac, x_c, max_iter=50, alpha=1e-4):
                 lambda_temp = (-b + np.sqrt(disc)) / (3 * a)
             if lambda_temp > 1 / 2 * lambda_ls:
                 lambda_temp = 1 / 2 * lambda_ls
-            lambda_ls_prev = lambda_ls
-            g_1 = g_2
-            if lambda_temp <= 0.1 * lambda_ls:
-                lambda_ls = 0.1 * lambda_ls
-            else:
-                lambda_ls = lambda_temp
+        lambda_ls_prev = lambda_ls
+        g_1 = g_2
+        if lambda_temp <= 0.1 * lambda_ls:
+            lambda_ls = 0.1 * lambda_ls
+        else:
+            lambda_ls = lambda_temp
         x_2 = x_c + lambda_ls * s_0_n
         f_2 = fun(x_2)
-        g_2 = 1 / 2. * f_2.dot(f_2)
+        g_2 = 1 / 2. * multiply(f_2, f_2)
         descent = alpha * lambda_ls * g_prime_t_s
-        satisfactory = g_2 <= g_0 + descent
-    return x_2
+        satisfactory = g_2 < g_0 + descent
+        if additional_restrictions is not None:
+            satisfactory = satisfactory and additional_restrictions(x_2)
+    j_2 = jac(x_2)
+    return x_2, f_2, g_2, s_0_n, j_2, it_k, lambda_ls

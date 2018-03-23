@@ -23,7 +23,7 @@ def notify_status_func(progress_k, stop_value, k,
                        x, diff, f_val, j_val, lambda_ls_y,
                        method_loops, g_min=np.nan, g1=np.nan):
     y = lambda_ls_y
-    if np.ndim(x) > 0:
+    if np.size(x) > 1:
         diff_str = str(np.sqrt(diff.T.dot(diff)))
         x_str = '[' + ','.join(map(str, x)) + ']'
         f_val_str = '[' + ','.join(map(str, f_val)) + ']'
