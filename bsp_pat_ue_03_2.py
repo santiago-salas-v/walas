@@ -417,7 +417,7 @@ def r_entspannung(k_j, n_0, x_mal, temp_0, betrieb='isotherm'):
                 nr_ls(x0=-eps,
                       f=lambda xi: gg_abstaende(k_j[j], nuij[:, j], n, xi),
                       j=lambda xi: jac_gg_abstaende(k_j[j], nuij[:, j], n, xi),
-                      tol=1e-9,
+                      tol=1e-5,
                       max_it=1000,
                       inner_loop_condition=lambda xi:
                       all([item >= 0 for item in
@@ -475,6 +475,10 @@ def jac_fj_0(xi, n_0, nuij):
     n[n==0] = eps
     n_c = nujk.size
     n_t = sum(n)
+    pi = np.product(
+        np.power(n / n_t, nuij.T),
+        axis=nuij.ndim - 1
+    )
     for j in range(n_r):
         for i in range(n_r):
             for k_st, n_k in enumerate(n):
@@ -483,7 +487,8 @@ def jac_fj_0(xi, n_0, nuij):
                 else:
                     # add 0, since all n_k=0 do not remain in derivatives
                     pass
-            jac[j, i] = jac[j, i] - sum(nujk[j, :]) * sum(nujk[i, :]) / n_t
+            jac[j, i] = pi[j] * (
+                    jac[j, i] - sum(nujk[j, :]) * sum(nujk[i, :]) / n_t)
     logging.debug('j=' + str(jac.tolist()))
     if n_r == 1:
         # 1 R: return scalar
@@ -520,23 +525,31 @@ naus_0[naus_0 == 0] = eps
 naus_0_norm = naus_0 / sum(naus_0)  # Normalisieren
 # Entspannung
 _, _, xi_0, _ = r_entspannung(k_1, naus_0_norm, 1, t_aus_rdampfr)
-# denormalize
-#xi_0 = xi_0 * sum(naus_0)
-# Steifster Gradient
-xi_sdm = sdm(
-    xi_0,
-    lambda xi: gg_abstaende(k_1, nuij, naus_0_norm, xi),
-    lambda xi: jac_gg_abstaende(k_1, nuij, naus_0_norm, xi),
-    1e-4,
-    notify_status_func=notify_status_func
-)
-
 # Newton-Raphson
 progress_k, stop, outer_it_k, outer_it_j, \
     lambda_ls, accum_step, x, \
     diff, f_val, lambda_ls_y, \
     method_loops = \
-    nr_ls(x0=xi_sdm,
+    nr_ls(x0=xi_0,
+          f=lambda xi: gg_abstaende(k_1, nuij, naus_0_norm, xi),
+          j=lambda xi: jac_gg_abstaende(k_1, nuij, naus_0_norm, xi),
+          tol=1e-12,
+          max_it=1000,
+          inner_loop_condition=lambda x_vec:
+          all([item >= 0 for item in
+               naus_0_norm + nuij.dot(x_vec)]),
+          notify_status_func=notify_status_func,
+          method_loops=[0, 0],
+          process_func_handle=lambda: logging.debug('no progress'))
+# denormalize
+xi_accum_1 = x * sum(naus_0)
+n_1 = (n_0 + nuij.dot(xi_accum_1))
+# with actual size
+progress_k, stop, outer_it_k, outer_it_j, \
+    lambda_ls, accum_step, x, \
+    diff, f_val, lambda_ls_y, \
+    method_loops = \
+    nr_ls(x0=xi_accum_1,
           f=lambda xi: fj_0(xi, naus_0, k_1, nuij),
           j=lambda xi: jac_fj_0(xi, naus_0, nuij),
           tol=1e-12,
@@ -547,7 +560,8 @@ progress_k, stop, outer_it_k, outer_it_j, \
           notify_status_func=notify_status_func,
           method_loops=[0, 0],
           process_func_handle=lambda: logging.debug('no progress'))
-xi_accum_1 = x #* sum(naus_0)
+# actual
+xi_accum_1 = x
 n_1 = (n_0 + nuij.dot(xi_accum_1))
 
 for komb in n_1:
