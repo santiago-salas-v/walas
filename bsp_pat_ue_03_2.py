@@ -663,9 +663,11 @@ def jac_gg_abst_norm_sq(xi, n_0, k_t, nuij):
             factor_ji = s_nujknuik_nk_c[j, i] - \
                 sum(nuji[j, :]) * sum(nuji[i, :]) / n_t
             if k_pir_nt[j] > pip[j]:
-                jac[j, i] = 2*(1 - pip[j] / k_pir_nt[j])*(- pip[j] / k_pir_nt[j] * factor_ji)
+                jac[j, i] = 2 * (1 - pip[j] / k_pir_nt[j]) * \
+                    (- pip[j] / k_pir_nt[j] * factor_ji)
             elif k_pir_nt[j] < pip[j]:
-                jac[j, i] = 2*(k_pir_nt[j] / pip[j] - 1)*(- k_pir_nt[j] / pip[j] * factor_ji)
+                jac[j, i] = 2 * (k_pir_nt[j] / pip[j] - 1) * \
+                    (- k_pir_nt[j] / pip[j] * factor_ji)
             elif k_pir_nt[j] == pip[j]:
                 jac[j, i] = eps
     logging.debug('j=' + str(jac.tolist()))
@@ -706,38 +708,15 @@ naus_0_norm = naus_0 / sum(naus_0)  # Normalisieren
 _, _, xi_0, _ = r_entspannung(k_1, naus_0_norm, 1, t_aus_rdampfr)
 # denormalize
 xi_0 = xi_0 * sum(naus_0)
-# Steifster Abstieg
-xi_sdm = sdm(
-    xi_0,
-    lambda xi: fj_0(xi, naus_0, k_1, nuij),
-    lambda xi: jac_fj_0(xi, naus_0, nuij),
-    1e-9,
-    notify_status_func=notify_status_func
-)
-# with actual size
+# Newton Raphson
 progress_k, stop, outer_it_k, outer_it_j, \
     lambda_ls, accum_step, x, \
     diff, f_val, lambda_ls_y, \
     method_loops = \
-    nr_ls(x0=xi_sdm,
-          f=lambda xi: fj_0(xi, naus_0, k_1, nuij),
-          j=lambda xi: jac_fj_0(xi, naus_0, nuij),
-          tol=1e-12,
-          max_it=1000,
-          inner_loop_condition=lambda x_vec:
-          all([item >= 0 for item in
-               naus_0 + nuij.dot(x_vec)]),
-          notify_status_func=notify_status_func,
-          method_loops=[0, 0],
-          process_func_handle=lambda: logging.debug('no progress'))
-progress_k, stop, outer_it_k, outer_it_j, \
-    lambda_ls, accum_step, x, \
-    diff, f_val, lambda_ls_y, \
-    method_loops = \
-    nr_ls(x0= xi_0,
+    nr_ls(x0=xi_0,
           f=lambda xi: gg_abst_norm_sq(xi, naus_0, k_1, nuij),
           j=lambda xi: jac_gg_abst_norm_sq(xi, naus_0, k_1, nuij),
-          tol=1e-12,
+          tol=1e-6,
           max_it=1000,
           inner_loop_condition=lambda xi:
           all([item >= 0 for item in
@@ -845,34 +824,23 @@ naus_2_norm = naus_2 / sum(naus_2)  # Normalisieren
 _, _, xi_0, _ = r_entspannung(k_2, naus_2_norm, 1, t_ein_rwgs)
 # xi_0[abs(xi_0) <= eps] = 0  # values indistinguishible from 0 remain 0
 # Normalisierung beheben
-#xi_0 = xi_0 * sum(naus_2)
-# Steifster Gradient
-xi_sdm = sdm(
-    xi_0,
-    lambda xi: fj_0(xi, n_1 / sum(n_1), k_2, nuij),
-    lambda xi: jac_fj_0(xi, n_1 / sum(n_1), nuij),
-    1e-4,
-    notify_status_func=notify_status_func,
-    inner_loop_condition=lambda xi:
-    all([item >= 0 for item in
-         n_1 / sum(n_1) + nuij.dot(xi)])
-)
-# Newton-Raphson
+xi_0 = xi_0 * sum(naus_2)
+# Newton Raphson
 progress_k, stop, outer_it_k, outer_it_j, \
     lambda_ls, accum_step, x, \
     diff, f_val, lambda_ls_y, \
     method_loops = \
-    nr_ls(x0=xi_sdm,
-          f=lambda xi: fj_0(xi, n_1, k_2, nuij),
-          j=lambda xi: jac_fj_0(xi, n_1, nuij),
-          tol=1e-12,
+    nr_ls(x0=xi_0,
+          f=lambda xi: gg_abst_norm_sq(xi, n_1, k_2, nuij),
+          j=lambda xi: jac_gg_abst_norm_sq(xi, n_1, k_2, nuij),
+          tol=1e-6,
           max_it=1000,
-          inner_loop_condition=lambda x_vec:
+          inner_loop_condition=lambda xi:
           all([item >= 0 for item in
-               n_1 + nuij.dot(x_vec)]),
+               n_1 + nuij.dot(xi)]),
           notify_status_func=notify_status_func,
           method_loops=[0, 0],
-          process_func_handle=None)
+          process_func_handle=lambda: logging.debug('no progress'))
 
 for item in (n_1 + nuij.dot(x)) / 1000.:
     print(item)

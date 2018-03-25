@@ -187,7 +187,7 @@ def nr_ls(x0, f, j, tol, max_it, inner_loop_condition,
     lambda_ls = 1.0
     accum_step = 0.0
     # For progress bar, use exp scale to compensate for quadratic convergence
-    progress_k = np.exp(-magnitude_f + tol)
+    progress_k = np.exp(-magnitude_f + tol) * 100.
     stop = magnitude_f < tol  # stop if already fulfilling condition
     divergent = False
     # Non-functional status notification
@@ -218,7 +218,7 @@ def nr_ls(x0, f, j, tol, max_it, inner_loop_condition,
         else:
             # For progress use log scale to compensate for quadratic
             # convergence
-            progress_k = np.exp(-magnitude_f + tol)
+            progress_k = np.exp(-magnitude_f + tol) * 100.
             if np.isnan(magnitude_f) or np.isinf(magnitude_f):
                 stop = True  # Divergent method
                 divergent = True
@@ -367,9 +367,9 @@ def line_search(fun, jac, x_c, known_f_c=None, known_j_c=None,
     s_0_n = solve_ax_equal_b(j_0, -f_0)
     # relative length of p as calculated in the stopping routine
     if np.size(x_c) == 1:
-        rellength = s_0_n / x_c
+        rellength = abs(s_0_n / x_c)
     else:
-        rellength = max(s_0_n / max(x_c))
+        rellength = max(abs(s_0_n) / max(abs(x_c)))
     # minimum allowable step length
     lambda_min = tol / rellength
     # $\nabla f(x_c)^T s^N = -F(x_c)^T F(x_c)$
@@ -396,6 +396,26 @@ def line_search(fun, jac, x_c, known_f_c=None, known_j_c=None,
     while backtrack_count < max_iter and not stop:
         x_2 = x_c + lambda_ls * s_0_n
         f_2 = fun(x_2)
+        nan_result = np.any(np.isnan(f_2))
+        while nan_result:  # and lambda_ls >= lambda_min:
+            # handle case in which f_2 throws nan as rough line search
+            accum_step -= lambda_ls
+            backtrack_count += 1
+            lambda_ls = 0.1 * lambda_ls
+            x_1 = x_c + lambda_ls * s_0_n
+            f_1 = fun(x_1)
+            lambda_prev = lambda_ls
+            lambda_ls = 0.5 * lambda_ls
+            x_2 = x_c + lambda_ls * s_0_n
+            f_2 = fun(x_2)
+            nan_result = np.any(np.isnan(f_1)) or \
+                np.any(np.isnan(f_2))
+            accum_step += lambda_ls
+            if lambda_ls < lambda_min:
+                # failed to find suitable lambda
+                # outer_it_stop = True
+                # stop = True
+                pass
         g_2 = 1 / 2. * scalar_prod(f_2, f_2)
         descent = alpha * lambda_ls * g_prime_t_s
         satisfactory = g_2 <= g_0 + descent
@@ -406,12 +426,14 @@ def line_search(fun, jac, x_c, known_f_c=None, known_j_c=None,
             stop = satisfactory and additional_restrictions(x_2)
         if lambda_ls < lambda_min:
             # satisfactory x_2 cannot be found sufficiently distinct from x_c
-            stop = True
+            # outer_it_stop = True
+            # stop = True
+            pass
         # Non-functional status notification
         if notify_status_func is not None:
             diff = (lambda_ls - lambda_prev) * s_0_n
             inner_it_j = backtrack_count
-            progress_k = (1 - np.exp(-g_2 / (g_0 + descent))) * 100.
+            progress_k = np.exp(-g_2 / (g_0 + descent)) * 100.
             g_min = descent
             notify_status_func(progress_k, outer_it_stop and stop, outer_it,
                                inner_it_j, lambda_ls, accum_step,
