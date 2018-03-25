@@ -186,10 +186,8 @@ def nr_ls(x0, f, j, tol, max_it, inner_loop_condition,
     # Line search variable lambda
     lambda_ls = 1.0
     accum_step = 0.0
-    # For progress bar, use log scale to compensate for quadratic convergence
-    log10_to_o_max_magnitude_f = np.log10(tol / magnitude_f)
-    progress_k = (1.0 - np.log10(tol / magnitude_f) /
-                  log10_to_o_max_magnitude_f) * 100.0
+    # For progress bar, use exp scale to compensate for quadratic convergence
+    progress_k = np.exp(-magnitude_f + tol)
     stop = magnitude_f < tol  # stop if already fulfilling condition
     divergent = False
     # Non-functional status notification
@@ -201,36 +199,26 @@ def nr_ls(x0, f, j, tol, max_it, inner_loop_condition,
     while outer_it_k <= max_it and not stop:
         outer_it_k += 1
         method_loops[1] += 1
-        inner_it_j = 0
-        lambda_ls = 1.0
-        accum_step += lambda_ls
         x_k_m_1 = x
         progress_k_m_1 = progress_k
         # First attempt without backtracking. Continue line search
         # until satisfactory descent.
-        x, f_val, g_val, y, j_val, \
-            ls_it, lambda_ls = line_search(
-            f, j, x, known_f_c=f_val, known_j_c=j_val,
-            max_iter=max_it, alpha=1e-4,
-            additional_restrictions=inner_loop_condition)
-        magnitude_f = np.sqrt(2 * g_val)
-        inner_it_j += ls_it
+        x, f_val, g_val, y, j_val, ls_it, \
+            lambda_ls, magnitude_f, overall_stop, accum_step = \
+            line_search(
+                f, j, x, known_f_c=f_val, known_j_c=j_val,
+                max_iter=max_it, alpha=1e-4, tol=tol,
+                additional_restrictions=inner_loop_condition,
+                notify_status_func=notify_status_func,
+                outer_it=outer_it_k, accum_step=accum_step)
+        inner_it_j = ls_it
         diff = x - x_k_m_1
-        restrictions_met = inner_loop_condition(x)
-        if magnitude_f < tol and restrictions_met:
+        if overall_stop:
             stop = True  # Procedure successful
         else:
-            # Non-functional status notification
-            notify_status_func(progress_k, stop, outer_it_k,
-                               inner_it_j, lambda_ls, accum_step,
-                               x, diff, f_val, j_val, lambda_ls * y,
-                               method_loops)
-            # End non-functional notification
-
             # For progress use log scale to compensate for quadratic
             # convergence
-            progress_k = (1.0 - np.log10(tol / magnitude_f) /
-                          log10_to_o_max_magnitude_f) * 100.0
+            progress_k = np.exp(-magnitude_f + tol)
             if np.isnan(magnitude_f) or np.isinf(magnitude_f):
                 stop = True  # Divergent method
                 divergent = True
@@ -243,31 +231,6 @@ def nr_ls(x0, f, j, tol, max_it, inner_loop_condition,
                 # End non-functional processing
                 # if form.progress_var.wasCanceled():
                 # stop = True
-        while inner_it_j <= max_it and \
-                not restrictions_met and \
-                not stop:
-            # Backtrack if any conc < 0. Line search method.
-            # Ref. http://dx.doi.org/10.1016/j.compchemeng.2013.06.013
-            inner_it_j += 1
-            accum_step += -lambda_ls
-            x = x_k_m_1
-            progress_k = progress_k_m_1
-            x, f_val, g_val, y, j_val, \
-                ls_it, lambda_ls = line_search(
-                    f, j, x, known_f_c=f_val, known_j_c=j_val,
-                    max_iter=max_it, alpha=1e-4,
-                    additional_restrictions=inner_loop_condition)
-            magnitude_f = np.sqrt(2 * g_val)
-            inner_it_j += ls_it
-            diff = x - x_k_m_1
-            # Non-functional status notification
-            notify_status_func(progress_k, stop, outer_it_k,
-                               inner_it_j, lambda_ls, accum_step,
-                               x, diff, f_val, j_val, lambda_ls * y,
-                               method_loops)
-            # End non-functional notification
-            method_loops[0] += 1
-            restrictions_met = inner_loop_condition(x)
     if stop and not divergent:
         progress_k = 100.0
     elif divergent:
@@ -370,20 +333,31 @@ def sdm(x0, f, j, tol, notify_status_func, inner_loop_condition=None):
 
 
 def line_search(fun, jac, x_c, known_f_c=None, known_j_c=None,
-                max_iter=50, alpha=1e-4, additional_restrictions=None):
+                max_iter=50, alpha=1e-4, tol=1e-8,
+                additional_restrictions=None, notify_status_func=None,
+                outer_it=0, accum_step=0):
     """Line search algorithm
 
     Jr., J. E. Dennis ; Schnabel, Robert B.: Numerical Methods for Unconstrained
     Optimization and Nonlinear Equations. Philadelphia: SIAM, 1996.
 
+    Returns x+, f(x+), g(x+), s_0_n, j(x+) such that x+ = x_c + lambda s_0_n satisfies \
+        f(x+) <= f(xc) + alpha lambda (nabla f(x_0))^T s_0^N
+
     :param fun: function
     :param jac: jacobian
+    :param known_f_c: if already calculated, j_c
+    :param known_j_c: if already calculated, j_c
     :param x_c: initial estimate for x+
     :param max_iter: maximum iterations
     :param alpha: stringence constant in (0,1/2)
-    :return: x+, f(x+), g(x+), s_0_n, it_k, lambda_ls such that
-    x+ = x_c + lambda p  satisfies
-    f(x+) <= f(xc) + alpha lambda (nabla f(x_0))^T s_0^N
+    :param tol: step tolerance
+    :param additional_restrictions: optional restrictions imposed on x. Line search when False.
+    :param notify_status_func: optional function to log result
+    :param accum_step: optional accumulated step count
+    :param outer_it: optional initial iteration count
+    :return: x+, f(x+), g(x+), s_0_n, j(x+), backtrack_count, lambda_ls, \
+        magnitude_f, outer_it_stop, accum_step
     """
     if known_f_c is not None:
         f_0 = known_f_c
@@ -394,83 +368,114 @@ def line_search(fun, jac, x_c, known_f_c=None, known_j_c=None,
     else:
         j_0 = jac(x_c)
 
-    def multiply(factor_a, factor_b):
-        if np.ndim(x_c) >= 1 and len(x_c) > 1:
+    def scalar_prod(factor_a, factor_b):
+        if np.size(x_c) > 1:
             return factor_a.dot(factor_b)
-        elif np.ndim(x_c) < 1 or np.size(x_c) == 1:
+        elif np.size(x_c) == 1:
             return factor_a * factor_b
 
     def solve_ax_equal_b(factor_a, term_b):
-        if np.ndim(x_c) >= 1 and len(x_c) > 1:
+        if np.size(x_c) > 1:
             return gauss_elimination(factor_a, term_b)
-        elif np.ndim(x_c) < 1 or np.size(x_c) == 1:
+        elif np.size(x_c) == 1:
             return 1 / factor_a * term_b
 
     # p in the Newton-direction: $s_N = -J(x_c)^{-1} F(x_c)$
     s_0_n = solve_ax_equal_b(j_0, -f_0)
+    # relative length of p as calculated in the stopping routine
+    if np.size(x_c) == 1:
+        rellength = s_0_n / x_c
+    else:
+        rellength = max(s_0_n / max(x_c))
+    # minimum allowable step length
+    lambda_min = tol / rellength
     # $\nabla f(x_c)^T s^N = -F(x_c)^T F(x_c)$
     # initslope: expressed (p344) $g^T p$ as gradient . direction
-    g_0 = 1 / 2. * multiply(f_0, f_0)
-    g_prime_t_s = -multiply(f_0, f_0)
+    g_0 = 1 / 2. * scalar_prod(f_0, f_0)
+    g_prime_t_s = -scalar_prod(f_0, f_0)
 
-    # attempt Newton step
-    it_k = 0
+    # first attempt full Newton step
     lambda_ls = 1.0
-    lambda_ls_prev = lambda_ls
-    x_1 = x_c + lambda_ls * s_0_n
-    f_1 = fun(x_1)
-    g_1 = 1 / 2. * multiply(f_1, f_1)
-    descent = alpha * lambda_ls * g_prime_t_s
-    satisfactory = g_1 < g_0 + descent
-    if additional_restrictions is not None:
-        satisfactory = satisfactory and additional_restrictions(x_1)
-    if satisfactory:
-        # return full Newton step
-        j_1 = jac(x_1)
-        return x_1, f_1, g_1, s_0_n, j_1, it_k, lambda_ls
+    # add current lambda to accumulated steps
+    accum_step += lambda_ls
 
-    x_2 = np.empty_like(x_1)
-    f_2 = np.empty_like(f_1)
-    g_2 = np.empty_like(g_1)
-    while it_k < max_iter and not satisfactory:
-        # reduce lambda
-        it_k += 1
-        if lambda_ls == 1:
-            # first backtrack: quadratic fit
-            lambda_temp = -g_prime_t_s / (
-                2 * (g_1 - g_0 - g_prime_t_s)
-            )
-        elif lambda_ls < 1:
-            # subsequent backtracks: cubic fit
-            a, b = 1 / (lambda_ls - lambda_ls_prev) * np.array(
-                [[+1 / lambda_ls ** 2, - 1 / lambda_ls_prev ** 2],
-                 [- lambda_ls_prev / lambda_ls ** 2, +lambda_ls / lambda_ls_prev ** 2]]
-            ).dot(np.array(
-                [[g_2 - g_0 - g_prime_t_s * lambda_ls],
-                 [g_1 - g_0 - g_prime_t_s * lambda_ls_prev]]))
-            a = a.item()
-            b = b.item()
-            disc = b ** 2 - 3 * a * g_prime_t_s
-            if a == 0:
-                # actually quadratic
-                lambda_temp = -g_prime_t_s / (2 * b)
-            else:
-                # legitimate cubic
-                lambda_temp = (-b + np.sqrt(disc)) / (3 * a)
-            if lambda_temp > 1 / 2 * lambda_ls:
-                lambda_temp = 1 / 2 * lambda_ls
-        lambda_ls_prev = lambda_ls
-        g_1 = g_2
-        if lambda_temp <= 0.1 * lambda_ls:
-            lambda_ls = 0.1 * lambda_ls
-        else:
-            lambda_ls = lambda_temp
+    # init other variables
+    backtrack_count = 0
+    lambda_temp = lambda_ls
+    lambda_prev = lambda_ls
+    x_2 = np.empty_like(x_c)
+    f_2 = np.empty_like(f_0)
+    g_2 = np.empty_like(g_0)
+    g_1 = np.empty_like(g_0)
+    magnitude_f = np.empty_like(lambda_ls)
+    stop = False
+    outer_it_stop = False
+    while backtrack_count < max_iter and not stop:
+        # reduce lambda if needed
+        backtrack_count += 1
         x_2 = x_c + lambda_ls * s_0_n
         f_2 = fun(x_2)
-        g_2 = 1 / 2. * multiply(f_2, f_2)
+        g_2 = 1 / 2. * scalar_prod(f_2, f_2)
         descent = alpha * lambda_ls * g_prime_t_s
-        satisfactory = g_2 < g_0 + descent
+        satisfactory = g_2 <= g_0 + descent
+        stop = satisfactory
+        magnitude_f = np.sqrt(2 * g_2)
+        outer_it_stop = magnitude_f < tol
         if additional_restrictions is not None:
-            satisfactory = satisfactory and additional_restrictions(x_2)
+            stop = satisfactory and additional_restrictions(x_2)
+        if lambda_ls < lambda_min:
+            # satisfactory x_2 cannot be found sufficiently distinct from x_c
+            stop = True
+        if stop:
+            # last iteration is no backtrack
+            backtrack_count -= 1
+        elif not stop:
+            # backtrack accumulated steps in current lambda,
+            # then reduce lambda once more
+            accum_step -= lambda_ls
+            if lambda_ls == 1:
+                # first backtrack: quadratic fit
+                lambda_temp = -g_prime_t_s / (
+                    2 * (g_2 - g_0 - g_prime_t_s)
+                )
+            elif lambda_ls < 1:
+                # subsequent backtracks: cubic fit
+                a, b = 1 / (lambda_ls - lambda_prev) * np.array(
+                    [[+1 / lambda_ls ** 2, - 1 / lambda_prev ** 2],
+                     [- lambda_prev / lambda_ls ** 2, +lambda_ls / lambda_prev ** 2]]
+                ).dot(np.array(
+                    [[g_2 - g_0 - g_prime_t_s * lambda_ls],
+                     [g_1 - g_0 - g_prime_t_s * lambda_prev]]))
+                a = a.item()
+                b = b.item()
+                disc = b ** 2 - 3 * a * g_prime_t_s
+                if a == 0:
+                    # actually quadratic
+                    lambda_temp = -g_prime_t_s / (2 * b)
+                else:
+                    # legitimate cubic
+                    lambda_temp = (-b + np.sqrt(disc)) / (3 * a)
+                if lambda_temp > 1 / 2 * lambda_ls:
+                    lambda_temp = 1 / 2 * lambda_ls
+            lambda_prev = lambda_ls
+            g_1 = g_2
+            if lambda_temp <= 0.1 * lambda_ls:
+                lambda_ls = 0.1 * lambda_ls
+            else:
+                lambda_ls = lambda_temp
+            # add current lambda to accumulated steps
+            accum_step += lambda_ls
+        # Non-functional status notification
+        if notify_status_func is not None:
+            diff = (lambda_ls - lambda_prev) * s_0_n
+            inner_it_j = backtrack_count
+            progress_k = (1 - np.exp(-g_2 / (g_0 + descent))) * 100.
+            g_min = descent
+            notify_status_func(progress_k, outer_it_stop, outer_it,
+                               inner_it_j, lambda_ls, accum_step,
+                               x_2, diff, f_2, j_0, lambda_ls * s_0_n,
+                               backtrack_count, g_min=g_min, g1=g_2)
+        # End non-functional notification
     j_2 = jac(x_2)
-    return x_2, f_2, g_2, s_0_n, j_2, it_k, lambda_ls
+    return x_2, f_2, g_2, s_0_n, j_2, backtrack_count, lambda_ls, \
+        magnitude_f, outer_it_stop, accum_step

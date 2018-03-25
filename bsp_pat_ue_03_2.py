@@ -525,31 +525,22 @@ naus_0[naus_0 == 0] = eps
 naus_0_norm = naus_0 / sum(naus_0)  # Normalisieren
 # Entspannung
 _, _, xi_0, _ = r_entspannung(k_1, naus_0_norm, 1, t_aus_rdampfr)
-# Newton-Raphson
-progress_k, stop, outer_it_k, outer_it_j, \
-    lambda_ls, accum_step, x, \
-    diff, f_val, lambda_ls_y, \
-    method_loops = \
-    nr_ls(x0=xi_0,
-          f=lambda xi: gg_abstaende(k_1, nuij, naus_0_norm, xi),
-          j=lambda xi: jac_gg_abstaende(k_1, nuij, naus_0_norm, xi),
-          tol=1e-12,
-          max_it=1000,
-          inner_loop_condition=lambda x_vec:
-          all([item >= 0 for item in
-               naus_0_norm + nuij.dot(x_vec)]),
-          notify_status_func=notify_status_func,
-          method_loops=[0, 0],
-          process_func_handle=lambda: logging.debug('no progress'))
 # denormalize
-xi_accum_1 = x * sum(naus_0)
-n_1 = (n_0 + nuij.dot(xi_accum_1))
+xi_0 = xi_0 * sum(naus_0)
+# Steifster Abstieg
+xi_sdm = sdm(
+    xi_0,
+    lambda xi: fj_0(xi, naus_0, k_1, nuij),
+    lambda xi: jac_fj_0(xi, naus_0, nuij),
+    1e-9,
+    notify_status_func=notify_status_func
+)
 # with actual size
 progress_k, stop, outer_it_k, outer_it_j, \
     lambda_ls, accum_step, x, \
     diff, f_val, lambda_ls_y, \
     method_loops = \
-    nr_ls(x0=xi_accum_1,
+    nr_ls(x0=xi_sdm,
           f=lambda xi: fj_0(xi, naus_0, k_1, nuij),
           j=lambda xi: jac_fj_0(xi, naus_0, nuij),
           tol=1e-12,

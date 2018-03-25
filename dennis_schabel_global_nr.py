@@ -226,5 +226,7 @@ x_0 = np.array([2., 0.5])
 x_1 = x_0
 for iteration in range(7):
     x_1, f_1, g_1, s_0_n, j_1, \
-    it_k, lambda_ls = line_search(f, j, x_1)
+        it_k, lambda_ls, magnitude_f, \
+        outer_it_stop, accum_step = \
+        line_search(f, j, x_1)
     print(x_1)
