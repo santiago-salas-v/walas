@@ -4,7 +4,7 @@ from scipy import optimize
 import z_l_v
 import logging
 from numerik import nr_ls
-from numerik import gauss_elimination, lrpd, rref, ref, sdm
+from numerik import gauss_elimination, lrpd, rref, ref, sdm, scalar_prod
 import itertools
 import os
 from setup_results_log import notify_status_func, setup_log_file
@@ -318,6 +318,7 @@ def r_isoterm(x_vec, k, n_0):
     f[len(n_0):] = k_pir_nt - pip
     return f
 
+
 def jac_gg_abstaende(k, nuij, n_0, xi):
     if np.ndim(nuij) > 1:
         n_r = nuij.shape[1]
@@ -326,7 +327,7 @@ def jac_gg_abstaende(k, nuij, n_0, xi):
         n = n_0 + nuij.dot(xi)
     else:
         n_r = 1
-        nuji = nuij.reshape([1,nuij.shape[0]])
+        nuji = nuij.reshape([1, nuij.shape[0]])
         jac = np.zeros([1, 1])
         n = n_0 + nuij * xi
     nu_t = sum(nuij)
@@ -338,20 +339,23 @@ def jac_gg_abstaende(k, nuij, n_0, xi):
         for i in range(n_r):
             for k_st, n_k in enumerate(n):
                 if nuji[j, k_st] < 0 and abs(n_k) > eps:
-                    s_nujknuik_nk_r[j, i] = s_nujknuik_nk_r[j, i] + nuji[j, k_st] * nuji[i, k_st] / n_k
+                    s_nujknuik_nk_r[j, i] = s_nujknuik_nk_r[j,
+                                                            i] + nuji[j, k_st] * nuji[i, k_st] / n_k
                 elif nuji[j, k_st] > 0 and abs(n_k) > eps:
-                    s_nujknuik_nk_p[j, i] = s_nujknuik_nk_p[j, i] + nuji[j, k_st] * nuji[i, k_st] / n_k
+                    s_nujknuik_nk_p[j, i] = s_nujknuik_nk_p[j,
+                                                            i] + nuji[j, k_st] * nuji[i, k_st] / n_k
                 elif nuji[j, k_st] == 0:
                     # add 0
                     pass
             jac[j, i] = -pip[j] * s_nujknuik_nk_p[j, i] - k_pir_nt[j] * (
-                    s_nujknuik_nk_r[j, i] - sum(nuji[j, :]) * sum(nuji[i, :]) / n_t
+                s_nujknuik_nk_r[j, i] - sum(nuji[j, :]) * sum(nuji[i, :]) / n_t
             )
     logging.debug('j=' + str(jac.tolist()))
     if n_r == 1:
-        return jac[0].item() # avoid embedded array
+        return jac[0].item()  # avoid embedded array
     else:
         return jac
+
 
 def gg_abstaende(k, nuij, n_0, xi, full_output=False):
     if np.ndim(nuij) > 1:
@@ -360,7 +364,7 @@ def gg_abstaende(k, nuij, n_0, xi, full_output=False):
         n = n_0 + nuij.dot(xi)
     else:
         n_r = 1
-        nuji = nuij.reshape([1,nuij.shape[0]])
+        nuji = nuij.reshape([1, nuij.shape[0]])
         n = n_0 + nuij * xi
     nu_t = sum(nuij)
     n_t = np.sum(n)
@@ -381,7 +385,7 @@ def gg_abstaende(k, nuij, n_0, xi, full_output=False):
     if full_output:
         return (k_pir_nt, pir, pip)
     else:
-        if n_r==1:
+        if n_r == 1:
             return (k_pir_nt - pip).item()
         else:
             return k_pir_nt - pip
@@ -405,8 +409,8 @@ def r_entspannung(k_j, n_0, x_mal, temp_0, betrieb='isotherm'):
                 [-abs(gg_abstaende(k_j[i], nuij[:, i], n, 0)) for i in r_to_relax])
             j = r_to_relax[order[0]]
 
-            #soln1 = optimize.newton(lambda xi: fj_0(xi, n, k_1[j], nuij[:, j]), x0=0,
-            #                fprime=lambda xi: jac_fj_0(xi, n, nuij[:, j]))
+            # soln1 = optimize.newton(lambda xi: fj_0(xi, n, k_j[j], nuij[:, j]), x0=0,
+            #               fprime=lambda xi: jac_fj_0(xi, n, nuij[:, j]))
 
             progress_k, stop, outer_it_k, outer_it_j, \
                 lambda_ls, accum_step, x, \
@@ -423,6 +427,23 @@ def r_entspannung(k_j, n_0, x_mal, temp_0, betrieb='isotherm'):
                       notify_status_func=notify_status_func,
                       method_loops=[0, 0],
                       process_func_handle=lambda: logging.debug('no progress'))
+
+            progress_k, stop, outer_it_k, outer_it_j, \
+                lambda_ls, accum_step, x, \
+                diff, f_val, lambda_ls_y, \
+                method_loops = \
+                nr_ls(x0=x,
+                      f=lambda xi: gg_abst_norm(xi, n, k_j[j], nuij[:, j]),
+                      j=lambda xi: jac_gg_abst_norm(xi, n, k_j[j], nuij[:, j]),
+                      tol=1e-6,
+                      max_it=1000,
+                      inner_loop_condition=lambda xi:
+                      all([item >= 0 for item in
+                           n + nuij[:, j] * xi]),
+                      notify_status_func=notify_status_func,
+                      method_loops=[0, 0],
+                      process_func_handle=lambda: logging.debug('no progress'))
+
             soln_xi = x
 
             xi_j[j] = soln_xi
@@ -444,8 +465,10 @@ def r_entspannung(k_j, n_0, x_mal, temp_0, betrieb='isotherm'):
 
 def fj_0(xi, n_0, k_t, nuij):
     if np.ndim(nuij) > 1:
+        n_r = nuij.shape[1]
         n = n_0 + nuij.dot(xi)
     else:
+        n_r = 1
         n = n_0 + nuij * xi
     n_t = sum(n)
     #f = nuij.T.dot(np.log((n) / (n_t))) - np.log(k_1)
@@ -453,6 +476,8 @@ def fj_0(xi, n_0, k_t, nuij):
         np.power(n / n_t, nuij.T),
         axis=nuij.ndim - 1
     )
+    if n_r == 1:
+        pi = np.array([pi])
     f = pi - k_t
     logging.debug('x=' + str(xi))
     logging.debug('f=' + str(f))
@@ -467,16 +492,18 @@ def jac_fj_0(xi, n_0, nuij):
         n = n_0 + nuij.dot(xi)
     else:
         n_r = 1
-        nujk = nuij.reshape([1,nuij.shape[0]])
+        nujk = nuij.reshape([1, nuij.shape[0]])
         jac = np.zeros([1, 1])
         n = n_0 + nuij * xi
-    n[n==0] = eps
+    n[n == 0] = eps
     n_c = nujk.size
     n_t = sum(n)
     pi = np.product(
         np.power(n / n_t, nuij.T),
         axis=nuij.ndim - 1
     )
+    if n_r == 1:
+        pi = np.array([pi])
     for j in range(n_r):
         for i in range(n_r):
             for k_st, n_k in enumerate(n):
@@ -486,12 +513,98 @@ def jac_fj_0(xi, n_0, nuij):
                     # add 0, since all n_k=0 do not remain in derivatives
                     pass
             jac[j, i] = pi[j] * (
-                    jac[j, i] - sum(nujk[j, :]) * sum(nujk[i, :]) / n_t)
+                jac[j, i] - sum(nujk[j, :]) * sum(nujk[i, :]) / n_t)
     logging.debug('j=' + str(jac.tolist()))
     if n_r == 1:
         # 1 R: return scalar
         jac = jac[0]
     return jac
+
+
+def gg_abst_norm(xi, n_0, k_t, nuij, full_output=False):
+    if np.ndim(nuij) > 1:
+        n_r = nuij.shape[1]
+        nuji = nuij.T
+        fun = np.zeros_like(xi)
+        n = n_0 + nuij.dot(xi)
+    else:
+        n_r = 1
+        nuji = nuij.reshape([1, nuij.shape[0]])
+        fun = np.zeros([1])
+        n = n_0 + nuij * xi
+    nu_t = sum(nuij)
+    n_t = np.sum(n)
+    pir = np.ones(n_r)
+    pip = np.ones(n_r)
+    fun_j = np.ones(n_r)
+    for j in range(n_r):
+        for k_st, nujk in enumerate(nuji[j]):
+            if nujk < 0 and abs(n[k_st]) > eps:
+                pir[j] = pir[j] * n[k_st] ** abs(nujk)
+            elif nujk > 0 and abs(n[k_st]) > eps:
+                pip[j] = pip[j] * n[k_st] ** abs(nujk)
+            elif nujk == 0:
+                # multiply by 1
+                pass
+    k_pir_nt = k_t * pir * n_t ** nu_t
+
+    for j, fun_j in enumerate(fun):
+        if k_pir_nt[j] > pip[j]:
+            fun_j = 1 - pip[j] / k_pir_nt[j]
+        elif k_pir_nt[j] < pip[j]:
+            fun_j = k_pir_nt[j] / pip[j] - 1
+        elif k_pir_nt[j] == pip[j]:
+            fun_j = eps
+
+    logging.debug('xi=' + str(xi))
+    logging.debug('f(xi)=' + str(fun_j))
+
+    if full_output:
+        return k_pir_nt, pir, pip
+    else:
+        if n_r == 1:
+            return fun_j
+        else:
+            return fun_j
+
+
+def jac_gg_abst_norm(xi, n_0, k_t, nuij):
+    if np.ndim(nuij) > 1:
+        n_r = nuij.shape[1]
+        nuji = nuij.T
+        jac = np.zeros([len(xi), len(xi)])
+        n = n_0 + nuij.dot(xi)
+    else:
+        n_r = 1
+        nuji = nuij.reshape([1, nuij.shape[0]])
+        jac = np.zeros([1, 1])
+        n = n_0 + nuij * xi
+    n_t = np.sum(n)
+    k_pir_nt, pir, pip = gg_abst_norm(xi, n_0, k_t, nuij, full_output=True)
+
+    s_nujknuik_nk_c = np.zeros_like(jac)
+    for j in range(n_r):
+        for i in range(n_r):
+            for k_st, n_k in enumerate(n):
+                if abs(n_k) > eps:
+                    s_nujknuik_nk_c[j, i] = s_nujknuik_nk_c[j,
+                                                            i] + nuji[j, k_st] * nuji[i, k_st] / n_k
+                elif nuji[j, k_st] == 0:
+                    # add 0
+                    pass
+            factor_ji = s_nujknuik_nk_c[j, i] - \
+                sum(nuji[j, :]) * sum(nuji[i, :]) / n_t
+            if k_pir_nt[j] > pip[j]:
+                jac[j, i] = - pip[j] / k_pir_nt[j] * factor_ji
+            elif k_pir_nt[j] < pip[j]:
+                jac[j, i] = - k_pir_nt[j] / pip[j] * factor_ji
+            elif k_pir_nt[j] == pip[j]:
+                jac[j, i] = eps
+    logging.debug('j=' + str(jac.tolist()))
+    if n_r == 1:
+        return jac[0]  # avoid embedded array
+    else:
+        return jac
 
 
 def fj_adiab(x_vec, n_0, h_0):
@@ -647,19 +760,19 @@ naus_2_norm = naus_2 / sum(naus_2)  # Normalisieren
 # Entspannung
 # man könnte diesen Schritt überspringen.
 _, _, xi_0, _ = r_entspannung(k_2, naus_2_norm, 1, t_ein_rwgs)
-#xi_0[abs(xi_0) <= eps] = 0  # values indistinguishible from 0 remain 0
+# xi_0[abs(xi_0) <= eps] = 0  # values indistinguishible from 0 remain 0
 # Normalisierung beheben
 #xi_0 = xi_0 * sum(naus_2)
 # Steifster Gradient
 xi_sdm = sdm(
     xi_0,
-    lambda xi: fj_0(xi, n_1/sum(n_1), k_2, nuij),
-    lambda xi: jac_fj_0(xi, n_1/sum(n_1), nuij),
+    lambda xi: fj_0(xi, n_1 / sum(n_1), k_2, nuij),
+    lambda xi: jac_fj_0(xi, n_1 / sum(n_1), nuij),
     1e-4,
     notify_status_func=notify_status_func,
     inner_loop_condition=lambda xi:
     all([item >= 0 for item in
-         n_1/sum(n_1) + nuij.dot(xi)])
+         n_1 / sum(n_1) + nuij.dot(xi)])
 )
 # Newton-Raphson
 progress_k, stop, outer_it_k, outer_it_j, \

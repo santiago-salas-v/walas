@@ -362,18 +362,6 @@ def line_search(fun, jac, x_c, known_f_c=None, known_j_c=None,
     else:
         j_0 = jac(x_c)
 
-    def scalar_prod(factor_a, factor_b):
-        if np.size(x_c) > 1:
-            return factor_a.dot(factor_b)
-        elif np.size(x_c) == 1:
-            return factor_a * factor_b
-
-    def solve_ax_equal_b(factor_a, term_b):
-        if np.size(x_c) > 1:
-            return gauss_elimination(factor_a, term_b)
-        elif np.size(x_c) == 1:
-            return 1 / factor_a * term_b
-
     # p in the Newton-direction: $s_N = -J(x_c)^{-1} F(x_c)$
     s_0_n = solve_ax_equal_b(j_0, -f_0)
     # relative length of p as calculated in the stopping routine
@@ -470,3 +458,17 @@ def line_search(fun, jac, x_c, known_f_c=None, known_j_c=None,
     j_2 = jac(x_2)
     return x_2, f_2, g_2, s_0_n, j_2, backtrack_count, lambda_ls, \
         magnitude_f, outer_it_stop, accum_step
+
+
+def scalar_prod(factor_a, factor_b):
+    if np.size(factor_b) > 1:
+        return factor_a.dot(factor_b)
+    elif np.size(factor_b) == 1:
+        return factor_a * factor_b
+
+
+def solve_ax_equal_b(factor_a, term_b):
+    if np.size(term_b) > 1:
+        return gauss_elimination(factor_a, term_b)
+    elif np.size(term_b) == 1:
+        return 1 / factor_a * term_b
