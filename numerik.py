@@ -228,6 +228,7 @@ def nr_ls(x0, f, j, tol, max_it, inner_loop_condition,
             if progress_k == progress_k_m_1:
                 # Non-functional gui processing
                 process_func_handle()
+                stop = True
                 # End non-functional processing
                 # if form.progress_var.wasCanceled():
                 # stop = True

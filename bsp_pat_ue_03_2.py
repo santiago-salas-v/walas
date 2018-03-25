@@ -428,22 +428,6 @@ def r_entspannung(k_j, n_0, x_mal, temp_0, betrieb='isotherm'):
                       method_loops=[0, 0],
                       process_func_handle=lambda: logging.debug('no progress'))
 
-            progress_k, stop, outer_it_k, outer_it_j, \
-                lambda_ls, accum_step, x, \
-                diff, f_val, lambda_ls_y, \
-                method_loops = \
-                nr_ls(x0=x,
-                      f=lambda xi: gg_abst_norm(xi, n, k_j[j], nuij[:, j]),
-                      j=lambda xi: jac_gg_abst_norm(xi, n, k_j[j], nuij[:, j]),
-                      tol=1e-6,
-                      max_it=1000,
-                      inner_loop_condition=lambda xi:
-                      all([item >= 0 for item in
-                           n + nuij[:, j] * xi]),
-                      notify_status_func=notify_status_func,
-                      method_loops=[0, 0],
-                      process_func_handle=lambda: logging.debug('no progress'))
-
             soln_xi = x
 
             xi_j[j] = soln_xi
@@ -536,7 +520,6 @@ def gg_abst_norm(xi, n_0, k_t, nuij, full_output=False):
     n_t = np.sum(n)
     pir = np.ones(n_r)
     pip = np.ones(n_r)
-    fun_j = np.ones(n_r)
     for j in range(n_r):
         for k_st, nujk in enumerate(nuji[j]):
             if nujk < 0 and abs(n[k_st]) > eps:
@@ -548,24 +531,24 @@ def gg_abst_norm(xi, n_0, k_t, nuij, full_output=False):
                 pass
     k_pir_nt = k_t * pir * n_t ** nu_t
 
-    for j, fun_j in enumerate(fun):
+    for j in range(len(fun)):
         if k_pir_nt[j] > pip[j]:
-            fun_j = 1 - pip[j] / k_pir_nt[j]
+            fun[j] = 1 - pip[j] / k_pir_nt[j]
         elif k_pir_nt[j] < pip[j]:
-            fun_j = k_pir_nt[j] / pip[j] - 1
+            fun[j] = k_pir_nt[j] / pip[j] - 1
         elif k_pir_nt[j] == pip[j]:
-            fun_j = eps
+            fun[j] = 0.
 
     logging.debug('xi=' + str(xi))
-    logging.debug('f(xi)=' + str(fun_j))
+    logging.debug('f(xi)=' + str(fun))
 
     if full_output:
         return k_pir_nt, pir, pip
     else:
         if n_r == 1:
-            return fun_j
+            return fun.item()
         else:
-            return fun_j
+            return fun
 
 
 def jac_gg_abst_norm(xi, n_0, k_t, nuij):
@@ -598,6 +581,91 @@ def jac_gg_abst_norm(xi, n_0, k_t, nuij):
                 jac[j, i] = - pip[j] / k_pir_nt[j] * factor_ji
             elif k_pir_nt[j] < pip[j]:
                 jac[j, i] = - k_pir_nt[j] / pip[j] * factor_ji
+            elif k_pir_nt[j] == pip[j]:
+                jac[j, i] = eps
+    logging.debug('j=' + str(jac.tolist()))
+    if n_r == 1:
+        return jac[0]  # avoid embedded array
+    else:
+        return jac
+
+
+def gg_abst_norm_sq(xi, n_0, k_t, nuij, full_output=False):
+    if np.ndim(nuij) > 1:
+        n_r = nuij.shape[1]
+        nuji = nuij.T
+        fun = np.zeros_like(xi)
+        n = n_0 + nuij.dot(xi)
+    else:
+        n_r = 1
+        nuji = nuij.reshape([1, nuij.shape[0]])
+        fun = np.zeros([1])
+        n = n_0 + nuij * xi
+    nu_t = sum(nuij)
+    n_t = np.sum(n)
+    pir = np.ones(n_r)
+    pip = np.ones(n_r)
+    for j in range(n_r):
+        for k_st, nujk in enumerate(nuji[j]):
+            if nujk < 0 and abs(n[k_st]) > eps:
+                pir[j] = pir[j] * n[k_st] ** abs(nujk)
+            elif nujk > 0 and abs(n[k_st]) > eps:
+                pip[j] = pip[j] * n[k_st] ** abs(nujk)
+            elif nujk == 0:
+                # multiply by 1
+                pass
+    k_pir_nt = k_t * pir * n_t ** nu_t
+
+    for j in range(len(fun)):
+        if k_pir_nt[j] > pip[j]:
+            fun[j] = (1 - pip[j] / k_pir_nt[j])**2
+        elif k_pir_nt[j] < pip[j]:
+            fun[j] = (k_pir_nt[j] / pip[j] - 1)**2
+        elif k_pir_nt[j] == pip[j]:
+            fun[j] = 0.
+
+    logging.debug('xi=' + str(xi))
+    logging.debug('f(xi)=' + str(fun))
+
+    if full_output:
+        return k_pir_nt, pir, pip
+    else:
+        if n_r == 1:
+            return fun.item()
+        else:
+            return fun
+
+
+def jac_gg_abst_norm_sq(xi, n_0, k_t, nuij):
+    if np.ndim(nuij) > 1:
+        n_r = nuij.shape[1]
+        nuji = nuij.T
+        jac = np.zeros([len(xi), len(xi)])
+        n = n_0 + nuij.dot(xi)
+    else:
+        n_r = 1
+        nuji = nuij.reshape([1, nuij.shape[0]])
+        jac = np.zeros([1, 1])
+        n = n_0 + nuij * xi
+    n_t = np.sum(n)
+    k_pir_nt, pir, pip = gg_abst_norm(xi, n_0, k_t, nuij, full_output=True)
+
+    s_nujknuik_nk_c = np.zeros_like(jac)
+    for j in range(n_r):
+        for i in range(n_r):
+            for k_st, n_k in enumerate(n):
+                if abs(n_k) > eps:
+                    s_nujknuik_nk_c[j, i] = s_nujknuik_nk_c[j,
+                                                            i] + nuji[j, k_st] * nuji[i, k_st] / n_k
+                elif nuji[j, k_st] == 0:
+                    # add 0
+                    pass
+            factor_ji = s_nujknuik_nk_c[j, i] - \
+                sum(nuji[j, :]) * sum(nuji[i, :]) / n_t
+            if k_pir_nt[j] > pip[j]:
+                jac[j, i] = 2*(1 - pip[j] / k_pir_nt[j])*(- pip[j] / k_pir_nt[j] * factor_ji)
+            elif k_pir_nt[j] < pip[j]:
+                jac[j, i] = 2*(k_pir_nt[j] / pip[j] - 1)*(- k_pir_nt[j] / pip[j] * factor_ji)
             elif k_pir_nt[j] == pip[j]:
                 jac[j, i] = eps
     logging.debug('j=' + str(jac.tolist()))
@@ -659,6 +727,21 @@ progress_k, stop, outer_it_k, outer_it_j, \
           inner_loop_condition=lambda x_vec:
           all([item >= 0 for item in
                naus_0 + nuij.dot(x_vec)]),
+          notify_status_func=notify_status_func,
+          method_loops=[0, 0],
+          process_func_handle=lambda: logging.debug('no progress'))
+progress_k, stop, outer_it_k, outer_it_j, \
+    lambda_ls, accum_step, x, \
+    diff, f_val, lambda_ls_y, \
+    method_loops = \
+    nr_ls(x0= xi_0,
+          f=lambda xi: gg_abst_norm_sq(xi, naus_0, k_1, nuij),
+          j=lambda xi: jac_gg_abst_norm_sq(xi, naus_0, k_1, nuij),
+          tol=1e-12,
+          max_it=1000,
+          inner_loop_condition=lambda xi:
+          all([item >= 0 for item in
+               naus_0 + nuij.dot(xi)]),
           notify_status_func=notify_status_func,
           method_loops=[0, 0],
           process_func_handle=lambda: logging.debug('no progress'))
