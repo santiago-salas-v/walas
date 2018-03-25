@@ -391,12 +391,10 @@ def r_entspannung(k_j, n_0, x_mal, temp_0, betrieb='isotherm'):
     """ Entspannungs-Methode (Gmehling Chem. Therm.).
     """
     n = np.copy(n_0)
-    n[n==0] = eps
     xi_j = np.array([0 for j in range(nuij.shape[1])], dtype=float)
     xi_j_accum = np.array([0 for j in range(nuij.shape[1])], dtype=float)
     h_temp_0 = h(temp_0)
     temp = temp_0
-    #xi_0 = sum(n_0) / n_r * (k_j / (k_j + 1))
     r_to_relax = [j for j in range(nuij.shape[1])]
 
     for x in range(x_mal):

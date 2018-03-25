@@ -235,12 +235,6 @@ def nr_ls(x0, f, j, tol, max_it, inner_loop_condition,
         progress_k = 100.0
     elif divergent:
         progress_k = 0.0
-    # Non-functional status notification
-    notify_status_func(progress_k, stop, outer_it_k,
-                       inner_it_j, lambda_ls, accum_step,
-                       x, diff, f_val, j_val, lambda_ls * y,
-                       method_loops)
-    # End non-functional notification
     return progress_k, stop, outer_it_k,\
         inner_it_j, lambda_ls, accum_step,\
         x, diff, f_val, lambda_ls * y,\
@@ -411,8 +405,6 @@ def line_search(fun, jac, x_c, known_f_c=None, known_j_c=None,
     stop = False
     outer_it_stop = False
     while backtrack_count < max_iter and not stop:
-        # reduce lambda if needed
-        backtrack_count += 1
         x_2 = x_c + lambda_ls * s_0_n
         f_2 = fun(x_2)
         g_2 = 1 / 2. * scalar_prod(f_2, f_2)
@@ -426,13 +418,23 @@ def line_search(fun, jac, x_c, known_f_c=None, known_j_c=None,
         if lambda_ls < lambda_min:
             # satisfactory x_2 cannot be found sufficiently distinct from x_c
             stop = True
-        if stop:
-            # last iteration is no backtrack
-            backtrack_count -= 1
-        elif not stop:
+        # Non-functional status notification
+        if notify_status_func is not None:
+            diff = (lambda_ls - lambda_prev) * s_0_n
+            inner_it_j = backtrack_count
+            progress_k = (1 - np.exp(-g_2 / (g_0 + descent))) * 100.
+            g_min = descent
+            notify_status_func(progress_k, outer_it_stop and stop, outer_it,
+                               inner_it_j, lambda_ls, accum_step,
+                               x_2, diff, f_2, j_0, lambda_ls * s_0_n,
+                               backtrack_count, g_min=g_min, g1=g_2)
+        # End non-functional notification
+        if not stop:
+            # reduce lambda
             # backtrack accumulated steps in current lambda,
             # then reduce lambda once more
-            accum_step -= lambda_ls
+            accum_step -= lambda_prev
+            backtrack_count += 1
             if lambda_ls == 1:
                 # first backtrack: quadratic fit
                 lambda_temp = -g_prime_t_s / (
@@ -465,17 +467,6 @@ def line_search(fun, jac, x_c, known_f_c=None, known_j_c=None,
                 lambda_ls = lambda_temp
             # add current lambda to accumulated steps
             accum_step += lambda_ls
-        # Non-functional status notification
-        if notify_status_func is not None:
-            diff = (lambda_ls - lambda_prev) * s_0_n
-            inner_it_j = backtrack_count
-            progress_k = (1 - np.exp(-g_2 / (g_0 + descent))) * 100.
-            g_min = descent
-            notify_status_func(progress_k, outer_it_stop, outer_it,
-                               inner_it_j, lambda_ls, accum_step,
-                               x_2, diff, f_2, j_0, lambda_ls * s_0_n,
-                               backtrack_count, g_min=g_min, g1=g_2)
-        # End non-functional notification
     j_2 = jac(x_2)
     return x_2, f_2, g_2, s_0_n, j_2, backtrack_count, lambda_ls, \
         magnitude_f, outer_it_stop, accum_step
