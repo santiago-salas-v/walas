@@ -289,17 +289,47 @@ def phi_v(t, p, y_i, tc_i, pc_i, af_omega_i):
     return soln
 
 
-def siedepunkt(t, p, x_i, y_i, tc_i, pc_i, af_omega_i, max_it):
+def siedepunkt(t, p, x_i, y_i, tc_i, pc_i, af_omega_i, max_it, tol=1e-14):
+    """Siedepunkt-Bestimmung
+
+    Bei gegebenen Temperatur-Wert und Flüssigkeit-Zusammenstellung (mit geschätzten\
+    Druck-Wert und Dampf-Zusammenstellung) werden phi, K und neue Zusammenstellung y \
+    berechnet. Diese sollen wiederum optimiert werden, bis opt_fun niedrig genug ist. \
+    ( Summe(K_i x_i -1 = 0) )
+
+    ref. e.V., VDI: VDI-Wärmeatlas. Wiesbaden: Springer Berlin Heidelberg, 2013. \
+    (D5.1. Abb.6.)
+
+    ref. Smith, Joseph Mauk ; Ness, Hendrick C. Van ; Abbott, Michael M.: \
+    Introduction to chemical engineering thermodynamics. New York: McGraw-Hill, 2005.\
+    (Fig. 14.9)
+
+    :param t: Temperatur / °K
+    :param p: Druck / bar
+    :param x_i: Flüssigkeit-Zusammenstellung
+    :param y_i: Dampf-Zusammenstellung
+    :param tc_i: Kritische Temperatur-Werte
+    :param pc_i: Kritische Druck-Werte
+    :param af_omega_i: Pitzer-Faktoren
+    :param max_it: Maximale Iterationen
+    :param tol: Fehlertoleranz
+    :return: soln (dict)
+    """
     soln_l = phi_l(t, p, x_i, tc_i, pc_i, af_omega_i)
     soln_v = phi_v(t, p, y_i, tc_i, pc_i, af_omega_i)
     k_i = soln_l['phi_l'] / soln_v['phi_v']
-    y_i = k_i * x_i / sum(k_i * x_i)
+    sum_k_i_n = sum(k_i * x_i)
+    y_i = k_i * x_i / sum_k_i_n
+    stop = False
     i = 0
-    while i < max_it and np.abs(1 - sum(y_i)) > 0:
+    while i < max_it and not stop:
+        sum_k_i_n_min_1 = sum_k_i_n
         i = i + 1
         soln_v = phi_v(t, p, y_i, tc_i, pc_i, af_omega_i)
         k_i = soln_l['phi_l'] / soln_v['phi_v']
-        y_i = k_i * x_i / sum(k_i * x_i)
+        sum_k_i_n = sum(k_i * x_i)
+        y_i = k_i * x_i / sum_k_i_n
+        stop = np.abs((sum_k_i_n_min_1 - sum_k_i_n)/sum_k_i_n) <= tol
         # print('i='+str(i))
 
     opt_func = 1 - sum(k_i * x_i)
@@ -308,6 +338,8 @@ def siedepunkt(t, p, x_i, y_i, tc_i, pc_i, af_omega_i, max_it):
     for item in ['soln_l', 'soln_v', 'k_i', 'y_i', 'opt_func']:
         soln[item] = locals().get(item)
     return soln
+
+
 
 
 def isot_flash(t, p, x_i, y_i, z_i, tc_i, pc_i, af_omega_i):
