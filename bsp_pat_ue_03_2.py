@@ -11,9 +11,9 @@ from setup_results_log import notify_status_func, setup_log_file
 
 eps = np.finfo(float).eps
 np.set_printoptions(linewidth=200)
-setup_log_file('log_bsp_pat_ue_03_2.log', with_console=False)
+setup_log_file('log_bsp_pat_ue_03_2.log', with_console=True)
 
-# Modell feststellen
+# Modell festlegen
 z_l_v.use_pr_eos()
 
 p = 35.  # bar
@@ -861,18 +861,74 @@ z_i = n_2 / sum(n_2)
 x_i = 1 / len(n_2) * np.ones(len(n_2))
 y_i = 1 / len(n_2) * np.ones(len(n_2))
 v_f = 1.
-for i in range(10):
-    v_f_temp = v_f
-    soln = z_l_v.isot_flash(
-        t_aus_tkuehler, p, x_i, y_i, z_i, tc, pc, omega_af
-    )
-    y_i = soln['y_i']
-    x_i = soln['x_i']
-    v_f = soln['v_f']
-    k_i_verteilung = soln['k_i']
-    if abs(v_f - v_f_temp) < 1e-12:
+for p_i in np.linspace(p,1e-5,300):
+    for i in range(10):
+        v_f_temp = v_f
+        soln = z_l_v.isot_flash(
+            t_aus_tkuehler, p_i, x_i, y_i, z_i, tc, pc, omega_af
+        )
+        y_i = soln['y_i']
+        x_i = soln['x_i']
+        v_f = soln['v_f']
+        k_i_verteilung = soln['k_i']
+        if abs(v_f - v_f_temp) < 1e-12:
+            break
+
+    logging.debug('p_i='+str(p_i))
+    logging.debug('v_f=' + str(v_f))
+    logging.debug('x_i='+str(x_i))
+    logging.debug('z_i=' + str(z_i))
+    logging.debug('y_i='+str(y_i))
+    logging.debug('k_i=' + str(k_i_verteilung))
+    # Eigentlich wurde der Druck deutlich erniedrigt, und keine Erniedrigung des V/F-Wertes
+    # geschafft, da Wasser bei dieser Temperatur wird immer einen deutlich höheren K-Wert
+    # als die anderen Komponente haben.
+
+
+# die Verdampfungsenthalpie der Mischung lässt sich anhand der Clausius-Clapeyron
+# Gleichung berechnen, wofür man  dp_s/dT braucht.
+# Siedepunkt-Bestimmung bei Temperatur T, nach VDI Wärmeatlas D5.1. Abb.6.
+p_sat = p
+t = t_aus_tkuehler
+for i in range(50):
+    # Hauptsache z_i = x_i, sum(z_i * k_i) = 1
+    p_sat_n_minus_1 = p_sat
+    soln_l = z_l_v.phi_l(t, p_sat, z_i, tc, pc, omega_af)
+    # Hier trifft ein Fehler zu, da diese Bedingungen mit keinem Dampf-Fl. Gleichgewicht
+    # verbunden sind
+    soln_v = z_l_v.phi_v(t, p_sat, y_i, tc, pc, omega_af)
+    phi_i_l = soln_l['phi_l']
+    phi_i_v = soln_v['phi_v']
+    # Gleichgewichtsbedingung f_i_v = f_i_l
+    k_i = phi_i_l / phi_i_v
+    f_i_l = phi_i_l * x_i * p_sat
+    y_i = f_i_l / (phi_i_v * p_sat)
+    # oder auch y_i = k_i * x_i
+    # oder auch y_i = k_i * x_i / sum(k_i x_i) [SVN]
+    p_sat = sum(y_i) * p_sat
+    logging.debug('y_i=' + str(y_i))
+    logging.debug('1-sum(y_i) =' + str(1 - sum(y_i)))
+    logging.debug('sum(k_i x_i) = ' + str(sum(k_i * x_i)))
+    y_i = y_i / sum(y_i)
+    #if abs((p_sat - p_sat_n_minus_1)/p_sat) <= 1e-4:
+    if abs(1 - sum(k_i * x_i)) <= eps:
         break
 
+def p_sat_func(p_sat):
+    soln = z_l_v.siedepunkt(
+        t_aus_tkuehler, p_sat, x_i, y_i, tc, pc, omega_af, 50)
+    y_i = soln['y_i']
+    return
+
+for i in range(5):
+    soln = z_l_v.siedepunkt(t, p, x_i, y_i, tc, pc, omega_af, 100)
+    y_i = soln['y_i']
+    k_i = soln['k_i']
+    print(y_i)
+    print(1 - sum(y_i))
+    print(sum(k_i * x_i))
+
+p_sat_2 = optimize.root(p_sat_func, p)
 
 # Vorkühler-Leistung, inklusive Flash bei 20°C
 q = sum(n_2 * (h_3 - h_2))  # mol/h * J/mol = J/h
