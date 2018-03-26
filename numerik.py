@@ -176,12 +176,12 @@ def nr_ls(x0, f, j, tol, max_it, inner_loop_condition,
     y = np.empty_like(f_val)
     magnitude_f = np.sqrt(f_val**2)
     diff = np.nan
-    if np.ndim(x) > 0:
+    if np.size(x) > 1:
         y = np.ones(len(x)).T * tol / (np.sqrt(len(x)) * tol)
         magnitude_f = np.sqrt((f_val.dot(f_val)).item())
         diff = np.empty([len(x), 1])
         diff.fill(np.nan)
-    elif np.ndim(x) == 0:
+    elif np.size(x) == 1:
         pass  # defined above
     # Line search variable lambda
     lambda_ls = 1.0

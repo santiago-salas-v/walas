@@ -666,7 +666,7 @@ progress_k, stop, outer_it_k, outer_it_j, \
     nr_ls(x0=xi_1_norm,
           f=lambda xi: gg_abstaende(k_x_1, nuij, n_1_norm, xi),
           j=lambda xi: jac_gg_abstaende(k_x_1, nuij, n_1_norm, xi),
-          tol=1e-6,
+          tol=1e-12,
           max_it=1000,
           inner_loop_condition=lambda xi:
           all([item >= 0 for item in
@@ -754,6 +754,26 @@ q = sum(n_1 * (h_2 - h_1))  # mol/h * J/mol = J/h
 
 stoech_m, indexes, nach_g_sortieren, \
     k_x_2, nuij = stoech_matrix(atom_m, g_2, p, t_aus_rwgs, namen, None)
+# Force selected reactions
+# namen = ['CO', 'H2', 'CO2', 'H2O', 'CH4', 'NH3', 'AR', 'O2', 'N2']
+nuij_force = np.array([
+    [+1, +2, +0, +0, -1, +0, +0, -1 / 2, +0],  # PO
+    [+1, +3, +0, -1, -1, +0, +0, +0, +0],  # DR
+    [-1, +1, +1, -1, +0, +0, +0, +0, +0],  # WGS
+    [-1, -3, +0, +1, +1, +0, +0, +0, +0],  # Meth1
+    [+0, -4, -1, +2, +1, +0, +0, +0, +0],  # Meth2
+    [+0, -3 / 2, 0, 0, +0, +1, +0, +0, -1 / 2]  # Amm
+]).T
+# WGS
+nuij = np.array([nuij_force[:, 2]]).T
+k_2 = np.exp(-nuij.T.dot(g_2 / (r * t_aus_rwgs)))
+k_x_2 = np.multiply(k_2, np.power(p / 1., -sum(nuij)))
+for i in range(len(nuij.T)):
+    if k_x_2[i] > 1:
+        nuij.T[i] = -nuij.T[i]
+k_2 = np.exp(-nuij.T.dot(g_2 / (r * t_aus_rwgs)))
+k_x_2 = np.multiply(k_2, np.power(p / 1., -sum(nuij)))
+
 n_2 = np.copy(n_1)
 n_2_norm = n_2 / sum(n_1)  # Normalisieren
 # Entspannung
@@ -825,3 +845,41 @@ for j in range(5):
     print('')
 print('Gesamtfehler: ' + str(np.sqrt(fehler.dot(fehler))))
 print('========================================')
+for j in range(2):
+    print('')
+
+print('========================================')
+print('Trocknung: Vorkühler + Abscheider')
+print('========================================')
+
+t_aus_tkuehler = 20 + 273.15  # °K
+h_3 = h(t_aus_tkuehler)
+g_3 = g(t_aus_tkuehler, h_3)
+
+# Lösung des isothermischen Verdampfers
+z_i = n_2 / sum(n_2)
+x_i = 1 / len(n_2) * np.ones(len(n_2))
+y_i = 1 / len(n_2) * np.ones(len(n_2))
+v_f = 1.
+for i in range(10):
+    v_f_temp = v_f
+    soln = z_l_v.isot_flash(
+        t_aus_tkuehler, p, x_i, y_i, z_i, tc, pc, omega_af
+    )
+    y_i = soln['y_i']
+    x_i = soln['x_i']
+    v_f = soln['v_f']
+    k_i_verteilung = soln['k_i']
+    if abs(v_f - v_f_temp) < 1e-12:
+        break
+
+
+# Vorkühler-Leistung, inklusive Flash bei 20°C
+q = sum(n_2 * (h_3 - h_2))  # mol/h * J/mol = J/h
+
+print(
+    'Vorkühler (auf T= ' + str(t_aus_tkuehler) + ' °K), Q: ' +
+    '{0:0.20g}'.format(
+        q * 1 / 60. ** 2 * 1 / 1000.  # 1h/60^2s * 1kW / 1000W
+    ).replace('.', ',') + ' kW'
+)
