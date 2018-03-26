@@ -11,7 +11,7 @@ from setup_results_log import notify_status_func, setup_log_file
 
 eps = np.finfo(float).eps
 np.set_printoptions(linewidth=200)
-setup_log_file('log_bsp_pat_ue_03_2.log')
+setup_log_file('log_bsp_pat_ue_03_2.log', with_console=False)
 
 # Modell feststellen
 z_l_v.use_pr_eos()
@@ -190,7 +190,7 @@ cp_1 = r * cp_durch_r(t_aus_rdampfr)
 g_1 = g(t_aus_rdampfr, h_1)
 
 
-def stoech_matrix(atom_m, g_t, namen, festgelegte_komponente=None):
+def stoech_matrix(atom_m, g_t, p, temp, namen, festgelegte_komponente=None):
     """
     Hauptreaktionen nach Meyers 1986
     REF:
@@ -200,6 +200,7 @@ def stoech_matrix(atom_m, g_t, namen, festgelegte_komponente=None):
 
     :param atom_m: atomic matrix. Unsorted. E by C.
     :param g_t: Gibbs free energy of formation of species in atom matrix at T.
+    :param p: Operating pressure
     :param namen: names of compounds in atomic matrix.
     :return: stoech_m, indexes, nach_g_sortieren, k_t, nuij
     """
@@ -241,7 +242,8 @@ def stoech_matrix(atom_m, g_t, namen, festgelegte_komponente=None):
                 -b.T, np.eye(n_c - rho_gruppe, dtype=float)
             ], axis=1)
             k_t = np.exp(-stoech_m.dot(g_t[nach_g_sortieren]
-                                       [indexes] / (r * t_aus_rdampfr)))
+                                       [indexes] / (r * temp)))
+            k_x_t = np.multiply(k_t, np.power(p / 1., -sum(stoech_m.T)))
             logging.debug('Gruppe:' + str(sortierte_namen))
             logging.debug('Primär:' + str(sortierte_namen[:rho]))
             logging.debug('Sekundär:' + str(sortierte_namen[rho:]))
@@ -262,61 +264,12 @@ def stoech_matrix(atom_m, g_t, namen, festgelegte_komponente=None):
             logging.debug('Kj(T)')
             logging.debug(str(k_t.tolist()))
 
-            if np.all(k_t < 1):
+            if np.all(k_x_t < 1):
                 break
+    # rearrange columns to original order (rows remain the same, so does K)
     nuij = np.array(stoech_m[:, np.argsort(indexes)]
                     [:, np.argsort(nach_g_sortieren)]).T
-    return stoech_m, indexes, nach_g_sortieren, k_t, nuij
-
-
-def r_isoterm(x_vec, k, n_0):
-    n_aus = x_vec[:len(n_0)]
-    xi_aus = x_vec[len(n_0):]
-
-    n_t = np.sum(n_aus)
-    delta_h_1 = nuij.T.dot(h_1)  # J/mol
-
-    f = np.empty_like(x_vec)
-
-    # Stoffbilanzen
-    f[:len(n_0)] = -n_aus + n_0 + nuij.dot(xi_aus)
-
-    # Gleichgewicht-Verhältnisse
-    # 0 = - Kj * n_T^sum_i(nuij) *  prod_i(ni^(nuij*deltaij)) +
-    #                               prod_i(ni^(nuij*(1-deltaij)))
-    # deltaij = 1 , wenn nuij < 0 ; 0 sonst
-    pir = np.ones_like(k)
-    pip = np.ones_like(k)
-
-    for i in range(nuij.shape[0]):  # Komponente i
-        for j in range(nuij.shape[1]):  # Reaktion j
-            if nuij[i, j] < 0:
-                pir[j] = pir[j] * np.power(n_aus[i], abs(nuij[i, j]))
-            elif nuij[i, j] > 0:
-                pip[j] = pip[j] * np.power(n_aus[i], abs(nuij[i, j]))
-            elif nuij[i, j] == 0:
-                # Mit ni^0 multiplizieren
-                pass
-
-    # Substrate, inklusive totale Mengen je Molenbruch
-    k_pir_nt = n_t**sum(+ nuij) * k * pir
-    # f_val = k_pir_nt - pip
-    # Abstand zum Gleichgewicht
-    for i in range(len(f[len(n_0):])):
-        if k_pir_nt[i] < pip[i]:
-            f[len(n_0) + i] = k_pir_nt[i] / pip[i] - 1
-        elif k_pir_nt[i] > pip[i]:
-            f[len(n_0) + i] = 1 - pip[i] / k_pir_nt[i]
-        elif k_pir_nt[i] == pip[i]:
-            f[len(n_0) + i] = 0
-    # Energiebilanz
-    # q = np.sum(
-    #    np.multiply(n_ein, (h_0 - h_298)) -
-    #    np.multiply(n_aus, (h_1 - h_298))
-    #) + np.dot(xi_aus, -delta_h_1)
-
-    f[len(n_0):] = k_pir_nt - pip
-    return f
+    return stoech_m, indexes, nach_g_sortieren, k_x_t, nuij
 
 
 def jac_gg_abstaende(k, nuij, n_0, xi):
@@ -699,48 +652,37 @@ def fj_adiab(x_vec, n_0, h_0):
     return f
 
 
-stoech_m, indexes, nach_g_sortieren, k_1, nuij = stoech_matrix(
-    atom_m, g_1, namen, [4])
-naus_0 = np.copy(n_0)
-naus_0[naus_0 == 0] = eps
-naus_0_norm = naus_0 / sum(naus_0)  # Normalisieren
+stoech_m, indexes, nach_g_sortieren, \
+    k_x_1, nuij = stoech_matrix(atom_m, g_1, p, t_aus_rdampfr, namen, [4])
+n_1 = np.copy(n_0)
+n_1_norm = n_1 / sum(n_0)  # Normalisieren
 # Entspannung
-_, _, xi_0, _ = r_entspannung(k_1, naus_0_norm, 1, t_aus_rdampfr)
-# denormalize
-xi_0 = xi_0 * sum(naus_0)
+_, _, xi_1_norm, _ = r_entspannung(k_x_1, n_1_norm, 1, t_aus_rdampfr)
 # Newton Raphson
 progress_k, stop, outer_it_k, outer_it_j, \
     lambda_ls, accum_step, x, \
     diff, f_val, lambda_ls_y, \
     method_loops = \
-    nr_ls(x0=xi_0,
-          f=lambda xi: gg_abst_norm_sq(xi, naus_0, k_1, nuij),
-          j=lambda xi: jac_gg_abst_norm_sq(xi, naus_0, k_1, nuij),
+    nr_ls(x0=xi_1_norm,
+          f=lambda xi: gg_abstaende(k_x_1, nuij, n_1_norm, xi),
+          j=lambda xi: jac_gg_abstaende(k_x_1, nuij, n_1_norm, xi),
           tol=1e-6,
           max_it=1000,
           inner_loop_condition=lambda xi:
           all([item >= 0 for item in
-               naus_0 + nuij.dot(xi)]),
+               n_1_norm + nuij.dot(xi)]),
           notify_status_func=notify_status_func,
           method_loops=[0, 0],
           process_func_handle=lambda: logging.debug('no progress'))
-# actual
-xi_accum_1 = x
-n_1 = (n_0 + nuij.dot(xi_accum_1))
+xi_1 = x * sum(n_0)
+n_1 = (n_0 + nuij.dot(xi_1))
+fehler = fj_0(xi_1, n_0, k_x_1, nuij)
 
 for komb in n_1:
     logging.debug('{0:0.20g}'.format(komb / 1000.).replace('.', ','))
 
-for komb in np.array(xi_accum_1):
+for komb in np.array(xi_1):
     logging.debug('{0:0.20g}'.format(komb / 1000.).replace('.', ','))
-
-print('========================================')
-
-fehler = r_isoterm(np.concatenate([n_1, xi_accum_1]), k_1, n_0)
-print('Gesamtfehler (Relaxation): ' + str(np.sqrt(fehler.dot(fehler))))
-
-for j in range(5):
-    print('')
 
 print('========================================')
 print('Dampf-Reformierung: Vorwärmer + Reaktor')
@@ -760,7 +702,7 @@ print(
 print(
     'Isothermisch betriebener Reaktor, Q: ' +
     '{0:0.20g}'.format(
-        sum(nuij.dot(xi_accum_1) * h_1) * 1 / 60. ** 2 * 1 / 1000.
+        sum(nuij.dot(xi_1) * h_1) * 1 / 60. ** 2 * 1 / 1000.
     ).replace('.', ',') + ' kW'
 )
 
@@ -791,61 +733,95 @@ print('p: ' + '{:g}'.format(p) + ' bar')
 print('H: ' + '{0:0.6f}'.format(
     sum(n_1 * h_1) / sum(n_1) * 1000.) + ' J/kmol')
 
+
+for j in range(5):
+    print('')
+print('Gesamtfehler: ' + str(np.sqrt(fehler.dot(fehler))))
+print('========================================')
+for j in range(2):
+    print('')
+
 print('========================================')
 print('Wassergashift: Vorkühler + Reaktor')
 print('========================================')
 
-t_ein_rwgs = 210 + 273.15  # °K
-h_2 = h(t_ein_rwgs)
-cp_2 = r * cp_durch_r(t_ein_rwgs)
-g_2 = g(t_ein_rwgs, h_2)
-k_2 = k(t_ein_rwgs, g_2, nuij)
+t_aus_rwgs = 210 + 273.15  # °K
+h_2 = h(t_aus_rwgs)
+cp_2 = r * cp_durch_r(t_aus_rwgs)
+g_2 = g(t_aus_rwgs, h_2)
+# Vorkühler-Leistung
+q = sum(n_1 * (h_2 - h_1))  # mol/h * J/mol = J/h
 
-n_2 = n_1
-
-q = sum(n_2 * (h_2 - h_1))  # mol/h * J/mol = J/h
-
-print(
-    'Vormärmer (auf T= ' + str(t_ein_rwgs) + ' °K), Q: ' +
-    '{0:0.20g}'.format(
-        q * 1 / 60. ** 2 * 1 / 1000.  # 1h/60^2s * 1kW / 1000W
-    ).replace('.', ',') + ' kW'
-)
-
-# Koeffizienten neu bestimmen
-print(namen)
-stoech_m, indexes, nach_g_sortieren, k_2, nuij = stoech_matrix(
-    atom_m, g_2, namen, None)
-k_2 = k(t_ein_rwgs, g_2, nuij)
-naus_2 = np.copy(n_2)
-naus_2_norm = naus_2 / sum(naus_2)  # Normalisieren
+stoech_m, indexes, nach_g_sortieren, \
+    k_x_2, nuij = stoech_matrix(atom_m, g_2, p, t_aus_rwgs, namen, None)
+n_2 = np.copy(n_1)
+n_2_norm = n_2 / sum(n_1)  # Normalisieren
 # Entspannung
-# man könnte diesen Schritt überspringen.
-_, _, xi_0, _ = r_entspannung(k_2, naus_2_norm, 1, t_ein_rwgs)
-# xi_0[abs(xi_0) <= eps] = 0  # values indistinguishible from 0 remain 0
-# Normalisierung beheben
-xi_0 = xi_0 * sum(naus_2)
+_, _, xi_2_norm, _ = r_entspannung(k_x_2, n_2_norm, 1, t_aus_rwgs)
 # Newton Raphson
 progress_k, stop, outer_it_k, outer_it_j, \
     lambda_ls, accum_step, x, \
     diff, f_val, lambda_ls_y, \
     method_loops = \
-    nr_ls(x0=xi_0,
-          f=lambda xi: gg_abst_norm_sq(xi, n_1, k_2, nuij),
-          j=lambda xi: jac_gg_abst_norm_sq(xi, n_1, k_2, nuij),
-          tol=1e-6,
+    nr_ls(x0=xi_2_norm,
+          f=lambda xi: gg_abstaende(k_x_2, nuij, n_2_norm, xi),
+          j=lambda xi: jac_gg_abstaende(k_x_2, nuij, n_2_norm, xi),
+          tol=1e-12,
           max_it=1000,
           inner_loop_condition=lambda xi:
           all([item >= 0 for item in
-               n_1 + nuij.dot(xi)]),
+               n_2_norm + nuij.dot(xi)]),
           notify_status_func=notify_status_func,
           method_loops=[0, 0],
           process_func_handle=lambda: logging.debug('no progress'))
+xi_2 = x * sum(n_1)
+n_2 = (n_1 + nuij.dot(xi_2))
+fehler = fj_0(xi_2, n_1, k_x_2, nuij)
 
-for item in (n_1 + nuij.dot(x)) / 1000.:
-    print(item)
+print(
+    'Vorkühler (auf T= ' + str(t_aus_rwgs) + ' °K), Q: ' +
+    '{0:0.20g}'.format(
+        q * 1 / 60. ** 2 * 1 / 1000.  # 1h/60^2s * 1kW / 1000W
+    ).replace('.', ',') + ' kW'
+)
 
-# soln = optimize.root(
-#    lambda x_vec: fj_adiab(x_vec, n_1, h_1),
-#    np.concatenate([x, [t_ein_rwgs]])
-#)
+q = sum(n_2 * h_2 - n_1 * h_1)  # mol/h * J/mol = J/h
+
+print(
+    'Isothermisch betriebener Reaktor, Q: ' +
+    '{0:0.20g}'.format(
+        sum(nuij.dot(xi_2) * h_2) * 1 / 60. ** 2 * 1 / 1000.
+    ).replace('.', ',') + ' kW'
+)
+
+print(
+    'Totale zu tauschende Energie, Q: ' +
+    '{0:0.20g}'.format(
+        q * 1 / 60.**2 * 1 / 1000.
+    ).replace('.', ',') + ' kW'
+)
+
+print('')
+
+for i, komb in enumerate(np.array(n_2)):
+    print('n_{' + namen[i] + '}=' +
+          '{0:0.20g}'.format(komb / 1000.).replace('.', ',') +
+          ' kmol/h')
+print('n_T' + '=' +
+      '{0:0.20g}'.format(sum(n_2) / 1000.).replace('.', ',') +
+      ' kmol/h')
+print('')
+for i, komb in enumerate(np.array(n_2 / sum(n_2))):
+    print('y_{' + namen[i] + '}=' +
+          '{0:0.20g}'.format(komb).replace('.', ',')
+          )
+print('')
+print('T: ' + '{:g}'.format(t_aus_rwgs) + ' °K')
+print('p: ' + '{:g}'.format(p) + ' bar')
+print('H: ' + '{0:0.6f}'.format(
+    sum(n_2 * h_2) / sum(n_2) * 1000.) + ' J/kmol')
+
+for j in range(5):
+    print('')
+print('Gesamtfehler: ' + str(np.sqrt(fehler.dot(fehler))))
+print('========================================')

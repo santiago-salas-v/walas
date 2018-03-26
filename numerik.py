@@ -372,6 +372,8 @@ def line_search(fun, jac, x_c, known_f_c=None, known_j_c=None,
         rellength = max(abs(s_0_n) / max(abs(x_c)))
     # minimum allowable step length
     lambda_min = tol / rellength
+    # FIXME: lambda_min can sometimes be lower than tol / rellength
+    lambda_min = np.finfo(float).eps * lambda_min
     # $\nabla f(x_c)^T s^N = -F(x_c)^T F(x_c)$
     # initslope: expressed (p344) $g^T p$ as gradient . direction
     g_0 = 1 / 2. * scalar_prod(f_0, f_0)
@@ -411,11 +413,6 @@ def line_search(fun, jac, x_c, known_f_c=None, known_j_c=None,
             nan_result = np.any(np.isnan(f_1)) or \
                 np.any(np.isnan(f_2))
             accum_step += lambda_ls
-            if lambda_ls < lambda_min:
-                # failed to find suitable lambda
-                # outer_it_stop = True
-                # stop = True
-                pass
         g_2 = 1 / 2. * scalar_prod(f_2, f_2)
         descent = alpha * lambda_ls * g_prime_t_s
         satisfactory = g_2 <= g_0 + descent
@@ -426,8 +423,8 @@ def line_search(fun, jac, x_c, known_f_c=None, known_j_c=None,
             stop = satisfactory and additional_restrictions(x_2)
         if lambda_ls < lambda_min:
             # satisfactory x_2 cannot be found sufficiently distinct from x_c
-            # outer_it_stop = True
-            # stop = True
+            outer_it_stop = True
+            stop = True
             pass
         # Non-functional status notification
         if notify_status_func is not None:
