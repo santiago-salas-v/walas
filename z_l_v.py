@@ -100,7 +100,7 @@ def z_l_func(z, beta, q):
 # Dampfdruck nach VDI-Wärmeatlas
 
 
-def p_sat_func(psat, t, af_omega, tc, pc):
+def p_sat_func(psat, t, af_omega, tc, pc, full_output=False):
     tr = t / tc
     pr = psat / pc
     beta_i = beta(tr, pr)
@@ -127,7 +127,16 @@ def p_sat_func(psat, t, af_omega, tc, pc):
     ln_phi_v = + z_v - 1 - \
         np.log(z_v - beta_i) - q_i * i_i_v
     f1 = -ln_phi_v + ln_phi_l
-    return f1
+    if full_output:
+        opt_func = f1
+        phi_l = np.exp(ln_phi_l)
+        phi_v = np.exp(ln_phi_v)
+        soln = dict()
+        for item in ['z_l', 'z_v', 'phi_l', 'phi_v', 'opt_func']:
+            soln[item] = locals().get(item)
+        return soln
+    else:
+        return f1
 
 
 def p_sat(t, af_omega, tc, pc):

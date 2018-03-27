@@ -1,6 +1,7 @@
 import numpy as np
 from scipy import integrate
 from scipy import optimize
+from scipy import misc
 import z_l_v
 import logging
 from numerik import nr_ls
@@ -32,6 +33,17 @@ atom_m = np.array([
     [0, 2, 0, 2, 4, 3, 0, 0, 0],
     [0, 0, 0, 0, 0, 0, 1, 0, 0]
 ], dtype=float)
+
+mm_el = np.array([
+    12.011,
+    15.999,
+    14.007,
+    1.008,
+    39.948,
+])/1000. # kg/gmol
+
+mm_k = atom_m.T.dot(mm_el)
+
 
 red_atom_m = rref(ref(atom_m)[0])
 
@@ -733,10 +745,8 @@ print('p: ' + '{:g}'.format(p) + ' bar')
 print('H: ' + '{0:0.6f}'.format(
     sum(n_1 * h_1) / sum(n_1) * 1000.) + ' J/kmol')
 
-
-for j in range(5):
-    print('')
 print('Gesamtfehler: ' + str(np.sqrt(fehler.dot(fehler))))
+print('')
 print('========================================')
 for j in range(2):
     print('')
@@ -841,9 +851,10 @@ print('p: ' + '{:g}'.format(p) + ' bar')
 print('H: ' + '{0:0.6f}'.format(
     sum(n_2 * h_2) / sum(n_2) * 1000.) + ' J/kmol')
 
-for j in range(5):
-    print('')
 print('Gesamtfehler: ' + str(np.sqrt(fehler.dot(fehler))))
+
+print('')
+
 print('========================================')
 for j in range(2):
     print('')
@@ -856,7 +867,7 @@ t_aus_tkuehler = 20 + 273.15  # °K
 h_3 = h(t_aus_tkuehler)
 g_3 = g(t_aus_tkuehler, h_3)
 
-# Lösung des isothermischen Verdampfers
+# Lösung des isothermischen Verdampfers (des Abscheiders)
 z_i = n_2 / sum(n_2)
 x_i = 1 / len(n_2) * np.ones(len(n_2))
 y_i = 1 / len(n_2) * np.ones(len(n_2))
@@ -873,9 +884,69 @@ for i in range(10):
     if abs(v_f - v_f_temp) < 1e-12:
         break
 
+n_3_l = (1 - v_f) * sum(n_2) * x_i
+n_3_v = v_f * sum(n_2) * y_i
 
-# Vorkühler-Leistung, inklusive Flash bei 20°C
-q = sum(n_2 * (h_3 - h_2))  # mol/h * J/mol = J/h
+
+# die Verdampfungsenthalpie der Mischung lässt sich anhand der Clausius-Clapeyron
+# Gleichung berechnen, wofür man dp_s/dT braucht:
+# $\Delta h_v = T(v''-v') \fac{d p_s}{d_T}$
+# Bei Berechnung des Gemisches entstehen Probleme, wenn es keinen Siedepunkt
+# aufweist, aber für die einzelnen Komponente erfolgt die Berechnung, was
+# letztendlich die übliche Praxis für Verdampfungsenthalpie ist (Wärmeatlas D1 -
+# Gl 49).
+# Das molare Volumen der Flüssigkeit v' ist gegenüber demjenigen des Gases v''
+# vernachlässigbar.
+
+def p_sat_func(i):
+    soln = optimize.root(lambda p_sat: z_l_v.p_sat_func(
+        p_sat, t_aus_tkuehler, omega_af[i], tc[i], pc[i]), 1e-5)
+    if soln.success:
+        return soln.x
+    else:
+        return np.nan
+
+
+p_sat = np.empty_like(n_2)
+v_m_l = np.empty_like(n_2)
+v_m_v = np.empty_like(n_2)
+z_l = np.empty_like(n_2)
+z_v = np.empty_like(n_2)
+delta_h_v = np.empty_like(n_2)
+
+for i in range(len(p_sat)):
+    p_sat[i] = p_sat_func(i)
+    if not np.isnan(p_sat[i]):
+        soln = z_l_v.p_sat_func(
+            p_sat[i], t_aus_tkuehler,
+            omega_af[i], tc[i], pc[i],
+            full_output=True)
+        z_l[i] = soln['z_l']
+        z_v[i] = soln['z_v']
+        v_m_l[i] = z_l[i] * r * t_aus_tkuehler / (
+                p_sat[i] * 100000.)  # m^3 / mol
+        v_m_v[i] = z_v[i] * r * t_aus_tkuehler / (
+                p_sat[i] * 100000.)  # m^3 / mol
+        dps_dt = misc.derivative(
+            lambda t: optimize.root(
+                lambda p_sat: z_l_v.p_sat_func(
+                    p_sat, t, omega_af[i],
+                    tc[i], pc[i]), 1e-3
+            ).x, t_aus_tkuehler)  # bar / °K
+        # Clausius-Clapeyron
+        delta_h_v[i] = t_aus_tkuehler * (v_m_v[i] - v_m_l[i]) * dps_dt * \
+                       100000.  # J / mol
+    else:
+        z_l[i] = np.nan
+        z_v[i] = np.nan
+        v_m_l[i] = np.nan
+        v_m_v[i] = np.nan
+        delta_h_v[i] = 0
+
+
+# Vorkühler-Leistung, inklusive Verflüssigung des entsprechenden
+# Anteils bei Trockner-Temperatur (20°C)
+q = sum(n_2 * (h_3 - h_2))  +  sum(n_3_l * -delta_h_v) # mol/h * J/mol = J/h
 
 print(
     'Vorkühler (auf T= ' + str(t_aus_tkuehler) + ' °K), Q: ' +
@@ -883,3 +954,54 @@ print(
         q * 1 / 60. ** 2 * 1 / 1000.  # 1h/60^2s * 1kW / 1000W
     ).replace('.', ',') + ' kW'
 )
+
+
+print('')
+
+print('Dampfphase:')
+
+for i, komb in enumerate(np.array(n_3_v)):
+    print('n_{' + namen[i] + '}=' +
+          '{0:0.20g}'.format(komb / 1000.).replace('.', ',') +
+          ' kmol/h')
+print('n_T' + '=' +
+      '{0:0.20g}'.format(sum(n_3_v) / 1000.).replace('.', ',') +
+      ' kmol/h')
+print('')
+for i, komb in enumerate(y_i):
+    print('y_{' + namen[i] + '}=' +
+          '{0:0.20g}'.format(komb).replace('.', ',')
+          )
+print('')
+print('T: ' + '{:g}'.format(t_aus_tkuehler) + ' °K')
+print('p: ' + '{:g}'.format(p) + ' bar')
+print('H: ' + '{0:0.6f}'.format(
+    sum(n_3_v * h_3) / sum(n_3_v) * 1000.) + ' J/kmol')
+
+print('')
+
+print('========================================')
+
+print('Flüssigphase (Abwasser):')
+
+for i, komb in enumerate(np.array(n_3_l)):
+    print('n_{' + namen[i] + '}=' +
+          '{0:0.20g}'.format(komb / 1000.).replace('.', ',') +
+          ' kmol/h')
+print('n_T' + '=' +
+      '{0:0.20g}'.format(sum(n_3_l) / 1000.).replace('.', ',') +
+      ' kmol/h')
+print('')
+for i, komb in enumerate(x_i):
+    print('x_{' + namen[i] + '}=' +
+          '{0:0.20g}'.format(komb).replace('.', ',')
+          )
+print('')
+print('T: ' + '{:g}'.format(t_aus_tkuehler) + ' °K')
+print('p: ' + '{:g}'.format(p) + ' bar')
+print('H: ' + '{0:0.6f}'.format(
+    sum(n_3_l * h_3) / sum(n_3_l) * 1000.) + ' J/kmol')
+
+print('')
+
+print('========================================')
