@@ -12,7 +12,7 @@ from setup_results_log import notify_status_func, setup_log_file
 
 eps = np.finfo(float).eps
 np.set_printoptions(linewidth=200)
-setup_log_file('log_bsp_pat_ue_03_2.log', with_console=False)
+setup_log_file('log_bsp_pat_ue_03_2.log', with_console=True)
 
 # Modell feststellen
 z_l_v.use_pr_eos()
@@ -40,7 +40,7 @@ mm_el = np.array([
     14.007,
     1.008,
     39.948,
-])/1000. # kg/gmol
+]) / 1000.  # kg/gmol
 
 mm_k = atom_m.T.dot(mm_el)
 
@@ -281,7 +281,7 @@ def stoech_matrix(atom_m, g_t, p, temp, namen, festgelegte_komponente=None):
     # rearrange columns to original order (rows remain the same, so does K)
     nuij = np.array(stoech_m[:, np.argsort(indexes)]
                     [:, np.argsort(nach_g_sortieren)]).T
-    return stoech_m, indexes, nach_g_sortieren, k_x_t, nuij
+    return stoech_m, indexes, nach_g_sortieren, k_x_t, k_t, nuij
 
 
 def jac_gg_abstaende(k, nuij, n_0, xi):
@@ -665,7 +665,7 @@ def fj_adiab(x_vec, n_0, h_0):
 
 
 stoech_m, indexes, nach_g_sortieren, \
-    k_x_1, nuij = stoech_matrix(atom_m, g_1, p, t_aus_rdampfr, namen, [4])
+    k_x_1, k_1, nuij = stoech_matrix(atom_m, g_1, p, t_aus_rdampfr, namen, [4])
 n_1 = np.copy(n_0)
 n_1_norm = n_1 / sum(n_0)  # Normalisieren
 # Entspannung
@@ -710,6 +710,15 @@ print(
         1 / 1000.  # 1h/60^2s * 1kW / 1000W
     ).replace('.', ',') + ' kW'
 )
+
+print('Berücksichtigte (unabhängige) Reaktionen:')
+
+for j, row in enumerate(np.array(nuij.T)):
+    lhs = '+ '.join([str(abs(row[i])) + ' ' + namen[i]
+                     for i in np.where(row < 0)[0]])
+    rhs = '+'.join([str(abs(row[i])) + ' ' + namen[i]
+                    for i in np.where(row > 0)[0]])
+    print(lhs + '<<==>>' + rhs  + '    K(T)=' + '{:g}'.format(k_1[j]))
 
 print(
     'Isothermisch betriebener Reaktor, Q: ' +
@@ -763,7 +772,7 @@ g_2 = g(t_aus_rwgs, h_2)
 q = sum(n_1 * (h_2 - h_1))  # mol/h * J/mol = J/h
 
 stoech_m, indexes, nach_g_sortieren, \
-    k_x_2, nuij = stoech_matrix(atom_m, g_2, p, t_aus_rwgs, namen, None)
+    k_x_2, k_2, nuij = stoech_matrix(atom_m, g_2, p, t_aus_rwgs, namen, None)
 # Force selected reactions
 # namen = ['CO', 'H2', 'CO2', 'H2O', 'CH4', 'NH3', 'AR', 'O2', 'N2']
 nuij_force = np.array([
@@ -814,6 +823,15 @@ print(
         q * 1 / 60. ** 2 * 1 / 1000.  # 1h/60^2s * 1kW / 1000W
     ).replace('.', ',') + ' kW'
 )
+
+print('Berücksichtigte Reaktionen:')
+
+for j, row in enumerate(np.array(nuij.T)):
+    lhs = '+ '.join([str(abs(row[i])) + ' ' + namen[i]
+                     for i in np.where(row < 0)[0]])
+    rhs = '+'.join([str(abs(row[i])) + ' ' + namen[i]
+                    for i in np.where(row > 0)[0]])
+    print(lhs + '<<==>>' + rhs  + '    K(T)=' + '{:g}'.format(k_2[j]))
 
 q = sum(n_2 * h_2 - n_1 * h_1)  # mol/h * J/mol = J/h
 
@@ -924,9 +942,9 @@ for i in range(len(p_sat)):
         z_l[i] = soln['z_l']
         z_v[i] = soln['z_v']
         v_m_l[i] = z_l[i] * r * t_aus_tkuehler / (
-                p_sat[i] * 100000.)  # m^3 / mol
+            p_sat[i] * 100000.)  # m^3 / mol
         v_m_v[i] = z_v[i] * r * t_aus_tkuehler / (
-                p_sat[i] * 100000.)  # m^3 / mol
+            p_sat[i] * 100000.)  # m^3 / mol
         dps_dt = misc.derivative(
             lambda t: optimize.root(
                 lambda p_sat: z_l_v.p_sat_func(
@@ -935,7 +953,7 @@ for i in range(len(p_sat)):
             ).x, t_aus_tkuehler)  # bar / °K
         # Clausius-Clapeyron
         delta_h_v[i] = t_aus_tkuehler * (v_m_v[i] - v_m_l[i]) * dps_dt * \
-                       100000.  # J / mol
+            100000.  # J / mol
     else:
         z_l[i] = np.nan
         z_v[i] = np.nan
@@ -946,7 +964,7 @@ for i in range(len(p_sat)):
 
 # Vorkühler-Leistung, inklusive Verflüssigung des entsprechenden
 # Anteils bei Trockner-Temperatur (20°C)
-q = sum(n_2 * (h_3 - h_2))  +  sum(n_3_l * -delta_h_v) # mol/h * J/mol = J/h
+q = sum(n_2 * (h_3 - h_2)) + sum(n_3_l * -delta_h_v)  # mol/h * J/mol = J/h
 
 print(
     'Vorkühler (auf T= ' + str(t_aus_tkuehler) + ' °K), Q: ' +
@@ -972,6 +990,9 @@ for i, komb in enumerate(y_i):
     print('y_{' + namen[i] + '}=' +
           '{0:0.20g}'.format(komb).replace('.', ',')
           )
+print('')
+print('H2/N2 Verhältnis: ' + str(y_i[namen.index('H2')]/y_i[namen.index('N2')]))
+print('Stoechiometrisches Verhältnis: ' + str(3))
 print('')
 print('T: ' + '{:g}'.format(t_aus_tkuehler) + ' °K')
 print('p: ' + '{:g}'.format(p) + ' bar')
@@ -1001,6 +1022,173 @@ print('T: ' + '{:g}'.format(t_aus_tkuehler) + ' °K')
 print('p: ' + '{:g}'.format(p) + ' bar')
 print('H: ' + '{0:0.6f}'.format(
     sum(n_3_l * h_3) / sum(n_3_l) * 1000.) + ' J/kmol')
+
+print('')
+
+print('========================================')
+for j in range(2):
+    print('')
+
+print('========================================')
+print('CO2-Abschneider: ')
+print('========================================')
+
+
+h_4 = h_3
+abschn_fakt_ab = np.zeros([len(n_3_v), len(n_3_v)])
+abschn_fakt_pr = np.eye(len(n_3_v))
+co2_index = np.array([n == 'CO2' for n in namen])
+abschn_fakt_ab[co2_index, co2_index] = 0.95
+abschn_fakt_pr[co2_index, co2_index] = 0.05
+
+n_4_ab = abschn_fakt_ab.dot(n_3_v)
+n_4_pr = abschn_fakt_pr.dot(n_3_v)
+
+print('Abtrennung-Faktor (CO2): ' + str(0.05) + ' - Produkt')
+
+for i, komb in enumerate(np.array(n_4_pr)):
+    print('n_{' + namen[i] + '}=' +
+          '{0:0.20g}'.format(komb / 1000.).replace('.', ',') +
+          ' kmol/h')
+print('n_T' + '=' +
+      '{0:0.20g}'.format(sum(n_4_pr) / 1000.).replace('.', ',') +
+      ' kmol/h')
+print('')
+for i, komb in enumerate(n_4_pr / sum(n_4_pr)):
+    print('y_{' + namen[i] + '}=' +
+          '{0:0.20g}'.format(komb).replace('.', ',')
+          )
+print('')
+print('T: ' + '{:g}'.format(t_aus_tkuehler) + ' °K')
+print('p: ' + '{:g}'.format(p) + ' bar')
+print('H: ' + '{0:0.6f}'.format(
+    sum(n_4_pr * h_4) / sum(n_4_pr) * 1000.) + ' J/kmol')
+
+print('')
+
+print('========================================')
+print('Abtrennung-Faktor (CO2): ' + str(0.95) + ' - Abfluss')
+
+for i, komb in enumerate(np.array(n_4_ab)):
+    print('n_{' + namen[i] + '}=' +
+          '{0:0.20g}'.format(komb / 1000.).replace('.', ',') +
+          ' kmol/h')
+print('n_T' + '=' +
+      '{0:0.20g}'.format(sum(n_4_ab) / 1000.).replace('.', ',') +
+      ' kmol/h')
+print('')
+for i, komb in enumerate(n_4_ab / sum(n_4_ab)):
+    print('y_{' + namen[i] + '}=' +
+          '{0:0.20g}'.format(komb).replace('.', ',')
+          )
+print('')
+print('T: ' + '{:g}'.format(t_aus_tkuehler) + ' °K')
+print('p: ' + '{:g}'.format(p) + ' bar')
+print('H: ' + '{0:0.6f}'.format(
+    sum(n_4_ab * h_4) / sum(n_4_ab) * 1000.) + ' J/kmol')
+print('')
+
+print('========================================')
+for j in range(2):
+    print('')
+
+print('========================================')
+print('Methanisierung: Aufheizer + Reaktor')
+print('========================================')
+
+t_aus_rmeth = 350 + 273.15  # °K
+h_5 = h(t_aus_rmeth )
+g_5 = g(t_aus_rmeth , h_5)
+# Aufheizer-Leistung
+q = sum(n_4_pr * (h_5 - h_4))  # mol/h * J/mol = J/h
+
+stoech_m, indexes, nach_g_sortieren, \
+    k_x_5, k_5, nuij = stoech_matrix(atom_m, g_5, p, t_aus_rmeth, namen, None)
+
+# Ammoniaksynthese sei künstlich ausgeschlossen
+k_5 = k_5[nuij[namen.index('NH3'),:]==0]
+k_x_5 = k_x_5[nuij[namen.index('NH3'),:]==0]
+nuij = nuij[:,nuij[namen.index('NH3'),:]==0]
+
+n_5 = np.copy(n_4_pr)
+n_5_norm = n_5 / sum(n_5)  # Normalisieren
+# Entspannung
+_, _, xi_5_norm, _ = r_entspannung(k_x_5, n_5_norm, 1, t_aus_rmeth)
+# Newton Raphson
+progress_k, stop, outer_it_k, outer_it_j, \
+    lambda_ls, accum_step, x, \
+    diff, f_val, lambda_ls_y, \
+    method_loops = \
+    nr_ls(x0=xi_5_norm,
+          f=lambda xi: gg_abstaende(k_x_5, nuij, n_5_norm, xi),
+          j=lambda xi: jac_gg_abstaende(k_x_5, nuij, n_5_norm, xi),
+          tol=1e-12,
+          max_it=1000,
+          inner_loop_condition=lambda xi:
+          all([item >= 0 for item in
+               n_5_norm + nuij.dot(xi)]),
+          notify_status_func=notify_status_func,
+          method_loops=[0, 0],
+          process_func_handle=lambda: logging.debug('no progress'))
+xi_5 = x * sum(n_5)
+n_5 = (n_4_pr + nuij.dot(xi_5))
+fehler = fj_0(xi_5, n_4_pr, k_x_5, nuij)
+
+print(
+    'Aufheizer (auf T= ' + str(t_aus_rmeth) + ' °K), Q: ' +
+    '{0:0.20g}'.format(
+        q * 1 / 60. ** 2 * 1 / 1000.  # 1h/60^2s * 1kW / 1000W
+    ).replace('.', ',') + ' kW'
+)
+
+print('Berücksichtigte (unabhängige) Reaktionen:')
+
+for j, row in enumerate(np.array(nuij.T)):
+    lhs = '+ '.join([str(abs(row[i])) + ' ' + namen[i]
+                     for i in np.where(row < 0)[0]])
+    rhs = '+'.join([str(abs(row[i])) + ' ' + namen[i]
+                    for i in np.where(row > 0)[0]])
+    print(lhs + '<<==>>' + rhs  + '    K(T)=' + '{:g}'.format(k_5[j]))
+
+print(namen)
+
+q = sum(n_5 * h_5 - n_4_pr * h_4)  # mol/h * J/mol = J/h
+
+print(
+    'Isothermisch betriebener Reaktor, Q: ' +
+    '{0:0.20g}'.format(
+        sum(nuij.dot(xi_5) * h_5) * 1 / 60. ** 2 * 1 / 1000.
+    ).replace('.', ',') + ' kW'
+)
+
+print(
+    'Totale zu tauschende Energie, Q: ' +
+    '{0:0.20g}'.format(
+        q * 1 / 60.**2 * 1 / 1000.
+    ).replace('.', ',') + ' kW'
+)
+
+print('')
+
+for i, komb in enumerate(np.array(n_5)):
+    print('n_{' + namen[i] + '}=' +
+          '{0:0.20g}'.format(komb / 1000.).replace('.', ',') +
+          ' kmol/h')
+print('n_T' + '=' +
+      '{0:0.20g}'.format(sum(n_5) / 1000.).replace('.', ',') +
+      ' kmol/h')
+print('')
+for i, komb in enumerate(np.array(n_5 / sum(n_5))):
+    print('y_{' + namen[i] + '}=' +
+          '{0:0.20g}'.format(komb).replace('.', ',')
+          )
+print('')
+print('T: ' + '{:g}'.format(t_aus_rmeth) + ' °K')
+print('p: ' + '{:g}'.format(p) + ' bar')
+print('H: ' + '{0:0.6f}'.format(
+    sum(n_5 * h_5) / sum(n_5) * 1000.) + ' J/kmol')
+
+print('Gesamtfehler: ' + str(np.sqrt(fehler.dot(fehler))))
 
 print('')
 
