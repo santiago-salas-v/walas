@@ -7,12 +7,11 @@ import logging
 from numerik import nr_ls
 from numerik import gauss_elimination, lrpd, rref, ref, sdm, scalar_prod
 import itertools
-import os
 from setup_results_log import notify_status_func, setup_log_file
 
 eps = np.finfo(float).eps
 np.set_printoptions(linewidth=200)
-setup_log_file('log_bsp_pat_ue_03_2.log', with_console=True)
+setup_log_file('log_bsp_pat_ue_03_2.log', with_console=False)
 
 # Modell feststellen
 z_l_v.use_pr_eos()
@@ -1149,8 +1148,6 @@ for j, row in enumerate(np.array(nuij.T)):
     rhs = '+'.join([str(abs(row[i])) + ' ' + namen[i]
                     for i in np.where(row > 0)[0]])
     print(lhs + '<<==>>' + rhs  + '    K(T)=' + '{:g}'.format(k_5[j]))
-
-print(namen)
 
 q = sum(n_5 * h_5 - n_4_pr * h_4)  # mol/h * J/mol = J/h
 
