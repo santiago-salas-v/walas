@@ -186,6 +186,8 @@ def nr_ls(x0, f, j, tol, max_it, inner_loop_condition,
     # Line search variable lambda
     lambda_ls = 1.0
     accum_step = 0.0
+    # Machine precision
+    machine_eps = np.finfo(float).eps
     # For progress bar, use exp scale to compensate for quadratic convergence
     progress_factor = 1 / (1 - 10. ** (5 * (2 - 1))) * np.log(0.1)  # prog=0.1, x=10^-5 & tol=10^-10
     progress_k = np.exp((-magnitude_f + tol) / tol * progress_factor) * 100.
@@ -229,13 +231,19 @@ def nr_ls(x0, f, j, tol, max_it, inner_loop_condition,
             gradient_change = abs(g_val - g_max) > np.finfo(float).eps
             no_gradient_change_twice = no_gradient_change_once and not gradient_change
             no_gradient_change_once = no_gradient_change_once or not gradient_change
+            min_g_reached = g_val <= machine_eps
+            # conditions to stop prematurely: sum of squares reaches machine precision, or
+            # no progress and no gradient change
+            premature_stop = progress_k == progress_k_m_1 and \
+                             no_gradient_change_twice or \
+                             min_g_reached
             if np.isnan(magnitude_f) or np.isinf(magnitude_f):
                 stop = True  # Divergent method
                 divergent = True
                 progress_k = 0.0
             else:
                 pass
-            if progress_k == progress_k_m_1 and no_gradient_change_twice:
+            if premature_stop:
                 # Non-functional gui processing
                 process_func_handle()
                 stop = True
