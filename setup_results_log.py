@@ -51,7 +51,8 @@ def notify_status_func(progress_k, stop_value, k,
         ';Y=' + y_str + \
         ';||Y||=' + y_str + \
         ';g=' + str(g_min) + \
-        ';|g-g1|=' + str(abs(g_min - g1))
+        ';|g-g1|=' + str(abs(g_min - g1)) + \
+        ';progress=' + str(progress_k)
     logging.debug(pr_str)
 
 

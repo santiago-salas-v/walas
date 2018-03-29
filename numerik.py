@@ -150,7 +150,8 @@ def gauss_elimination(a, b):
 
 # noinspection PyAugmentAssignment
 def nr_ls(x0, f, j, tol, max_it, inner_loop_condition,
-          notify_status_func, method_loops, process_func_handle):
+          notify_status_func, process_func_handle,
+          alpha=1e-4):
     """
     Newton method: G(x) = J(x)^-1 * F(x)
 
@@ -161,12 +162,11 @@ def nr_ls(x0, f, j, tol, max_it, inner_loop_condition,
     :param max_it: maximum number of iterations.
     :param inner_loop_condition: inner loop condition. Function to activate line search.
     :param notify_status_func: logging function.
-    :param method_loops: starting loop number.
     :param process_func_handle: function handle to exit process.
+    :param alpha: line search parameter.
     :return: progress_k, stop, outer_it_k,\
         inner_it_j, lambda_ls, accum_step,\
-        x, diff, f_val, lambda_ls * y,\
-        method_loops
+        x, diff, f_val, lambda_ls * y
     """
     x = x0
     outer_it_k = 0
@@ -179,7 +179,7 @@ def nr_ls(x0, f, j, tol, max_it, inner_loop_condition,
     if np.size(x) > 1:
         y = np.ones(len(x)).T * tol / (np.sqrt(len(x)) * tol)
         magnitude_f = np.sqrt((f_val.dot(f_val)).item())
-        diff = np.empty([len(x), 1])
+        diff = np.empty(len(x))
         diff.fill(np.nan)
     elif np.size(x) == 1:
         pass  # defined above
@@ -187,19 +187,24 @@ def nr_ls(x0, f, j, tol, max_it, inner_loop_condition,
     lambda_ls = 1.0
     accum_step = 0.0
     # For progress bar, use exp scale to compensate for quadratic convergence
-    progress_k = np.exp(-magnitude_f + tol) * 100.
+    progress_factor = 1 / (1 - 10. ** (5 * (2 - 1))) * np.log(0.1)  # prog=0.1, x=10^-5 & tol=10^-10
+    progress_k = np.exp((-magnitude_f + tol) / tol * progress_factor) * 100.
     stop = magnitude_f < tol  # stop if already fulfilling condition
     divergent = False
-    gradient_change = True
+    no_gradient_change_once = False
     # Non-functional status notification
-    notify_status_func(progress_k, stop, outer_it_k,
-                       inner_it_j, lambda_ls, accum_step,
-                       x, diff, f_val, j_val, lambda_ls * y,
-                       method_loops)
+    if notify_status_func is not None:
+        g_val = 1 / 2. * scalar_prod(f_val, f_val)
+        g_prime_t_s = -scalar_prod(f_val, f_val)
+        descent = alpha * lambda_ls * g_prime_t_s
+        g_max = g_val + descent
+        notify_status_func(progress_k, stop, outer_it_k,
+                           inner_it_j, lambda_ls, accum_step,
+                           x, diff, f_val, j_val, 1.0 * y,
+                           inner_it_j, g_min=g_val, g1=g_max)
     # End non-functional notification
     while outer_it_k <= max_it and not stop:
         outer_it_k += 1
-        method_loops[1] += 1
         x_k_m_1 = x
         progress_k_m_1 = progress_k
         # First attempt without backtracking. Continue line search
@@ -208,7 +213,7 @@ def nr_ls(x0, f, j, tol, max_it, inner_loop_condition,
             lambda_ls, overall_stop, accum_step = \
             line_search(
                 f, j, x, known_f_c=f_val, known_j_c=j_val,
-                max_iter=max_it, alpha=1e-4, tol=tol,
+                max_iter=max_it, alpha=alpha, tol=tol,
                 additional_restrictions=inner_loop_condition,
                 notify_status_func=notify_status_func,
                 outer_it=outer_it_k, accum_step=accum_step)
@@ -219,30 +224,31 @@ def nr_ls(x0, f, j, tol, max_it, inner_loop_condition,
         else:
             # For progress use exp scale to compensate for quadratic
             # convergence
-            progress_k = np.exp(-magnitude_f + tol) * 100.
+            progress_k = np.exp((-magnitude_f + tol) / tol * progress_factor) * 100.
+            # continue if gradient still changing
+            gradient_change = abs(g_val - g_max) > np.finfo(float).eps
+            no_gradient_change_twice = no_gradient_change_once and not gradient_change
+            no_gradient_change_once = no_gradient_change_once or not gradient_change
             if np.isnan(magnitude_f) or np.isinf(magnitude_f):
                 stop = True  # Divergent method
                 divergent = True
                 progress_k = 0.0
             else:
                 pass
-            if progress_k == progress_k_m_1 and not gradient_change:
+            if progress_k == progress_k_m_1 and no_gradient_change_twice:
                 # Non-functional gui processing
                 process_func_handle()
                 stop = True
                 # End non-functional processing
                 # if form.progress_var.wasCanceled():
                 # stop = True
-            # continue if gradient still changing
-            gradient_change = abs(g_val - g_max) > np.finfo(float).eps
     if stop and not divergent:
         progress_k = 100.0
     elif divergent:
         progress_k = 0.0
     return progress_k, stop, outer_it_k,\
         inner_it_j, lambda_ls, accum_step,\
-        x, diff, f_val, lambda_ls * y,\
-        method_loops
+        x, diff, f_val, lambda_ls * y
 
 
 def sdm(x0, f, j, tol, notify_status_func, inner_loop_condition=None):
@@ -333,7 +339,7 @@ def sdm(x0, f, j, tol, notify_status_func, inner_loop_condition=None):
 def line_search(fun, jac, x_c, known_f_c=None, known_j_c=None,
                 max_iter=50, alpha=1e-4, tol=1e-8,
                 additional_restrictions=None, notify_status_func=None,
-                outer_it=0, accum_step=0):
+                outer_it=1, accum_step=0):
     """Line search algorithm
 
     Jr., J. E. Dennis ; Schnabel, Robert B.: Numerical Methods for Unconstrained
@@ -397,6 +403,7 @@ def line_search(fun, jac, x_c, known_f_c=None, known_j_c=None,
     g_1 = np.empty_like(g_0)
     magnitude_f = np.empty_like(lambda_ls)
     g_max = np.empty_like(lambda_ls)
+    progress_factor = 1 / (1 - 10. ** (5 * (2 - 1))) * np.log(0.1)  # prog=0.1, x=10^-5 & tol=10^-10
     stop = False
     outer_it_stop = False
     while backtrack_count < max_iter and not stop:
@@ -412,22 +419,12 @@ def line_search(fun, jac, x_c, known_f_c=None, known_j_c=None,
             if notify_status_func is not None:
                 diff = (lambda_ls - lambda_prev) * s_0_n
                 inner_it_j = backtrack_count
-                progress_k = np.exp(-g_2 / g_max) * 100.
-                notify_status_func(
-                    progress_k,
-                    outer_it_stop and stop,
-                    outer_it,
-                    inner_it_j,
-                    lambda_ls,
-                    accum_step,
-                    x_2,
-                    diff,
-                    f_2,
-                    j_0,
-                    lambda_ls * s_0_n,
-                    backtrack_count,
-                    g_min=g_2,
-                    g1=g_max)
+                magnitude_f = np.sqrt(2 * g_2)
+                progress_k = np.exp((-magnitude_f + tol) / tol * progress_factor) * 100.
+                notify_status_func(progress_k, outer_it_stop and stop, outer_it,
+                                   inner_it_j, lambda_ls, accum_step,
+                                   x_2, diff, f_2, j_0, lambda_ls * s_0_n,
+                                   backtrack_count, g_min=g_2, g1=g_max)
             # End non-functional notification
             accum_step -= lambda_ls
             backtrack_count += 1
@@ -457,7 +454,7 @@ def line_search(fun, jac, x_c, known_f_c=None, known_j_c=None,
         if notify_status_func is not None:
             diff = (lambda_ls - lambda_prev) * s_0_n
             inner_it_j = backtrack_count
-            progress_k = np.exp(-g_2 / (g_0 + descent)) * 100.
+            progress_k = np.exp((-magnitude_f + tol) / tol * progress_factor) * 100.
             notify_status_func(progress_k, outer_it_stop and stop, outer_it,
                                inner_it_j, lambda_ls, accum_step,
                                x_2, diff, f_2, j_0, lambda_ls * s_0_n,

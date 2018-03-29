@@ -5,7 +5,7 @@ from scipy import misc
 import z_l_v
 import logging
 from numerik import nr_ls
-from numerik import gauss_elimination, lrpd, rref, ref, sdm, scalar_prod
+from numerik import rref, ref
 import itertools
 from setup_results_log import notify_status_func, setup_log_file
 
@@ -378,8 +378,7 @@ def r_entspannung(k_j, n_0, x_mal, temp_0, betrieb='isotherm'):
 
             progress_k, stop, outer_it_k, outer_it_j, \
                 lambda_ls, accum_step, x, \
-                diff, f_val, lambda_ls_y, \
-                method_loops = \
+                diff, f_val, lambda_ls_y = \
                 nr_ls(x0=-eps,
                       f=lambda xi: gg_abstaende(k_j[j], nuij[:, j], n, xi),
                       j=lambda xi: jac_gg_abstaende(k_j[j], nuij[:, j], n, xi),
@@ -389,7 +388,6 @@ def r_entspannung(k_j, n_0, x_mal, temp_0, betrieb='isotherm'):
                       all([item >= 0 for item in
                            n + nuij[:, j] * xi]),
                       notify_status_func=notify_status_func,
-                      method_loops=[0, 0],
                       process_func_handle=lambda: logging.debug('no progress'))
 
             soln_xi = x
@@ -672,8 +670,7 @@ _, _, xi_1_norm, _ = r_entspannung(k_x_1, n_1_norm, 1, t_aus_rdampfr)
 # Newton Raphson
 progress_k, stop, outer_it_k, outer_it_j, \
     lambda_ls, accum_step, x, \
-    diff, f_val, lambda_ls_y, \
-    method_loops = \
+    diff, f_val, lambda_ls_y = \
     nr_ls(x0=xi_1_norm,
           f=lambda xi: gg_abstaende(k_x_1, nuij, n_1_norm, xi),
           j=lambda xi: jac_gg_abstaende(k_x_1, nuij, n_1_norm, xi),
@@ -683,7 +680,6 @@ progress_k, stop, outer_it_k, outer_it_j, \
           all([item >= 0 for item in
                n_1_norm + nuij.dot(xi)]),
           notify_status_func=notify_status_func,
-          method_loops=[0, 0],
           process_func_handle=lambda: logging.debug('no progress'))
 xi_1 = x * sum(n_0)
 n_1 = (n_0 + nuij.dot(xi_1))
@@ -799,8 +795,7 @@ _, _, xi_2_norm, _ = r_entspannung(k_x_2, n_2_norm, 1, t_aus_rwgs)
 # Newton Raphson
 progress_k, stop, outer_it_k, outer_it_j, \
     lambda_ls, accum_step, x, \
-    diff, f_val, lambda_ls_y, \
-    method_loops = \
+    diff, f_val, lambda_ls_y= \
     nr_ls(x0=xi_2_norm,
           f=lambda xi: gg_abstaende(k_x_2, nuij, n_2_norm, xi),
           j=lambda xi: jac_gg_abstaende(k_x_2, nuij, n_2_norm, xi),
@@ -810,7 +805,6 @@ progress_k, stop, outer_it_k, outer_it_j, \
           all([item >= 0 for item in
                n_2_norm + nuij.dot(xi)]),
           notify_status_func=notify_status_func,
-          method_loops=[0, 0],
           process_func_handle=lambda: logging.debug('no progress'))
 xi_2 = x * sum(n_1)
 n_2 = (n_1 + nuij.dot(xi_2))
@@ -1116,8 +1110,7 @@ _, _, xi_5_norm, _ = r_entspannung(k_x_5, n_5_norm, 1, t_aus_rmeth)
 # Newton Raphson
 progress_k, stop, outer_it_k, outer_it_j, \
     lambda_ls, accum_step, x, \
-    diff, f_val, lambda_ls_y, \
-    method_loops = \
+    diff, f_val, lambda_ls_y = \
     nr_ls(x0=xi_5_norm,
           f=lambda xi: gg_abstaende(k_x_5, nuij, n_5_norm, xi),
           j=lambda xi: jac_gg_abstaende(k_x_5, nuij, n_5_norm, xi),
@@ -1127,7 +1120,6 @@ progress_k, stop, outer_it_k, outer_it_j, \
           all([item >= 0 for item in
                n_5_norm + nuij.dot(xi)]),
           notify_status_func=notify_status_func,
-          method_loops=[0, 0],
           process_func_handle=lambda: logging.debug('no progress'))
 xi_5 = x * sum(n_5)
 n_5 = (n_4_pr + nuij.dot(xi_5))
