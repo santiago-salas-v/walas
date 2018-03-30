@@ -146,12 +146,23 @@ def cp_durch_r(t, component=-1):
         ))  # dimensionslos
 
 
-def gem_cp_durch_r(t, x):
+def x_cp_r(t, x):
     tot = 0
     for i, frac in enumerate(x):
         tot += frac * cp_durch_r(t, i)
     return tot
 
+
+def mcph(x, t0, t):
+    return integrate.quad(
+        lambda temp: x_cp_r(temp, x), t0, t
+    )[0] / (t - t0)
+
+
+def mcps(x, t0, t):
+    return integrate.quad(
+        lambda temp: x_cp_r(temp, x) / temp, t0, t
+    )[0] / np.log(t / t0)
 
 # Berechne H(T), G(T) und K(T) mit Cp(T)
 
@@ -1199,43 +1210,64 @@ print('========================================')
 print('Verdichtung: Adiabatischer Verdichter + Abkühler')
 print('========================================')
 
-p = 180  # bar
-
 n = n_5
+p2 = 180.  # bar
+p1 = 35.  # bar
+t1 = t_aus_rmeth
 
 # isentropisch: $dS = \frac{dQ_rev}{T}=\frac{Cp^{iG}}{T}-R/PdP=0$
 
-t_aus_verdichter = optimize.newton(
-    lambda t: np.log(180 / 35.) - integrate.quad(
-        lambda temp: gem_cp_durch_r(
-            temp, n_5 / sum(n_5)
-        ) / temp, t_aus_rmeth, t)[0],
-    t_aus_rmeth
+t2_rev = optimize.newton(
+    lambda t: np.log(p2 / p1) - integrate.quad(
+        lambda temp: x_cp_r(
+            temp, n / sum(n)
+        ) / temp, t1, t)[0],
+    t1
 )
 
-wg_mech = 0.95
+wg_mech = 1.0
 
-wg_th = 0.70 * 0.95 * 0.9
+wg_th = 0.72
 
-h1 = h(t_aus_rmeth)
+h1 = h(t1)
 
-h2 = h(t_aus_verdichter)
+h2 = h(t2_rev)
 
 # p12: Verdichter-Leistung. Zunächst reversibel, danach mit Wirkungsgraden.
 
 p12_rev = sum(n * (h2 - h1))
 
+# Alt. Methode (AP, PAT)
+
+# Idealgas: $ gamma \equiv C_p/C_v = C_v + R $
+gamma = 1 / (1 - 1 / mcps(n / sum(n), t1, t2_rev))
+
+p12_rev = sum(n) * r * t1 / ((gamma - 1) / gamma) * (
+    (p2 / p1)**((gamma - 1) / gamma) - 1)
+
 p12 = p12_rev / wg_th / wg_mech
 
-t_aus_verdichter = optimize.newton(
-    lambda temp: - sum(n / sum(n) * h(temp)) + (
-            p12_rev / wg_th - sum(n / sum(n) * h1)) / sum(n),
-    t_aus_verdichter
+
+# Gmehling-Methode
+t2 = optimize.newton(
+    lambda t2: - sum(n / sum(n) * h(t2)) + (
+        p12_rev / wg_th / sum(n) + sum(n / sum(n) * h1)),
+    t2_rev
 )
 
-h2 = h(t_aus_verdichter)
+# SVN-Methode
+t2 = optimize.newton(
+    lambda t2: -t2 + t1 + sum(n * (h2 - h1)) / sum(n) / wg_th / (
+        r * integrate.quad(
+            lambda temp: x_cp_r(
+                temp, n / sum(n)), t1, t2
+        )[0] / (t2 - t1)
+    ), t2_rev)
 
-t_aus_vd_kuehler = t_aus_rmeth
+h2 = h(t2)
+
+t_aus_verdichter = t2
+t_aus_vd_kuehler = t1
 
 q = sum(n * (h1 - h2))
 
@@ -1245,6 +1277,8 @@ print(
         p12_rev / wg_th * 1 / 60. ** 2  # 1h/60^2s
     ).replace('.', ',') + ' W'
 )
+
+print('gamma=Cp/Cv=: ' + '{:g}'.format(gamma) + '')
 
 print('T: ' + '{:g}'.format(t_aus_verdichter) + ' °K')
 
@@ -1304,3 +1338,11 @@ print('')
 print('========================================')
 for j in range(2):
     print('')
+
+rlv = 0.20
+
+ne = n_5
+
+
+def schleife(var):
+    n_e_norm = n_e / sum(n_e)
