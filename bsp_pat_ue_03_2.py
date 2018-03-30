@@ -145,6 +145,14 @@ def cp_durch_r(t, component=-1):
             d + e * t / (a + t) + f * (t / (a + t))**2 + g * (t / (a + t))**3
         ))  # dimensionslos
 
+
+def gem_cp_durch_r(t, x):
+    tot = 0
+    for i, frac in enumerate(x):
+        tot += frac * cp_durch_r(t, i)
+    return tot
+
+
 # Berechne H(T), G(T) und K(T) mit Cp(T)
 
 
@@ -713,7 +721,7 @@ for j, row in enumerate(np.array(nuij.T)):
                      for i in np.where(row < 0)[0]])
     rhs = '+'.join([str(abs(row[i])) + ' ' + namen[i]
                     for i in np.where(row > 0)[0]])
-    print(lhs + '<<==>>' + rhs  + '    K(T)=' + '{:g}'.format(k_1[j]))
+    print(lhs + '<<==>>' + rhs + '    K(T)=' + '{:g}'.format(k_1[j]))
 
 print(
     'Isothermisch betriebener Reaktor, Q: ' +
@@ -795,7 +803,7 @@ _, _, xi_2_norm, _ = r_entspannung(k_x_2, n_2_norm, 1, t_aus_rwgs)
 # Newton Raphson
 progress_k, stop, outer_it_k, outer_it_j, \
     lambda_ls, accum_step, x, \
-    diff, f_val, lambda_ls_y= \
+    diff, f_val, lambda_ls_y = \
     nr_ls(x0=xi_2_norm,
           f=lambda xi: gg_abstaende(k_x_2, nuij, n_2_norm, xi),
           j=lambda xi: jac_gg_abstaende(k_x_2, nuij, n_2_norm, xi),
@@ -824,7 +832,7 @@ for j, row in enumerate(np.array(nuij.T)):
                      for i in np.where(row < 0)[0]])
     rhs = '+'.join([str(abs(row[i])) + ' ' + namen[i]
                     for i in np.where(row > 0)[0]])
-    print(lhs + '<<==>>' + rhs  + '    K(T)=' + '{:g}'.format(k_2[j]))
+    print(lhs + '<<==>>' + rhs + '    K(T)=' + '{:g}'.format(k_2[j]))
 
 q = sum(n_2 * h_2 - n_1 * h_1)  # mol/h * J/mol = J/h
 
@@ -984,7 +992,9 @@ for i, komb in enumerate(y_i):
           '{0:0.20g}'.format(komb).replace('.', ',')
           )
 print('')
-print('H2/N2 Verhältnis: ' + str(y_i[namen.index('H2')]/y_i[namen.index('N2')]))
+print('H2/N2 Verhältnis: ' +
+      str(y_i[namen.index('H2')] /
+          y_i[namen.index('N2')]))
 print('Stoechiometrisches Verhältnis: ' + str(3))
 print('')
 print('T: ' + '{:g}'.format(t_aus_tkuehler) + ' °K')
@@ -1090,8 +1100,8 @@ print('Methanisierung: Aufheizer + Reaktor')
 print('========================================')
 
 t_aus_rmeth = 350 + 273.15  # °K
-h_5 = h(t_aus_rmeth )
-g_5 = g(t_aus_rmeth , h_5)
+h_5 = h(t_aus_rmeth)
+g_5 = g(t_aus_rmeth, h_5)
 # Aufheizer-Leistung
 q = sum(n_4_pr * (h_5 - h_4))  # mol/h * J/mol = J/h
 
@@ -1099,9 +1109,9 @@ stoech_m, indexes, nach_g_sortieren, \
     k_x_5, k_5, nuij = stoech_matrix(atom_m, g_5, p, t_aus_rmeth, namen, None)
 
 # Ammoniaksynthese sei künstlich ausgeschlossen
-k_5 = k_5[nuij[namen.index('NH3'),:]==0]
-k_x_5 = k_x_5[nuij[namen.index('NH3'),:]==0]
-nuij = nuij[:,nuij[namen.index('NH3'),:]==0]
+k_5 = k_5[nuij[namen.index('NH3'), :] == 0]
+k_x_5 = k_x_5[nuij[namen.index('NH3'), :] == 0]
+nuij = nuij[:, nuij[namen.index('NH3'), :] == 0]
 
 n_5 = np.copy(n_4_pr)
 n_5_norm = n_5 / sum(n_5)  # Normalisieren
@@ -1139,7 +1149,7 @@ for j, row in enumerate(np.array(nuij.T)):
                      for i in np.where(row < 0)[0]])
     rhs = '+'.join([str(abs(row[i])) + ' ' + namen[i]
                     for i in np.where(row > 0)[0]])
-    print(lhs + '<<==>>' + rhs  + '    K(T)=' + '{:g}'.format(k_5[j]))
+    print(lhs + '<<==>>' + rhs + '    K(T)=' + '{:g}'.format(k_5[j]))
 
 q = sum(n_5 * h_5 - n_4_pr * h_4)  # mol/h * J/mol = J/h
 
@@ -1182,3 +1192,115 @@ print('Gesamtfehler: ' + str(np.sqrt(fehler.dot(fehler))))
 print('')
 
 print('========================================')
+for j in range(2):
+    print('')
+
+print('========================================')
+print('Verdichtung: Adiabatischer Verdichter + Abkühler')
+print('========================================')
+
+p = 180  # bar
+
+n = n_5
+
+# isentropisch: $dS = \frac{dQ_rev}{T}=\frac{Cp^{iG}}{T}-R/PdP=0$
+
+t_aus_verdichter = optimize.newton(
+    lambda t: np.log(180 / 35.) - integrate.quad(
+        lambda temp: gem_cp_durch_r(
+            temp, n_5 / sum(n_5)
+        ) / temp, t_aus_rmeth, t)[0],
+    t_aus_rmeth
+)
+
+wg_mech = 0.95
+
+wg_th = 0.70 * 0.95 * 0.9
+
+h1 = h(t_aus_rmeth)
+
+h2 = h(t_aus_verdichter)
+
+# p12: Verdichter-Leistung. Zunächst reversibel, danach mit Wirkungsgraden.
+
+p12_rev = sum(n * (h2 - h1))
+
+p12 = p12_rev / wg_th / wg_mech
+
+t_aus_verdichter = optimize.newton(
+    lambda temp: - sum(n / sum(n) * h(temp)) + (
+            p12_rev / wg_th - sum(n / sum(n) * h1)) / sum(n),
+    t_aus_verdichter
+)
+
+h2 = h(t_aus_verdichter)
+
+t_aus_vd_kuehler = t_aus_rmeth
+
+q = sum(n * (h1 - h2))
+
+print(
+    'Verdichten (auf p= ' + str(p) + ' bar), W: ' +
+    '{0:0.20g}'.format(
+        p12_rev / wg_th * 1 / 60. ** 2  # 1h/60^2s
+    ).replace('.', ',') + ' W'
+)
+
+print('T: ' + '{:g}'.format(t_aus_verdichter) + ' °K')
+
+print('')
+
+for i, komb in enumerate(np.array(n_5)):
+    print('n_{' + namen[i] + '}=' +
+          '{0:0.20g}'.format(komb / 1000.).replace('.', ',') +
+          ' kmol/h')
+print('n_T' + '=' +
+      '{0:0.20g}'.format(sum(n_5) / 1000.).replace('.', ',') +
+      ' kmol/h')
+print('')
+for i, komb in enumerate(np.array(n_5 / sum(n_5))):
+    print('y_{' + namen[i] + '}=' +
+          '{0:0.20g}'.format(komb).replace('.', ',')
+          )
+print('')
+print('T: ' + '{:g}'.format(t_aus_verdichter) + ' °K')
+print('p: ' + '{:g}'.format(p) + ' bar')
+print('H: ' + '{0:0.6f}'.format(
+    sum(n_5 * h2) / sum(n_5) * 1000.) + ' J/kmol')
+
+print('')
+
+print('========================================')
+
+print(
+    'Abkühlen (zurück auf T= ' + str(t_aus_vd_kuehler) + ' °K), Q: ' +
+    '{0:0.20g}'.format(
+        q * 1 / 60. ** 2 * 1 / 1000.  # 1h/60^2s * 1kW / 1000W
+    ).replace('.', ',') + ' kW'
+)
+
+print('')
+
+for i, komb in enumerate(np.array(n_5)):
+    print('n_{' + namen[i] + '}=' +
+          '{0:0.20g}'.format(komb / 1000.).replace('.', ',') +
+          ' kmol/h')
+print('n_T' + '=' +
+      '{0:0.20g}'.format(sum(n_5) / 1000.).replace('.', ',') +
+      ' kmol/h')
+print('')
+for i, komb in enumerate(np.array(n_5 / sum(n_5))):
+    print('y_{' + namen[i] + '}=' +
+          '{0:0.20g}'.format(komb).replace('.', ',')
+          )
+print('')
+print('T: ' + '{:g}'.format(t_aus_vd_kuehler) + ' °K')
+print('p: ' + '{:g}'.format(p) + ' bar')
+print('H: ' + '{0:0.6f}'.format(
+    sum(n_5 * h1) / sum(n_5) * 1000.) + ' J/kmol')
+
+print('')
+
+print('========================================')
+for j in range(2):
+    print('')
