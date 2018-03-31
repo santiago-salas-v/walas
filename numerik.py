@@ -18,7 +18,7 @@ def lrpd(a):
     dlr = np.zeros([n, m], dtype=float)
     l = np.eye(n, m, dtype=float)
     r = np.zeros([n, m], dtype=float)
-    indexes_r = [item for item in range(n)]
+    indexes_r = list([item for item in range(n)])
     for i in range(n):
         d[i, i] = 1 / sum(abs(a[i, :m]))
         # scaling
@@ -85,7 +85,7 @@ def ref(a):
     d = np.eye(n, dtype=float)
     dr = np.zeros([n, m], dtype=float)
     r = np.zeros([n, m], dtype=float)
-    indexes_r = [item for item in range(n)]
+    indexes_r = list([item for item in range(n)])
     shift = 0  # diagonal !=0, no shift
     for i in range(n):
         d[i, i] = 1 / sum(abs(a[i, :m]))
@@ -189,9 +189,11 @@ def nr_ls(x0, f, j, tol, max_it, inner_loop_condition,
     # Machine precision
     machine_eps = np.finfo(float).eps
     # For progress bar, use exp scale to compensate for quadratic convergence
-    progress_factor = 1 / (1 - 10. ** (5 * (2 - 1))) * np.log(0.1)  # prog=0.1, x=10^-5 & tol=10^-10
+    progress_factor = 1 / (1 - 10. ** (5 * (2 - 1))) * \
+        np.log(0.1)  # prog=0.1, x=10^-5 & tol=10^-10
     progress_k = np.exp((-magnitude_f + tol) / tol * progress_factor) * 100.
     stop = magnitude_f < tol  # stop if already fulfilling condition
+    stop = stop or np.any(np.isnan(j_val)) or np.any(np.isnan(f_val))
     divergent = False
     no_gradient_change_once = False
     # Non-functional status notification
@@ -226,7 +228,8 @@ def nr_ls(x0, f, j, tol, max_it, inner_loop_condition,
         else:
             # For progress use exp scale to compensate for quadratic
             # convergence
-            progress_k = np.exp((-magnitude_f + tol) / tol * progress_factor) * 100.
+            progress_k = np.exp(
+                (-magnitude_f + tol) / tol * progress_factor) * 100.
             # continue if gradient still changing
             gradient_change = abs(g_val - g_max) > np.finfo(float).eps
             no_gradient_change_twice = no_gradient_change_once and not gradient_change
@@ -235,8 +238,8 @@ def nr_ls(x0, f, j, tol, max_it, inner_loop_condition,
             # conditions to stop prematurely: sum of squares reaches machine precision, or
             # no progress and no gradient change
             premature_stop = progress_k == progress_k_m_1 and \
-                             no_gradient_change_twice or \
-                             min_g_reached
+                no_gradient_change_twice or \
+                min_g_reached
             if np.isnan(magnitude_f) or np.isinf(magnitude_f):
                 stop = True  # Divergent method
                 divergent = True
@@ -411,7 +414,8 @@ def line_search(fun, jac, x_c, known_f_c=None, known_j_c=None,
     g_1 = np.empty_like(g_0)
     magnitude_f = np.empty_like(lambda_ls)
     g_max = np.empty_like(lambda_ls)
-    progress_factor = 1 / (1 - 10. ** (5 * (2 - 1))) * np.log(0.1)  # prog=0.1, x=10^-5 & tol=10^-10
+    progress_factor = 1 / (1 - 10. ** (5 * (2 - 1))) * \
+        np.log(0.1)  # prog=0.1, x=10^-5 & tol=10^-10
     stop = False
     outer_it_stop = False
     while backtrack_count < max_iter and not stop:
@@ -428,11 +432,23 @@ def line_search(fun, jac, x_c, known_f_c=None, known_j_c=None,
                 diff = (lambda_ls - lambda_prev) * s_0_n
                 inner_it_j = backtrack_count
                 magnitude_f = np.sqrt(2 * g_2)
-                progress_k = np.exp((-magnitude_f + tol) / tol * progress_factor) * 100.
-                notify_status_func(progress_k, outer_it_stop and stop, outer_it,
-                                   inner_it_j, lambda_ls, accum_step,
-                                   x_2, diff, f_2, j_0, lambda_ls * s_0_n,
-                                   backtrack_count, g_min=g_2, g1=g_max)
+                progress_k = np.exp(
+                    (-magnitude_f + tol) / tol * progress_factor) * 100.
+                notify_status_func(
+                    progress_k,
+                    outer_it_stop and stop,
+                    outer_it,
+                    inner_it_j,
+                    lambda_ls,
+                    accum_step,
+                    x_2,
+                    diff,
+                    f_2,
+                    j_0,
+                    lambda_ls * s_0_n,
+                    backtrack_count,
+                    g_min=g_2,
+                    g1=g_max)
             # End non-functional notification
             accum_step -= lambda_ls
             backtrack_count += 1
@@ -462,7 +478,8 @@ def line_search(fun, jac, x_c, known_f_c=None, known_j_c=None,
         if notify_status_func is not None:
             diff = (lambda_ls - lambda_prev) * s_0_n
             inner_it_j = backtrack_count
-            progress_k = np.exp((-magnitude_f + tol) / tol * progress_factor) * 100.
+            progress_k = np.exp(
+                (-magnitude_f + tol) / tol * progress_factor) * 100.
             notify_status_func(progress_k, outer_it_stop and stop, outer_it,
                                inner_it_j, lambda_ls, accum_step,
                                x_2, diff, f_2, j_0, lambda_ls * s_0_n,
