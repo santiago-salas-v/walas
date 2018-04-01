@@ -11,7 +11,7 @@ from setup_results_log import notify_status_func, setup_log_file
 
 eps = np.finfo(float).eps
 np.set_printoptions(linewidth=200)
-setup_log_file('log_bsp_pat_ue_03_2.log', with_console=True)
+setup_log_file('log_bsp_pat_ue_03_2.log', with_console=False)
 
 # Modell feststellen
 z_l_v.use_pr_eos()
@@ -337,22 +337,23 @@ def jac_gg_abstaende(k_x, nuij, n_0, xi_t,
         for i in range(n_r):
             for k_st, n_k in enumerate(n):
                 if nuji[j, k_st] < 0 and abs(n_k) > eps:
-                    s_nujknuik_nk_r[j, i] = \
-                        s_nujknuik_nk_r[j, i] + nuji[j, k_st] * nuji[i, k_st] / n_k
+                    s_nujknuik_nk_r[j, i] = s_nujknuik_nk_r[j,
+                                                            i] + nuji[j, k_st] * nuji[i, k_st] / n_k
                 elif nuji[j, k_st] > 0 and abs(n_k) > eps:
-                    s_nujknuik_nk_p[j, i] = \
-                        s_nujknuik_nk_p[j, i] + nuji[j, k_st] * nuji[i, k_st] / n_k
+                    s_nujknuik_nk_p[j, i] = s_nujknuik_nk_p[j,
+                                                            i] + nuji[j, k_st] * nuji[i, k_st] / n_k
                 elif nuji[j, k_st] == 0:
                     # add 0
                     pass
             jac[j, i] = - k_x_pir_nt[j] * (
-                    s_nujknuik_nk_r[j, i] -
-                    sum(nuji[j, :]) * sum(nuji[i, :]) / n_t
-            ) -pip[j] * s_nujknuik_nk_p[j, i]
+                s_nujknuik_nk_r[j, i] -
+                sum(nuji[j, :]) * sum(nuji[i, :]) / n_t
+            ) - pip[j] * s_nujknuik_nk_p[j, i]
     if betriebsw == 'adiabat' and h_0 is not None:
         delta_h_r_t = nuji.dot(h_t)
         d_lnk_dt = delta_h_r_t / (r * temp ** 2)
-        cp_t = r * np.concatenate([cp_durch_r(temp, i) for i in range(np.size(n))])
+        cp_t = r * np.concatenate([cp_durch_r(temp, i)
+                                   for i in range(np.size(n))])
         for j in range(n_r):
             jac[j, n_r] = +k_x_pir_nt[j] * d_lnk_dt[j]
             jac[n_r, j] = -delta_h_r_t[j]
@@ -413,7 +414,7 @@ def gg_abstaende(k_x, nuij, n_0, xi_t,
             if n_r == 1:
                 return np.array([(k_x_pir_nt - pip).item(), f_q])
             else:
-                return np.concatenate(k_x_pir_nt - pip, [f_q])
+                return np.concatenate([k_x_pir_nt - pip, [f_q]])
     elif betriebsw == 'isotherm':
         if full_output:
             return (k_x_pir_nt, pir, pip)
@@ -424,7 +425,7 @@ def gg_abstaende(k_x, nuij, n_0, xi_t,
                 return k_x_pir_nt - pip
 
 
-def r_entspannung(k_x_j, nuij, n_0, temp_0, p, x_mal=1, betriebsw='isotherm'):
+def r_entspannung_isoth(k_x_j, nuij, n_0, temp_0, p, x_mal=1):
     """ Entspannungs-Methode (Gmehling Chem. Therm.).
     :param nuij:
     """
@@ -433,18 +434,7 @@ def r_entspannung(k_x_j, nuij, n_0, temp_0, p, x_mal=1, betriebsw='isotherm'):
     xi_j_accum = np.array([-eps for j in range(nuij.shape[1])], dtype=float)
     h_0 = h(temp_0)
     temp = temp_0
-    def inner_loop_condition(xi):
-        return all(
-            [item >= 0 for item in
-             n + nuij[:, j] * xi])
-    if betriebsw == 'isotherm':
-        x0 = -eps
-    elif betriebsw == 'adiabat':
-        x0 = np.array([-eps, temp_0])
-        def inner_loop_condition(xi_t):
-            return all(
-                [item >= 0 for item in
-                 n + nuij[:, j] * xi_t[:-1]])
+    x0 = -eps
     for rel in range(x_mal):
         r_to_relax = [j for j in range(nuij.shape[1])]
         while r_to_relax:
@@ -453,36 +443,23 @@ def r_entspannung(k_x_j, nuij, n_0, temp_0, p, x_mal=1, betriebsw='isotherm'):
             order = np.argsort(
                 [-abs(gg_abstaende(k_x_j[i], nuij[:, i], n, 0)) for i in r_to_relax])
             j = r_to_relax[order[0]]
-
-            # soln1 = optimize.newton(lambda xi: fj_0(xi, n, k_j[j], nuij[:, j]), x0=0,
-            #               fprime=lambda xi: jac_fj_0(xi, n, nuij[:, j]))
-
             progress_k, stop, outer_it_k, outer_it_j, \
                 lambda_ls, accum_step, x, \
                 diff, f_val, lambda_ls_y = \
                 nr_ls(x0=x0,
                       f=lambda xi_t: gg_abstaende(
-                          k_x_j[j], nuij[:, j], n, xi_t, h_0, betriebsw),
+                          k_x_j[j], nuij[:, j], n, xi_t, h_0, 'isotherm'),
                       j=lambda xi_t: jac_gg_abstaende(
-                          k_x_j[j], nuij[:, j], n, xi_t, h_0, betriebsw),
+                          k_x_j[j], nuij[:, j], n, xi_t, h_0, 'isotherm'),
                       tol=1e-5,
                       max_it=1000,
-                      inner_loop_condition=inner_loop_condition,
+                      inner_loop_condition=lambda xi: all(
+                          [item >= 0 for item in
+                           n + nuij[:, j] * xi]),
                       notify_status_func=notify_status_func,
                       process_func_handle=lambda: logging.debug('no progress'))
 
-            if betriebsw == 'isotherm':
-                soln_xi = x
-            elif betriebsw == 'adiabat':
-                soln_xi = x[:-1]
-                temp = x[-1]
-                h_t = h(temp)
-                g_t = g(temp, h_t)
-                k_t = k(temp, g_t, nuij)
-                k_x_j = np.multiply(
-                    k_t, np.power(p / 1., -sum(nuij)))
-                x0[-1] = temp
-                logging.debug('k_x=' + str(k_x_j))
+            soln_xi = x
 
             xi_j[j] = soln_xi
 
@@ -491,6 +468,69 @@ def r_entspannung(k_x_j, nuij, n_0, temp_0, p, x_mal=1, betriebsw='isotherm'):
 
             r_to_relax.pop(order[0])
     return (n, xi_j, xi_j_accum, temp)
+
+
+def r_entspannung_adiab(k_x_j, nuij, n_0, temp_0, p, x_mal=1):
+    xi_j = np.array([-eps for j in range(nuij.shape[1])], dtype=float)
+    xi_j_accum_adiab = np.array(
+        [-eps for j in range(nuij.shape[1])], dtype=float)
+    h_0 = h(temp_0)
+    n, xi_j, xi_j_accum_isot, temp = r_entspannung_isoth(
+        k_x_j, nuij, n_0, temp_0, p, x_mal=1)
+    progress_k, stop, outer_it_k, outer_it_j, \
+        lambda_ls, accum_step, x, \
+        diff, f_val, lambda_ls_y = \
+        nr_ls(x0=temp,
+              f=lambda t: np.sum(
+                  np.multiply(n_0, h_0) -
+                  np.multiply(n, h(t))),
+              j=lambda t: -sum(n * r * np.concatenate(
+                  [cp_durch_r(t, i) for i in range(np.size(n))])),
+              tol=1e-5,
+              max_it=1000,
+              inner_loop_condition=None,
+              notify_status_func=notify_status_func,
+              process_func_handle=lambda: logging.debug('no progress'))
+    temp = x
+    n = np.copy(n_0)
+    for rel in range(x_mal):
+        r_to_relax = [j for j in range(nuij.shape[1])]
+        while r_to_relax:
+            # nach Spannung sortieren, gespannteste Reaktion zunächst
+            # entspannen.
+            order = np.argsort(
+                [-abs(gg_abstaende(k_x_j[i], nuij[:, i], n, 0)) for i in r_to_relax])
+            j = r_to_relax[order[0]]
+            x0 = np.concatenate([[xi_j_accum_isot[j]], [temp]])
+            progress_k, stop, outer_it_k, outer_it_j, \
+                lambda_ls, accum_step, x, \
+                diff, f_val, lambda_ls_y = \
+                nr_ls(x0=x0,
+                      f=lambda xi_t: gg_abstaende(
+                          k_x_j[j], nuij[:, j], n, xi_t, h_0, 'adiabat'),
+                      j=lambda xi_t: jac_gg_abstaende(
+                          k_x_j[j], nuij[:, j], n, xi_t, h_0, 'adiabat'),
+                      tol=1e-5,
+                      max_it=1000,
+                      inner_loop_condition=lambda xi_t: all(
+                          [item >= 0 for item in
+                           n + nuij[:, j] * xi_t[:-1]]),
+                      notify_status_func=notify_status_func,
+                      process_func_handle=lambda: logging.debug('no progress'))
+
+            soln_xi = x[:-1]
+
+            temp = x[-1]
+
+            h_0 = h(temp)
+
+            xi_j[j] = soln_xi
+
+            xi_j_accum_adiab[j] = xi_j_accum_adiab[j] + xi_j[j]
+            n = n + nuij[:, j] * xi_j[j]
+
+            r_to_relax.pop(order[0])
+    return (n, xi_j, xi_j_accum_adiab, temp)
 
 
 def fj_0(xi, n_0, k_t, nuij):
@@ -750,7 +790,8 @@ stoech_m, indexes, nach_g_sortieren, \
 n_1 = np.copy(n_0)
 n_1_norm = n_1 / sum(n_0)  # Normalisieren
 # Entspannung
-_, _, xi_1_norm, _ = r_entspannung(k_x_1, nuij, n_1_norm, t_aus_rdampfr, p, 1)
+_, _, xi_1_norm, _ = r_entspannung_isoth(
+    k_x_1, nuij, n_1_norm, t_aus_rdampfr, p, 1)
 # Newton Raphson
 progress_k, stop, outer_it_k, outer_it_j, \
     lambda_ls, accum_step, x, \
@@ -875,7 +916,8 @@ k_x_2 = np.multiply(k_2, np.power(p / 1., -sum(nuij)))
 n_2 = np.copy(n_1)
 n_2_norm = n_2 / sum(n_1)  # Normalisieren
 # Entspannung
-_, _, xi_2_norm, _ = r_entspannung(k_x_2, nuij, n_2_norm, t_aus_rwgs, p, 1)
+_, _, xi_2_norm, _ = r_entspannung_isoth(
+    k_x_2, nuij, n_2_norm, t_aus_rwgs, p, 1)
 # Newton Raphson
 progress_k, stop, outer_it_k, outer_it_j, \
     lambda_ls, accum_step, x, \
@@ -1192,7 +1234,8 @@ nuij = nuij[:, nuij[namen.index('NH3'), :] == 0]
 n_5 = np.copy(n_4_pr)
 n_5_norm = n_5 / sum(n_5)  # Normalisieren
 # Entspannung
-_, _, xi_5_norm, _ = r_entspannung(k_x_5, nuij, n_5_norm, t_aus_rmeth, p, 1)
+_, _, xi_5_norm, _ = r_entspannung_isoth(
+    k_x_5, nuij, n_5_norm, t_aus_rmeth, p, 1)
 # Newton Raphson
 progress_k, stop, outer_it_k, outer_it_j, \
     lambda_ls, accum_step, x, \
@@ -1465,45 +1508,50 @@ for j, row in enumerate(np.array(nuij.T)):
                     for i in np.where(row > 0)[0]])
     print(lhs + '<<==>>' + rhs + '    K(T)=' + '{:g}'.format(k_7[j]))
 
-n_7_norm = n_6 / sum(n_6)  # Normalisieren
+n_6_norm = n_6 / sum(n_6)  # Normalisieren
+n_7_norm = n_6_norm
 # Entspannung
-_, _, xi_7_norm, t_aus_nh3_syn = r_entspannung(k_x_7, nuij, n_7_norm, t_ein_nh3_syn, p, 2, betriebsw='adiabat')
+n_7_norm, _, xi_7_norm, t_aus_nh3_syn = r_entspannung_adiab(
+    k_x_7, nuij, n_6_norm, t_ein_nh3_syn, p, 1)
+# denormalize
+xi_7 = xi_7_norm * sum(n_6)
 # Newton Raphson
+x0 = np.concatenate([xi_7, [t_aus_nh3_syn]])
 progress_k, stop, outer_it_k, outer_it_j, \
     lambda_ls, accum_step, x, \
     diff, f_val, lambda_ls_y = \
-    nr_ls(x0=xi_7_norm,
-          f=lambda xi: gg_abstaende(k_x_7, nuij, n_7_norm, xi),
-          j=lambda xi: jac_gg_abstaende(k_x_7, nuij, n_7_norm, xi),
-          tol=1e-10,
+    nr_ls(x0=x0,
+          f=lambda xi_t: gg_abstaende(
+              k_x_7, nuij, n_6, xi_t, h_6, 'adiabat'),
+          j=lambda xi_t: jac_gg_abstaende(
+              k_x_7, nuij, n_6, xi_t, h_6, 'adiabat'),
+          tol=1e-12,
           max_it=1000,
-          inner_loop_condition=lambda xi:
-          all([item >= 0 for item in
-               n_7_norm + nuij.dot(xi)]),
+          inner_loop_condition=lambda xi_t: all(
+              [item >= 0 for item in
+               n_6 + nuij.dot(xi_t[:-1])]),
           notify_status_func=notify_status_func,
           process_func_handle=lambda: logging.debug('no progress'))
-xi_7 = x * sum(n_6)
+xi_7 = x[:-1]
+t_aus_nh3_syn = x[-1]
 n_7 = (n_6 + nuij.dot(xi_7))
-fehler = fj_0(xi_7, n_6, k_x_7, nuij)
-
-t_aus_nh3_syn = t_ein_nh3_syn
+h_7 = h(t_aus_nh3_syn)
+g_7 = g(t_aus_nh3_syn, h_7)
+k_7 = k(t_aus_nh3_syn, g_7, nuij)
+k_x_7 = np.multiply(k_7, np.power(p / 1., -sum(nuij)))
+fehler = gg_abstaende(k_x_7, nuij, n_6,
+                      np.concatenate([xi_7, [t_aus_nh3_syn]]),
+                      h_6, 'adiabat')
 
 h_7 = h(t_aus_nh3_syn)
 
 q = sum(n_7 * h_7 - n_6 * h_6)  # mol/h * J/mol = J/h
 
 print(
-    'Isothermisch betriebener Reaktor, Q: ' +
-    '{0:0.20g}'.format(
-        sum(nuij.dot(xi_7) * h_7) * 1 / 60. ** 2 * 1 / 1000.
-    ).replace('.', ',') + ' kW'
-)
-
-print(
     'Totale zu tauschende Energie, Q: ' +
     '{0:0.20g}'.format(
         q * 1 / 60.**2 * 1 / 1000.
-    ).replace('.', ',') + ' kW'
+    ).replace('.', ',') + ' kW (adiabatisch)'
 )
 
 print('')
