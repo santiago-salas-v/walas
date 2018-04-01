@@ -454,7 +454,7 @@ def r_entspannung_isoth(k_x_j, nuij, n_0, temp_0, p, x_mal=1):
                       tol=1e-5,
                       max_it=1000,
                       inner_loop_condition=lambda xi: all(
-                          [item >= 0 for item in
+                          [item >= 0 or abs(item) < eps for item in
                            n + nuij[:, j] * xi]),
                       notify_status_func=notify_status_func,
                       process_func_handle=lambda: logging.debug('no progress'))
@@ -513,7 +513,7 @@ def r_entspannung_adiab(k_x_j, nuij, n_0, temp_0, p, x_mal=1):
                       tol=1e-5,
                       max_it=1000,
                       inner_loop_condition=lambda xi_t: all(
-                          [item >= 0 for item in
+                          [item >= 0 or abs(item) < eps for item in
                            n + nuij[:, j] * xi_t[:-1]]),
                       notify_status_func=notify_status_func,
                       process_func_handle=lambda: logging.debug('no progress'))
@@ -1449,10 +1449,28 @@ for j in range(2):
     print('')
 
 print('========================================')
+for j in range(2):
+    print('')
+it_str = '1.' + ' ' + 'Iteration'
+print(
+    '='*int(np.ceil((40-len(it_str))/2.))+
+    it_str+
+    '='*int(np.floor((40-len(it_str))/2.))
+)
+for j in range(2):
+    print('')
+print('========================================')
+for j in range(2):
+    print('')
+
+print('========================================')
 print('Mischung: Rücklauf + Zulauf + Vorwärmer')
 print('========================================')
 
 rlv = 0
+
+t_mischung = t_aus_vd_kuehler
+h_mischung = h_5
 
 n_6 = n_5 + 0
 
@@ -1460,9 +1478,16 @@ t_ein_nh3_syn = 300 + 273.15  # °K
 h_6 = h(t_ein_nh3_syn)
 g_6 = g(t_ein_nh3_syn, h_6)
 # Aufheizer-Leistung
-q = sum(n_6 * (h_6 - h_5))  # mol/h * J/mol = J/h
+q = sum(n_6 * (h_6 - h_mischung))  # mol/h * J/mol = J/h
 
 print('Rücklaufverhältnis = nr/nv = ' + '{:g}'.format(rlv) + '')
+print('Temperatur der Mischung: ' + '{:g}'.format(t_ein_nh3_syn) + ' °K')
+print(
+    'Vorwärmer (auf T= ' + str(t_ein_nh3_syn) + ' °K), Q: ' +
+    '{0:0.20g}'.format(
+        q * 1 / 60. ** 2 * 1 / 1000.  # 1h/60^2s * 1kW / 1000W
+    ).replace('.', ',') + ' kW'
+)
 
 print('')
 
@@ -1581,3 +1606,581 @@ print('')
 print('========================================')
 for j in range(2):
     print('')
+
+print('========================================')
+print('Abkühler + Produkt-Abscheider')
+print('========================================')
+
+t_aus_nh3_fl = 21 + 273.15 # °K
+h_8 = h(t_aus_nh3_fl)
+g_8 = g(t_aus_nh3_fl, h_8)
+
+# Lösung des isothermischen Verdampfers (des Abscheiders)
+z_i = n_7 / sum(n_7)
+x_i = 1 / len(n_7) * np.ones(len(n_7))
+y_i = z_i
+v_f = 1.
+for i in range(10):
+    v_f_temp = v_f
+    soln = z_l_v.isot_flash(
+        t_aus_tkuehler, p, x_i, y_i, z_i, tc, pc, omega_af
+    )
+    y_i = soln['y_i']
+    x_i = soln['x_i']
+    v_f = soln['v_f']
+    k_i_verteilung = soln['k_i']
+    if abs(v_f - v_f_temp) < 1e-12:
+        break
+
+n_8_l = (1 - v_f) * sum(n_7) * x_i
+n_8_v = v_f * sum(n_7) * y_i
+
+# Verdampfungsenthalpie-Berechnung (s. oben).
+p_sat = np.empty_like(n_7)
+v_m_l = np.empty_like(n_7)
+v_m_v = np.empty_like(n_7)
+z_l = np.empty_like(n_7)
+z_v = np.empty_like(n_7)
+delta_h_v = np.empty_like(n_7)
+
+for i in range(len(p_sat)):
+    p_sat[i] = p_sat_func(i)
+    if not np.isnan(p_sat[i]):
+        soln = z_l_v.p_sat_func(
+            p_sat[i], t_aus_nh3_fl,
+            omega_af[i], tc[i], pc[i],
+            full_output=True)
+        z_l[i] = soln['z_l']
+        z_v[i] = soln['z_v']
+        v_m_l[i] = z_l[i] * r * t_aus_nh3_fl / (
+            p_sat[i] * 100000.)  # m^3 / mol
+        v_m_v[i] = z_v[i] * r * t_aus_nh3_fl / (
+            p_sat[i] * 100000.)  # m^3 / mol
+        dps_dt = misc.derivative(
+            lambda t: optimize.root(
+                lambda p_sat: z_l_v.p_sat_func(
+                    p_sat, t, omega_af[i],
+                    tc[i], pc[i]), 1e-3
+            ).x, t_aus_nh3_fl)  # bar / °K
+        # Clausius-Clapeyron
+        delta_h_v[i] = t_aus_nh3_fl * (v_m_v[i] - v_m_l[i]) * dps_dt * \
+            100000.  # J / mol
+    else:
+        z_l[i] = np.nan
+        z_v[i] = np.nan
+        v_m_l[i] = np.nan
+        v_m_v[i] = np.nan
+        delta_h_v[i] = 0
+
+# Vorkühler-Leistung, inklusive Verflüssigung des entsprechenden
+# Anteils bei Trockner-Temperatur (20°C)
+q = sum(n_7 * (h_8 - h_7)) + sum(n_8_l * -delta_h_v)  # mol/h * J/mol = J/h
+
+print(
+    'Vorkühler (auf T= ' + str(t_aus_nh3_fl) + ' °K), Q: ' +
+    '{0:0.20g}'.format(
+        q * 1 / 60. ** 2 * 1 / 1000.  # 1h/60^2s * 1kW / 1000W
+    ).replace('.', ',') + ' kW'
+)
+
+print('')
+
+print('Dampfphase (zum Splitter):')
+
+for i, komb in enumerate(np.array(n_8_v)):
+    print('n_{' + namen[i] + '}=' +
+          '{0:0.20g}'.format(komb / 1000.).replace('.', ',') +
+          ' kmol/h')
+print('n_T' + '=' +
+      '{0:0.20g}'.format(sum(n_8_v) / 1000.).replace('.', ',') +
+      ' kmol/h')
+print('')
+for i, komb in enumerate(y_i):
+    print('y_{' + namen[i] + '}=' +
+          '{0:0.20g}'.format(komb).replace('.', ',')
+          )
+print('')
+print('H2/N2 Verhältnis: ' +
+      str(y_i[namen.index('H2')] /
+          y_i[namen.index('N2')]))
+print('Stoechiometrisches Verhältnis: ' + str(3))
+print('')
+print('T: ' + '{:g}'.format(t_aus_nh3_fl) + ' °K')
+print('p: ' + '{:g}'.format(p) + ' bar')
+print('H: ' + '{0:0.6f}'.format(
+    sum(n_8_v * h_8) / sum(n_8_v) * 1000.) + ' J/kmol')
+
+print('')
+
+print('========================================')
+
+print('Produkt-Flüssigkeit:')
+
+for i, komb in enumerate(np.array(n_8_l)):
+    print('n_{' + namen[i] + '}=' +
+          '{0:0.20g}'.format(komb / 1000.).replace('.', ',') +
+          ' kmol/h')
+print('n_T' + '=' +
+      '{0:0.20g}'.format(sum(n_8_l) / 1000.).replace('.', ',') +
+      ' kmol/h')
+print('')
+for i, komb in enumerate(x_i):
+    print('x_{' + namen[i] + '}=' +
+          '{0:0.20g}'.format(komb).replace('.', ',')
+          )
+print('')
+print('T: ' + '{:g}'.format(t_aus_nh3_fl) + ' °K')
+print('p: ' + '{:g}'.format(p) + ' bar')
+print('H: ' + '{0:0.6f}'.format(
+    sum(n_8_l * h_8) / sum(n_8_l) * 1000.) + ' J/kmol')
+
+print('')
+
+print('========================================')
+for j in range(2):
+    print('')
+
+print('========================================')
+print('Abtrennung: Splitter')
+print('========================================')
+
+rlv = 1 - 0.2
+
+print('Rücklaufverhältnis = nr/nv = ' + '{:g}'.format(rlv) + '')
+
+print('')
+
+print('Rücklaufstrom:')
+
+n_9 = rlv * n_8_v
+h_9 = h_8
+
+for i, komb in enumerate(np.array(n_9)):
+    print('n_{' + namen[i] + '}=' +
+          '{0:0.20g}'.format(komb / 1000.).replace('.', ',') +
+          ' kmol/h')
+print('n_T' + '=' +
+      '{0:0.20g}'.format(sum(n_9) / 1000.).replace('.', ',') +
+      ' kmol/h')
+print('')
+for i, komb in enumerate(np.array(n_9 / sum(n_9))):
+    print('y_{' + namen[i] + '}=' +
+          '{0:0.20g}'.format(komb).replace('.', ',')
+          )
+print('')
+print('T: ' + '{:g}'.format(t_aus_nh3_fl) + ' °K')
+print('p: ' + '{:g}'.format(p) + ' bar')
+print('H: ' + '{0:0.6f}'.format(
+    sum(n_9 * h_9) / sum(n_9) * 1000.) + ' J/kmol')
+
+print('========================================')
+
+print('')
+
+print('Abgas:')
+
+for i, komb in enumerate(np.array((1-rlv) * n_8_v)):
+    print('n_{' + namen[i] + '}=' +
+          '{0:0.20g}'.format(komb / 1000.).replace('.', ',') +
+          ' kmol/h')
+print('n_T' + '=' +
+      '{0:0.20g}'.format(sum((1-rlv) * n_8_v) / 1000.).replace('.', ',') +
+      ' kmol/h')
+print('')
+for i, komb in enumerate(np.array((1-rlv) * n_8_v / sum((1-rlv) * n_8_v))):
+    print('y_{' + namen[i] + '}=' +
+          '{0:0.20g}'.format(komb).replace('.', ',')
+          )
+print('')
+print('T: ' + '{:g}'.format(t_aus_nh3_fl) + ' °K')
+print('p: ' + '{:g}'.format(p) + ' bar')
+print('H: ' + '{0:0.6f}'.format(
+sum((1-rlv) * n_8_v * h_8) / sum((1-rlv) * n_8_v) * 1000.) + ' J/kmol')
+
+print('========================================')
+for j in range(2):
+    print('')
+
+# Rücklaufschleife wiederholen, bis Konvergenz erreicht.
+# Bei der 10. Iteration erreicht man  722,65°K=449,5°C
+for it_n in range(1, 25):
+
+    print('========================================')
+    for j in range(2):
+        print('')
+    it_str = str(it_n) + ' ' + 'Iteration'
+    print(
+        '='*int(np.ceil((40-len(it_str))/2.))+
+        it_str+
+        '='*int(np.floor((40-len(it_str))/2.))
+    )
+    for j in range(2):
+        print('')
+    print('========================================')
+    for j in range(2):
+        print('')
+
+    print('========================================')
+    print('Mischung: Rücklauf + Zulauf + Vorwärmer')
+    print('========================================')
+
+    # Elim. n<10^-16
+    n_8_v_t = sum(n_8_v)
+    n_8_v[abs(n_8_v) < eps] = 0
+    n_8_v = n_8_v/sum(n_8_v) * n_8_v_t
+    n_6 = n_5 + rlv * n_8_v
+
+    t_mischung = optimize.root(
+        lambda temp: sum(
+            n_5 * h_5 + rlv * n_8_v * h_8 - n_6 * h(temp)
+        ), t_aus_vd_kuehler
+    ).x.item()
+    h_mischung = h(t_mischung)
+    # Aufheizer-Leistung
+    q = sum(n_6 * (h_6 - h_mischung))  # mol/h * J/mol = J/h
+
+    print('Rücklaufverhältnis = nr/nv = ' + '{:g}'.format(rlv) + '')
+    print('Temperatur der Mischung: ' + '{:g}'.format(t_mischung) + ' °K')
+    print(
+        'Vorwärmer (auf T= ' + str(t_ein_nh3_syn) + ' °K), Q: ' +
+        '{0:0.20g}'.format(
+            q * 1 / 60. ** 2 * 1 / 1000.  # 1h/60^2s * 1kW / 1000W
+        ).replace('.', ',') + ' kW'
+    )
+
+
+    print('')
+
+    for i, komb in enumerate(np.array(n_6)):
+        print('n_{' + namen[i] + '}=' +
+              '{0:0.20g}'.format(komb / 1000.).replace('.', ',') +
+              ' kmol/h')
+    print('n_T' + '=' +
+          '{0:0.20g}'.format(sum(n_6) / 1000.).replace('.', ',') +
+          ' kmol/h')
+    print('')
+    for i, komb in enumerate(np.array(n_6 / sum(n_6))):
+        print('y_{' + namen[i] + '}=' +
+              '{0:0.20g}'.format(komb).replace('.', ',')
+              )
+    print('')
+    print('T: ' + '{:g}'.format(t_ein_nh3_syn) + ' °K')
+    print('p: ' + '{:g}'.format(p) + ' bar')
+    print('H: ' + '{0:0.6f}'.format(
+        sum(n_6 * h_6) / sum(n_6) * 1000.) + ' J/kmol')
+
+    print('')
+    print('========================================')
+    for j in range(2):
+        print('')
+
+
+    print('========================================')
+    print('Adiabatische Ammoniaksynthese: Reaktor')
+    print('========================================')
+
+    # Mit Zulauf-Temperatur als erster Ansatz beginnen.
+    h_7 = h(t_ein_nh3_syn)
+    g_7 = g(t_ein_nh3_syn, h_7)
+    k_7 = k(t_ein_nh3_syn, g_7, nuij)
+    k_x_7 = np.multiply(k_7, np.power(p / 1., -sum(nuij)))
+
+    print('Berücksichtigte (unabhängige) Reaktionen:')
+
+    for j, row in enumerate(np.array(nuij.T)):
+        lhs = '+ '.join([str(abs(row[i])) + ' ' + namen[i]
+                         for i in np.where(row < 0)[0]])
+        rhs = '+'.join([str(abs(row[i])) + ' ' + namen[i]
+                        for i in np.where(row > 0)[0]])
+        print(lhs + '<<==>>' + rhs + '    K(T)=' + '{:g}'.format(k_7[j]))
+
+    n_6_norm = n_6 / sum(n_6)  # Normalisieren
+    n_7_norm = n_6_norm
+    # Entspannung
+    n_7_norm, _, xi_7_norm, t_aus_nh3_syn = r_entspannung_adiab(
+        k_x_7, nuij, n_6_norm, t_ein_nh3_syn, p, 1)
+    # Newton Raphson
+    x0 = np.concatenate([xi_7_norm, [t_aus_nh3_syn]])
+    progress_k, stop, outer_it_k, outer_it_j, \
+        lambda_ls, accum_step, x, \
+        diff, f_val, lambda_ls_y = \
+        nr_ls(x0=x0,
+              f=lambda xi_t: gg_abstaende(
+                  k_x_7, nuij, n_6_norm, xi_t, h_6, 'adiabat'),
+              j=lambda xi_t: jac_gg_abstaende(
+                  k_x_7, nuij, n_6_norm, xi_t, h_6, 'adiabat'),
+              tol=1e-12,
+              max_it=1000,
+              inner_loop_condition=lambda xi_t: all(
+                  [item >= 0 or abs(item) for item in
+                   n_6_norm + nuij.dot(xi_t[:-1])]),
+              notify_status_func=notify_status_func,
+              process_func_handle=lambda: logging.debug('no progress'))
+    xi_7 = x[:-1]
+    # denormalize
+    xi_7 = xi_7 * sum(n_6)
+    t_aus_nh3_syn = x[-1]
+    n_7 = (n_6 + nuij.dot(xi_7))
+    fehler = gg_abstaende(k_x_7, nuij, n_6,
+                          np.concatenate([xi_7, [t_aus_nh3_syn]]),
+                          h_6, 'adiabat')
+
+    # Fehler-Verbesserung. Da die Ablauf-Temperatur schon bekannt ist, löst man
+    # die Massenbilanzen entkoppelt. Dies vermeidet Skalierung-Probleme bei
+    # Gleichungssystemen, deren Jacobi-Matrix zugleich Temperatur und
+    # Reaktionslaufzahlen enthalten, da Reaktionslaufzahlen normiert werden können,
+    # aber Temperatur nicht. Sie ist nämlich eine intensive Größe.
+    h_7 = h(t_aus_nh3_syn)
+    g_7 = g(t_aus_nh3_syn, h_7)
+    k_7 = k(t_aus_nh3_syn, g_7, nuij)
+    k_x_7 = np.multiply(k_7, np.power(p / 1., -sum(nuij)))
+    progress_k, stop, outer_it_k, outer_it_j, \
+    lambda_ls, accum_step, x, \
+    diff, f_val, lambda_ls_y = \
+        nr_ls(x0=xi_7,
+              f=lambda xi: gg_abstaende(
+                  k_x_7, nuij, n_6, xi, h_6, 'isotherm'),
+              j=lambda xi: jac_gg_abstaende(
+                  k_x_7, nuij, n_6, xi, h_6, 'isotherm'),
+              tol=1e-6,
+              max_it=1000,
+              inner_loop_condition=lambda xi: all(
+                  [item >= 0 or abs(item) < eps for item in
+                   n_6 + nuij.dot(xi)]),
+              notify_status_func=notify_status_func,
+              process_func_handle=lambda: logging.debug('no progress'))
+    xi_7 = x
+    n_7 = (n_6 + nuij.dot(xi_7))
+    fehler = gg_abstaende(k_x_7, nuij, n_6,
+                          np.concatenate([xi_7, [t_aus_nh3_syn]]),
+                          h_6, 'adiabat')
+
+    q = sum(n_7 * h_7 - n_6 * h_6)  # mol/h * J/mol = J/h
+
+    print(
+        'Totale zu tauschende Energie, Q: ' +
+        '{0:0.20g}'.format(
+            q * 1 / 60.**2 * 1 / 1000.
+        ).replace('.', ',') + ' kW (adiabatisch)'
+    )
+
+    print('')
+
+    for i, komb in enumerate(np.array(n_7)):
+        print('n_{' + namen[i] + '}=' +
+              '{0:0.20g}'.format(komb / 1000.).replace('.', ',') +
+              ' kmol/h')
+    print('n_T' + '=' +
+          '{0:0.20g}'.format(sum(n_7) / 1000.).replace('.', ',') +
+          ' kmol/h')
+    print('')
+    for i, komb in enumerate(np.array(n_7 / sum(n_7))):
+        print('y_{' + namen[i] + '}=' +
+              '{0:0.20g}'.format(komb).replace('.', ',')
+              )
+    print('')
+    print('T: ' + '{:g}'.format(t_aus_nh3_syn) + ' °K')
+    print('p: ' + '{:g}'.format(p) + ' bar')
+    print('H: ' + '{0:0.6f}'.format(
+        sum(n_7 * h_7) / sum(n_7) * 1000.) + ' J/kmol')
+
+    print('Gesamtfehler: ' + str(np.sqrt(fehler.dot(fehler))))
+
+    print('')
+
+    print('========================================')
+    for j in range(2):
+        print('')
+
+    print('========================================')
+    print('Abkühler + Produkt-Abscheider')
+    print('========================================')
+
+    t_aus_nh3_fl = 21 + 273.15 # °K
+    h_8 = h(t_aus_nh3_fl)
+    g_8 = g(t_aus_nh3_fl, h_8)
+
+    # Lösung des isothermischen Verdampfers (des Abscheiders)
+    z_i = n_7 / sum(n_7)
+    x_i = 1 / len(n_7) * np.ones(len(n_7))
+    y_i = z_i
+    v_f = 1.
+    for i in range(10):
+        v_f_temp = v_f
+        soln = z_l_v.isot_flash(
+            t_aus_tkuehler, p, x_i, y_i, z_i, tc, pc, omega_af
+        )
+        y_i = soln['y_i']
+        x_i = soln['x_i']
+        v_f = soln['v_f']
+        k_i_verteilung = soln['k_i']
+        if abs(v_f - v_f_temp) < 1e-12:
+            break
+
+    n_8_l = (1 - v_f) * sum(n_7) * x_i
+    n_8_v = v_f * sum(n_7) * y_i
+
+    # Verdampfungsenthalpie-Berechnung (s. oben).
+    p_sat = np.empty_like(n_7)
+    v_m_l = np.empty_like(n_7)
+    v_m_v = np.empty_like(n_7)
+    z_l = np.empty_like(n_7)
+    z_v = np.empty_like(n_7)
+    delta_h_v = np.empty_like(n_7)
+
+    for i in range(len(p_sat)):
+        p_sat[i] = p_sat_func(i)
+        if not np.isnan(p_sat[i]):
+            soln = z_l_v.p_sat_func(
+                p_sat[i], t_aus_nh3_fl,
+                omega_af[i], tc[i], pc[i],
+                full_output=True)
+            z_l[i] = soln['z_l']
+            z_v[i] = soln['z_v']
+            v_m_l[i] = z_l[i] * r * t_aus_nh3_fl / (
+                p_sat[i] * 100000.)  # m^3 / mol
+            v_m_v[i] = z_v[i] * r * t_aus_nh3_fl / (
+                p_sat[i] * 100000.)  # m^3 / mol
+            dps_dt = misc.derivative(
+                lambda t: optimize.root(
+                    lambda p_sat: z_l_v.p_sat_func(
+                        p_sat, t, omega_af[i],
+                        tc[i], pc[i]), 1e-3
+                ).x, t_aus_nh3_fl)  # bar / °K
+            # Clausius-Clapeyron
+            delta_h_v[i] = t_aus_nh3_fl * (v_m_v[i] - v_m_l[i]) * dps_dt * \
+                100000.  # J / mol
+        else:
+            z_l[i] = np.nan
+            z_v[i] = np.nan
+            v_m_l[i] = np.nan
+            v_m_v[i] = np.nan
+            delta_h_v[i] = 0
+
+    # Vorkühler-Leistung, inklusive Verflüssigung des entsprechenden
+    # Anteils bei Trockner-Temperatur (20°C)
+    q = sum(n_7 * (h_8 - h_7)) + sum(n_8_l * -delta_h_v)  # mol/h * J/mol = J/h
+
+    print(
+        'Vorkühler (auf T= ' + str(t_aus_nh3_fl) + ' °K), Q: ' +
+        '{0:0.20g}'.format(
+            q * 1 / 60. ** 2 * 1 / 1000.  # 1h/60^2s * 1kW / 1000W
+        ).replace('.', ',') + ' kW'
+    )
+
+    print('')
+
+    print('Dampfphase (zum Splitter):')
+
+    for i, komb in enumerate(np.array(n_8_v)):
+        print('n_{' + namen[i] + '}=' +
+              '{0:0.20g}'.format(komb / 1000.).replace('.', ',') +
+              ' kmol/h')
+    print('n_T' + '=' +
+          '{0:0.20g}'.format(sum(n_8_v) / 1000.).replace('.', ',') +
+          ' kmol/h')
+    print('')
+    for i, komb in enumerate(y_i):
+        print('y_{' + namen[i] + '}=' +
+              '{0:0.20g}'.format(komb).replace('.', ',')
+              )
+    print('')
+    print('H2/N2 Verhältnis: ' +
+          str(y_i[namen.index('H2')] /
+              y_i[namen.index('N2')]))
+    print('Stoechiometrisches Verhältnis: ' + str(3))
+    print('')
+    print('T: ' + '{:g}'.format(t_aus_nh3_fl) + ' °K')
+    print('p: ' + '{:g}'.format(p) + ' bar')
+    print('H: ' + '{0:0.6f}'.format(
+        sum(n_8_v * h_8) / sum(n_8_v) * 1000.) + ' J/kmol')
+
+    print('')
+
+    print('========================================')
+
+    print('Produkt-Flüssigkeit:')
+
+    for i, komb in enumerate(np.array(n_8_l)):
+        print('n_{' + namen[i] + '}=' +
+              '{0:0.20g}'.format(komb / 1000.).replace('.', ',') +
+              ' kmol/h')
+    print('n_T' + '=' +
+          '{0:0.20g}'.format(sum(n_8_l) / 1000.).replace('.', ',') +
+          ' kmol/h')
+    print('')
+    for i, komb in enumerate(x_i):
+        print('x_{' + namen[i] + '}=' +
+              '{0:0.20g}'.format(komb).replace('.', ',')
+              )
+    print('')
+    print('T: ' + '{:g}'.format(t_aus_nh3_fl) + ' °K')
+    print('p: ' + '{:g}'.format(p) + ' bar')
+    print('H: ' + '{0:0.6f}'.format(
+        sum(n_8_l * h_8) / sum(n_8_l) * 1000.) + ' J/kmol')
+
+    print('')
+
+    print('========================================')
+    for j in range(2):
+        print('')
+
+    print('========================================')
+    print('Abtrennung: Splitter')
+    print('========================================')
+
+    print('Rücklaufverhältnis = nr/nv = ' + '{:g}'.format(rlv) + '')
+
+    print('')
+
+    print('Rücklaufstrom:')
+
+    n_9 = rlv * n_8_v
+    h_9 = h_8
+
+    for i, komb in enumerate(np.array(n_9)):
+        print('n_{' + namen[i] + '}=' +
+              '{0:0.20g}'.format(komb / 1000.).replace('.', ',') +
+              ' kmol/h')
+    print('n_T' + '=' +
+          '{0:0.20g}'.format(sum(n_9) / 1000.).replace('.', ',') +
+          ' kmol/h')
+    print('')
+    for i, komb in enumerate(np.array(n_9 / sum(n_9))):
+        print('y_{' + namen[i] + '}=' +
+              '{0:0.20g}'.format(komb).replace('.', ',')
+              )
+    print('')
+    print('T: ' + '{:g}'.format(t_aus_nh3_fl) + ' °K')
+    print('p: ' + '{:g}'.format(p) + ' bar')
+    print('H: ' + '{0:0.6f}'.format(
+        sum(n_9 * h_9) / sum(n_9) * 1000.) + ' J/kmol')
+
+    print('========================================')
+
+    print('')
+
+    print('Abgas:')
+
+    for i, komb in enumerate(np.array((1-rlv) * n_8_v)):
+        print('n_{' + namen[i] + '}=' +
+              '{0:0.20g}'.format(komb / 1000.).replace('.', ',') +
+              ' kmol/h')
+    print('n_T' + '=' +
+          '{0:0.20g}'.format(sum((1-rlv) * n_8_v) / 1000.).replace('.', ',') +
+          ' kmol/h')
+    print('')
+    for i, komb in enumerate(np.array((1-rlv) * n_8_v / sum((1-rlv) * n_8_v))):
+        print('y_{' + namen[i] + '}=' +
+              '{0:0.20g}'.format(komb).replace('.', ',')
+              )
+    print('')
+    print('T: ' + '{:g}'.format(t_aus_nh3_fl) + ' °K')
+    print('p: ' + '{:g}'.format(p) + ' bar')
+    print('H: ' + '{0:0.6f}'.format(
+    sum((1-rlv) * n_8_v * h_8) / sum((1-rlv) * n_8_v) * 1000.) + ' J/kmol')
+
+    print('========================================')
+    for j in range(2):
+        print('')
+

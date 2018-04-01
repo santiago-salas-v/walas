@@ -9,7 +9,7 @@ def setup_log_file(file_name, with_console=True):
     logging.basicConfig(
         level=logging.DEBUG,
         format='%(asctime)s %(name)-12s %(levelname)-8s %(message)s',
-        datefmt='%m-%d %H:%M',
+        datefmt='%Y-%m-%d %H:%M:%S',
         filename=os.path.join('./logs', file_name),
         filemode='w')
     if with_console:

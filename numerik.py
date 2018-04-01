@@ -401,8 +401,6 @@ def line_search(fun, jac, x_c, known_f_c=None, known_j_c=None,
 
     # first attempt full Newton step
     lambda_ls = 1.0
-    # add current lambda to accumulated steps
-    accum_step += lambda_ls
 
     # init other variables
     backtrack_count = 0
@@ -425,6 +423,8 @@ def line_search(fun, jac, x_c, known_f_c=None, known_j_c=None,
         descent = alpha * lambda_ls * g_prime_t_s
         g_max = g_0 + descent
         nan_result = np.any(np.isnan(f_2))
+        # add current lambda to accumulated steps
+        accum_step += lambda_ls
         while nan_result and lambda_ls >= lambda_min:
             # handle case in which f_2 throws nan as rough line search
             # Non-functional status notification
@@ -489,7 +489,7 @@ def line_search(fun, jac, x_c, known_f_c=None, known_j_c=None,
             # reduce lambda
             # backtrack accumulated steps in current lambda,
             # then reduce lambda once more
-            accum_step -= lambda_prev
+            accum_step -= lambda_ls
             backtrack_count += 1
             if lambda_ls == 1:
                 # first backtrack: quadratic fit
@@ -521,8 +521,6 @@ def line_search(fun, jac, x_c, known_f_c=None, known_j_c=None,
                 lambda_ls = 0.1 * lambda_ls
             else:
                 lambda_ls = lambda_temp
-            # add current lambda to accumulated steps
-            accum_step += lambda_ls
     j_2 = jac(x_2)
     return x_2, f_2, g_2, s_0_n, j_2, magnitude_f, g_max,\
         backtrack_count, lambda_ls, outer_it_stop, accum_step
