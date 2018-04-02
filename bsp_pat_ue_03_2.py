@@ -196,7 +196,7 @@ n_0 = (ne_dampf + ne_rohgas + ne_luft) * 1000  # mol/h
 h_dampf_ein = h(te_dampf)
 h_rohgas_ein = h(te_rohgas)
 h_luft_ein = h(te_luft)
-# Adiabatische Vermischung sum(n_i h_i(T)-n_i h_i(T0))=0
+# Adiabate Vermischung sum(n_i h_i(T)-n_i h_i(T0))=0
 t_ein = optimize.root(lambda temp:
                       sum(
                           ne_dampf * 1000 * (h(temp) - h_dampf_ein) +
@@ -1315,7 +1315,7 @@ for j in range(2):
     print('')
 
 print('========================================')
-print('Verdichtung: Adiabatischer Verdichter + Abkühler')
+print('Verdichtung: Adiabater Verdichter + Abkühler')
 print('========================================')
 
 n = n_5
@@ -1516,7 +1516,7 @@ for j in range(2):
 
 
 print('========================================')
-print('Adiabatische Ammoniaksynthese: Reaktor')
+print('Adiabate Ammoniaksynthese: Reaktor')
 print('========================================')
 
 
@@ -1576,7 +1576,7 @@ print(
     'Totale zu tauschende Energie, Q: ' +
     '{0:0.20g}'.format(
         q * 1 / 60.**2 * 1 / 1000.
-    ).replace('.', ',') + ' kW (adiabatisch)'
+    ).replace('.', ',') + ' kW (adiabat)'
 )
 
 print('')
@@ -1876,7 +1876,7 @@ for it_n in range(1, 25):
 
 
     print('========================================')
-    print('Adiabatische Ammoniaksynthese: Reaktor')
+    print('Adiabate Ammoniaksynthese: Reaktor')
     print('========================================')
 
     # Mit Zulauf-Temperatur als erster Ansatz beginnen.
@@ -1961,7 +1961,7 @@ for it_n in range(1, 25):
         'Totale zu tauschende Energie, Q: ' +
         '{0:0.20g}'.format(
             q * 1 / 60.**2 * 1 / 1000.
-        ).replace('.', ',') + ' kW (adiabatisch)'
+        ).replace('.', ',') + ' kW (adiabat)'
     )
 
     print('')
