@@ -1,5 +1,4 @@
 import numpy as np
-from scipy import integrate
 from scipy import optimize
 from scipy import misc
 import z_l_v
@@ -134,56 +133,74 @@ cp_coefs = np.array([z for z in [
 """.split('\n') if len(x) > 0] if len(z) > 1], dtype=float)
 
 
-def cp_durch_r(t, component=-1):
-    if component != -1:
-        cp_c_temp = cp_coefs[component, :]
-        a, b, c, d, e, f, g = np.split(cp_c_temp, len(cp_c_temp), axis=0)
-    else:
-        a, b, c, d, e, f, g = np.split(cp_coefs, cp_coefs.shape[1], axis=1)
-    return b + (c - b) * (t / (a + t))**2 * (
-        1 - a / (a + t) * (
-            d + e * t / (a + t) + f * (t / (a + t))**2 + g * (t / (a + t))**3
+def cp_durch_r(t, component):
+    a, b, c, d, e, f, g = cp_coefs[component, :]
+    gamma_var = t / (a + t)
+    return b + (c - b) * gamma_var**2 * (
+        1 + (gamma_var - 1) * (
+            d + e * gamma_var + f * gamma_var**2 + g * gamma_var**3
         ))  # dimensionslos
 
 
-def x_cp_r(t, x):
-    tot = 0
-    for i, frac in enumerate(x):
-        tot += frac * cp_durch_r(t, i)
-    return tot
+def int_cp_durch_r_dt_minus_const(t):
+    a, b, c, d, e, f, g = [
+        item.reshape(n_c) for item in np.split(
+            cp_coefs, cp_coefs.shape[1], axis=1
+        )
+    ]
+    return b * t + (c - b) * (
+        t - (d + e + f + g + 2) * a * np.log(a + t) +
+        -(2 * d + 3 * e + 4 * f + 5 * g + 1) * a**2 / (a + t) +
+        +(1 * d + 3 * e + 6 * f + 10 * g) * a**3 / 2 / (a + t)**2 +
+        -(1 * e + 4 * f + 10 * g) * a**4 / 3 / (a + t)**3 +
+        +(1 * f + 5 * g) * a**5 / 4 / (a + t)**4 +
+        - g * a**6 / 5 / (a + t)**5
+    )
+
+
+def int_cp_durch_rt_dt_minus_const(t):
+    a, b, c, d, e, f, g = [
+        item.reshape(n_c) for item in np.split(
+            cp_coefs, cp_coefs.shape[1], axis=1
+        )
+    ]
+    return b * np.log(t) + (c - b) * (
+        np.log(a + t) + (1 + d + e + f + g) * a / (a + t) +
+        -(d / 2 + e + 3 * f / 2 + 2 * g) * a**2 / (a + t)**2 +
+        +(e / 3 + f + 2 * g) * a**3 / (a + t)**3 +
+        -(f / 4 + g) * a**4 / (a + t)**4 +
+        +(g / 5) * a**5 / (a + t)**5
+    )
 
 
 def mcph(x, t0, t):
-    return integrate.quad(
-        lambda temp: x_cp_r(temp, x), t0, t
-    )[0] / (t - t0)
+    return sum(x * (
+        int_cp_durch_r_dt_minus_const(t) -
+        int_cp_durch_r_dt_minus_const(t0))
+    ) / sum(x) / (t - t0)
 
 
 def mcps(x, t0, t):
-    return integrate.quad(
-        lambda temp: x_cp_r(temp, x) / temp, t0, t
-    )[0] / np.log(t / t0)
+    return sum(x * (
+        int_cp_durch_rt_dt_minus_const(t) -
+        int_cp_durch_rt_dt_minus_const(t0))
+    ) / sum(x) / np.log(t / t0)
 
 # Berechne H(T), G(T) und K(T) mit Cp(T)
 
 
 def h(t):
-    enthalpien = np.empty_like(h_298)
-    for i in range(len(enthalpien)):
-        int_cp_durch_r = integrate.quad(
-            lambda temp: cp_durch_r(temp, i), 298.15, t)[0]
-        enthalpien[i] = h_298[i] + r * int_cp_durch_r
+    enthalpien = h_298 + r * (
+        int_cp_durch_r_dt_minus_const(t) -
+        int_cp_durch_r_dt_minus_const(298.15)
+    )
     return enthalpien  # J/mol
 
 
 def g(t, h_t):
-    freie_energien = np.empty_like(h_298)
-    for i in range(len(freie_energien)):
-        int_cp_durch_rt = integrate.quad(
-            lambda temp: cp_durch_r(temp, i) / temp, 298.15, t)[0]
-        freie_energien[i] = \
-            h_t[i] - \
-            t / t0_ref * (h_298[i] - g_298[i]) - r * t * int_cp_durch_rt
+    freie_energien = h_t - t / t0_ref * (h_298 - g_298) - \
+        r * t * (int_cp_durch_rt_dt_minus_const(t) -
+                 int_cp_durch_rt_dt_minus_const(t0_ref))
     return freie_energien  # J/mol
 
 
@@ -207,16 +224,13 @@ t_ein = optimize.root(lambda temp:
                       ).x
 
 h_t_ein = h(t_ein)
-cp_t_ein = r * cp_durch_r(t_ein)
 g_t_ein = g(t_ein, h_t_ein)  # J/mol
 
 t_aus_rdampfr = 995 + 273.15  # °K
 h_0 = h_t_ein
-cp_0 = cp_t_ein
 g_0 = g_t_ein
 
 h_1 = h(t_aus_rdampfr)
-cp_1 = r * cp_durch_r(t_aus_rdampfr)
 g_1 = g(t_aus_rdampfr, h_1)
 
 
@@ -352,7 +366,7 @@ def jac_gg_abstaende(k_x, nuij, n_0, xi_t,
     if betriebsw == 'adiabat' and h_0 is not None:
         delta_h_r_t = nuji.dot(h_t)
         d_lnk_dt = delta_h_r_t / (r * temp ** 2)
-        cp_t = r * np.concatenate([cp_durch_r(temp, i)
+        cp_t = r * np.concatenate([[cp_durch_r(temp, i)]
                                    for i in range(np.size(n))])
         for j in range(n_r):
             jac[j, n_r] = +k_x_pir_nt[j] * d_lnk_dt[j]
@@ -485,7 +499,7 @@ def r_entspannung_adiab(k_x_j, nuij, n_0, temp_0, p, x_mal=1):
                   np.multiply(n_0, h_0) -
                   np.multiply(n, h(t))),
               j=lambda t: -sum(n * r * np.concatenate(
-                  [cp_durch_r(t, i) for i in range(np.size(n))])),
+                  [[cp_durch_r(t, i)] for i in range(np.size(n))])),
               tol=1e-5,
               max_it=1000,
               inner_loop_condition=None,
@@ -541,7 +555,6 @@ def fj_0(xi, n_0, k_t, nuij):
         n_r = 1
         n = n_0 + nuij * xi
     n_t = sum(n)
-    # f = nuij.T.dot(np.log((n) / (n_t))) - np.log(k_1)
     pi = np.product(
         np.power(n / n_t, nuij.T),
         axis=nuij.ndim - 1
@@ -551,237 +564,6 @@ def fj_0(xi, n_0, k_t, nuij):
     f = pi - k_t
     logging.debug('x=' + str(xi))
     logging.debug('f=' + str(f))
-    return f
-
-
-def jac_fj_0(xi, n_0, nuij):
-    if np.ndim(nuij) > 1:
-        n_r = nuij.shape[1]
-        nujk = nuij.T
-        jac = np.zeros([len(xi), len(xi)])
-        n = n_0 + nuij.dot(xi)
-    else:
-        n_r = 1
-        nujk = nuij.reshape([1, nuij.shape[0]])
-        jac = np.zeros([1, 1])
-        n = n_0 + nuij * xi
-    n[n == 0] = eps
-    n_c = nujk.size
-    n_t = sum(n)
-    pi = np.product(
-        np.power(n / n_t, nuij.T),
-        axis=nuij.ndim - 1
-    )
-    if n_r == 1:
-        pi = np.array([pi])
-    for j in range(n_r):
-        for i in range(n_r):
-            for k_st, n_k in enumerate(n):
-                if abs(n_k) > eps:
-                    jac[j, i] = jac[j, i] + nujk[j, k_st] * nujk[i, k_st] / n_k
-                else:
-                    # add 0, since all n_k=0 do not remain in derivatives
-                    pass
-            jac[j, i] = pi[j] * (
-                jac[j, i] - sum(nujk[j, :]) * sum(nujk[i, :]) / n_t)
-    logging.debug('j=' + str(jac.tolist()))
-    if n_r == 1:
-        # 1 R: return scalar
-        jac = jac[0]
-    return jac
-
-
-def gg_abst_norm(xi, n_0, k_t, nuij, full_output=False):
-    if np.ndim(nuij) > 1:
-        n_r = nuij.shape[1]
-        nuji = nuij.T
-        fun = np.zeros_like(xi)
-        n = n_0 + nuij.dot(xi)
-    else:
-        n_r = 1
-        nuji = nuij.reshape([1, nuij.shape[0]])
-        fun = np.zeros([1])
-        n = n_0 + nuij * xi
-    nu_t = sum(nuij)
-    n_t = np.sum(n)
-    pir = np.ones(n_r)
-    pip = np.ones(n_r)
-    for j in range(n_r):
-        for k_st, nujk in enumerate(nuji[j]):
-            if nujk < 0 and abs(n[k_st]) > eps:
-                pir[j] = pir[j] * n[k_st] ** abs(nujk)
-            elif nujk > 0 and abs(n[k_st]) > eps:
-                pip[j] = pip[j] * n[k_st] ** abs(nujk)
-            elif nujk == 0:
-                # multiply by 1
-                pass
-    k_pir_nt = k_t * pir * n_t ** nu_t
-
-    for j in range(len(fun)):
-        if k_pir_nt[j] > pip[j]:
-            fun[j] = 1 - pip[j] / k_pir_nt[j]
-        elif k_pir_nt[j] < pip[j]:
-            fun[j] = k_pir_nt[j] / pip[j] - 1
-        elif k_pir_nt[j] == pip[j]:
-            fun[j] = 0.
-
-    logging.debug('xi=' + str(xi))
-    logging.debug('f(xi)=' + str(fun))
-
-    if full_output:
-        return k_pir_nt, pir, pip
-    else:
-        if n_r == 1:
-            return fun.item()
-        else:
-            return fun
-
-
-def jac_gg_abst_norm(xi, n_0, k_t, nuij):
-    if np.ndim(nuij) > 1:
-        n_r = nuij.shape[1]
-        nuji = nuij.T
-        jac = np.zeros([len(xi), len(xi)])
-        n = n_0 + nuij.dot(xi)
-    else:
-        n_r = 1
-        nuji = nuij.reshape([1, nuij.shape[0]])
-        jac = np.zeros([1, 1])
-        n = n_0 + nuij * xi
-    n_t = np.sum(n)
-    k_pir_nt, pir, pip = gg_abst_norm(xi, n_0, k_t, nuij, full_output=True)
-
-    s_nujknuik_nk_c = np.zeros_like(jac)
-    for j in range(n_r):
-        for i in range(n_r):
-            for k_st, n_k in enumerate(n):
-                if abs(n_k) > eps:
-                    s_nujknuik_nk_c[j, i] = s_nujknuik_nk_c[j,
-                                                            i] + nuji[j, k_st] * nuji[i, k_st] / n_k
-                elif nuji[j, k_st] == 0:
-                    # add 0
-                    pass
-            factor_ji = s_nujknuik_nk_c[j, i] - \
-                sum(nuji[j, :]) * sum(nuji[i, :]) / n_t
-            if k_pir_nt[j] > pip[j]:
-                jac[j, i] = - pip[j] / k_pir_nt[j] * factor_ji
-            elif k_pir_nt[j] < pip[j]:
-                jac[j, i] = - k_pir_nt[j] / pip[j] * factor_ji
-            elif k_pir_nt[j] == pip[j]:
-                jac[j, i] = eps
-    logging.debug('j=' + str(jac.tolist()))
-    if n_r == 1:
-        return jac[0]  # avoid embedded array
-    else:
-        return jac
-
-
-def gg_abst_norm_sq(xi, n_0, k_t, nuij, full_output=False):
-    if np.ndim(nuij) > 1:
-        n_r = nuij.shape[1]
-        nuji = nuij.T
-        fun = np.zeros_like(xi)
-        n = n_0 + nuij.dot(xi)
-    else:
-        n_r = 1
-        nuji = nuij.reshape([1, nuij.shape[0]])
-        fun = np.zeros([1])
-        n = n_0 + nuij * xi
-    nu_t = sum(nuij)
-    n_t = np.sum(n)
-    pir = np.ones(n_r)
-    pip = np.ones(n_r)
-    for j in range(n_r):
-        for k_st, nujk in enumerate(nuji[j]):
-            if nujk < 0 and abs(n[k_st]) > eps:
-                pir[j] = pir[j] * n[k_st] ** abs(nujk)
-            elif nujk > 0 and abs(n[k_st]) > eps:
-                pip[j] = pip[j] * n[k_st] ** abs(nujk)
-            elif nujk == 0:
-                # multiply by 1
-                pass
-    k_pir_nt = k_t * pir * n_t ** nu_t
-
-    for j in range(len(fun)):
-        if k_pir_nt[j] > pip[j]:
-            fun[j] = (1 - pip[j] / k_pir_nt[j])**2
-        elif k_pir_nt[j] < pip[j]:
-            fun[j] = (k_pir_nt[j] / pip[j] - 1)**2
-        elif k_pir_nt[j] == pip[j]:
-            fun[j] = 0.
-
-    logging.debug('xi=' + str(xi))
-    logging.debug('f(xi)=' + str(fun))
-
-    if full_output:
-        return k_pir_nt, pir, pip
-    else:
-        if n_r == 1:
-            return fun.item()
-        else:
-            return fun
-
-
-def jac_gg_abst_norm_sq(xi, n_0, k_t, nuij):
-    if np.ndim(nuij) > 1:
-        n_r = nuij.shape[1]
-        nuji = nuij.T
-        jac = np.zeros([len(xi), len(xi)])
-        n = n_0 + nuij.dot(xi)
-    else:
-        n_r = 1
-        nuji = nuij.reshape([1, nuij.shape[0]])
-        jac = np.zeros([1, 1])
-        n = n_0 + nuij * xi
-    n_t = np.sum(n)
-    k_pir_nt, pir, pip = gg_abst_norm(xi, n_0, k_t, nuij, full_output=True)
-
-    s_nujknuik_nk_c = np.zeros_like(jac)
-    for j in range(n_r):
-        for i in range(n_r):
-            for k_st, n_k in enumerate(n):
-                if abs(n_k) > eps:
-                    s_nujknuik_nk_c[j, i] = s_nujknuik_nk_c[j,
-                                                            i] + nuji[j, k_st] * nuji[i, k_st] / n_k
-                elif nuji[j, k_st] == 0:
-                    # add 0
-                    pass
-            factor_ji = s_nujknuik_nk_c[j, i] - \
-                sum(nuji[j, :]) * sum(nuji[i, :]) / n_t
-            if k_pir_nt[j] > pip[j]:
-                jac[j, i] = 2 * (1 - pip[j] / k_pir_nt[j]) * \
-                    (- pip[j] / k_pir_nt[j] * factor_ji)
-            elif k_pir_nt[j] < pip[j]:
-                jac[j, i] = 2 * (k_pir_nt[j] / pip[j] - 1) * \
-                    (- k_pir_nt[j] / pip[j] * factor_ji)
-            elif k_pir_nt[j] == pip[j]:
-                jac[j, i] = eps
-    logging.debug('j=' + str(jac.tolist()))
-    if n_r == 1:
-        return jac[0]  # avoid embedded array
-    else:
-        return jac
-
-
-def fj_adiab(x_vec, n_0, h_0):
-    xi = x_vec[:-1]
-    temp = x_vec[-1]
-    f = np.empty_like(x_vec)
-    h_t = h(temp)
-    g_t = g(temp, h_t)
-    k_t = k(temp, g_t, nuij)
-    delta_h_t = nuij.T.dot(h_t)
-    n = n_0 + nuij.dot(xi)
-    n_t = sum(n_0) + sum(nuij.dot(xi))
-    pi = np.product(np.power(n / n_t, nuij.T), axis=1)
-    # Energiebilanz
-    q = np.sum(
-        np.multiply(n_0, (h_0 - h_298)) -
-        np.multiply(n, (h_t - h_298))) + \
-        np.dot(xi, -delta_h_t)
-    f[:-1] = pi - k_t
-    f[-1] = q
-    logging.debug('f=' + str(f) + '; x=' + str(x_vec))
     return f
 
 
@@ -886,7 +668,6 @@ print('========================================')
 
 t_aus_rwgs = 210 + 273.15  # °K
 h_2 = h(t_aus_rwgs)
-cp_2 = r * cp_durch_r(t_aus_rwgs)
 g_2 = g(t_aus_rwgs, h_2)
 # Vorkühler-Leistung
 q = sum(n_1 * (h_2 - h_1))  # mol/h * J/mol = J/h
@@ -1327,11 +1108,9 @@ t1 = t_aus_rmeth
 # isentropisch: $dS = \frac{dQ_rev}{T}=\frac{Cp^{iG}}{T}-R/PdP=0$
 
 t2_rev = optimize.newton(
-    lambda t: np.log(p2 / p1) - integrate.quad(
-        lambda temp: x_cp_r(
-            temp, n / sum(n)
-        ) / temp, t1, t)[0],
-    t1
+    lambda t: np.log(p2 / p1) -
+    mcps(n / sum(n), t1, t) * np.log(t / t1),
+    t1 + 5
 )
 
 wg_mech = 1.0
@@ -1367,10 +1146,7 @@ t2 = optimize.newton(
 # SVN-Methode
 t2 = optimize.newton(
     lambda t2: -t2 + t1 + sum(n * (h2 - h1)) / sum(n) / wg_th / (
-        r * integrate.quad(
-            lambda temp: x_cp_r(
-                temp, n / sum(n)), t1, t2
-        )[0] / (t2 - t1)
+        r * mcph(n / sum(n), t1, t2)
     ), t2_rev)
 
 h2 = h(t2)
@@ -1453,9 +1229,9 @@ for j in range(2):
     print('')
 it_str = '1.' + ' ' + 'Iteration'
 print(
-    '='*int(np.ceil((40-len(it_str))/2.))+
-    it_str+
-    '='*int(np.floor((40-len(it_str))/2.))
+    '=' * int(np.ceil((40 - len(it_str)) / 2.)) +
+    it_str +
+    '=' * int(np.floor((40 - len(it_str)) / 2.))
 )
 for j in range(2):
     print('')
@@ -1611,7 +1387,7 @@ print('========================================')
 print('Abkühler + Produkt-Abscheider')
 print('========================================')
 
-t_aus_nh3_fl = 21 + 273.15 # °K
+t_aus_nh3_fl = 21 + 273.15  # °K
 h_8 = h(t_aus_nh3_fl)
 g_8 = g(t_aus_nh3_fl, h_8)
 
@@ -1779,15 +1555,15 @@ print('')
 
 print('Abgas:')
 
-for i, komb in enumerate(np.array((1-rlv) * n_8_v)):
+for i, komb in enumerate(np.array((1 - rlv) * n_8_v)):
     print('n_{' + namen[i] + '}=' +
           '{0:0.20g}'.format(komb / 1000.).replace('.', ',') +
           ' kmol/h')
 print('n_T' + '=' +
-      '{0:0.20g}'.format(sum((1-rlv) * n_8_v) / 1000.).replace('.', ',') +
+      '{0:0.20g}'.format(sum((1 - rlv) * n_8_v) / 1000.).replace('.', ',') +
       ' kmol/h')
 print('')
-for i, komb in enumerate(np.array((1-rlv) * n_8_v / sum((1-rlv) * n_8_v))):
+for i, komb in enumerate(np.array((1 - rlv) * n_8_v / sum((1 - rlv) * n_8_v))):
     print('y_{' + namen[i] + '}=' +
           '{0:0.20g}'.format(komb).replace('.', ',')
           )
@@ -1795,7 +1571,7 @@ print('')
 print('T: ' + '{:g}'.format(t_aus_nh3_fl) + ' °K')
 print('p: ' + '{:g}'.format(p) + ' bar')
 print('H: ' + '{0:0.6f}'.format(
-sum((1-rlv) * n_8_v * h_8) / sum((1-rlv) * n_8_v) * 1000.) + ' J/kmol')
+    sum((1 - rlv) * n_8_v * h_8) / sum((1 - rlv) * n_8_v) * 1000.) + ' J/kmol')
 
 print('========================================')
 for j in range(2):
@@ -1810,9 +1586,9 @@ for it_n in range(1, 25):
         print('')
     it_str = str(it_n) + ' ' + 'Iteration'
     print(
-        '='*int(np.ceil((40-len(it_str))/2.))+
-        it_str+
-        '='*int(np.floor((40-len(it_str))/2.))
+        '=' * int(np.ceil((40 - len(it_str)) / 2.)) +
+        it_str +
+        '=' * int(np.floor((40 - len(it_str)) / 2.))
     )
     for j in range(2):
         print('')
@@ -1827,7 +1603,7 @@ for it_n in range(1, 25):
     # Elim. n<10^-16
     n_8_v_t = sum(n_8_v)
     n_8_v[abs(n_8_v) < eps] = 0
-    n_8_v = n_8_v/sum(n_8_v) * n_8_v_t
+    n_8_v = n_8_v / sum(n_8_v) * n_8_v_t
     n_6 = n_5 + rlv * n_8_v
 
     t_mischung = optimize.root(
@@ -1847,7 +1623,6 @@ for it_n in range(1, 25):
             q * 1 / 60. ** 2 * 1 / 1000.  # 1h/60^2s * 1kW / 1000W
         ).replace('.', ',') + ' kW'
     )
-
 
     print('')
 
@@ -1873,7 +1648,6 @@ for it_n in range(1, 25):
     print('========================================')
     for j in range(2):
         print('')
-
 
     print('========================================')
     print('Adiabate Ammoniaksynthese: Reaktor')
@@ -1935,8 +1709,8 @@ for it_n in range(1, 25):
     k_7 = k(t_aus_nh3_syn, g_7, nuij)
     k_x_7 = np.multiply(k_7, np.power(p / 1., -sum(nuij)))
     progress_k, stop, outer_it_k, outer_it_j, \
-    lambda_ls, accum_step, x, \
-    diff, f_val, lambda_ls_y = \
+        lambda_ls, accum_step, x, \
+        diff, f_val, lambda_ls_y = \
         nr_ls(x0=xi_7,
               f=lambda xi: gg_abstaende(
                   k_x_7, nuij, n_6, xi, h_6, 'isotherm'),
@@ -1996,7 +1770,7 @@ for it_n in range(1, 25):
     print('Abkühler + Produkt-Abscheider')
     print('========================================')
 
-    t_aus_nh3_fl = 21 + 273.15 # °K
+    t_aus_nh3_fl = 21 + 273.15  # °K
     h_8 = h(t_aus_nh3_fl)
     g_8 = g(t_aus_nh3_fl, h_8)
 
@@ -2162,25 +1936,24 @@ for it_n in range(1, 25):
 
     print('Abgas:')
 
-    for i, komb in enumerate(np.array((1-rlv) * n_8_v)):
+    for i, komb in enumerate(np.array((1 - rlv) * n_8_v)):
         print('n_{' + namen[i] + '}=' +
               '{0:0.20g}'.format(komb / 1000.).replace('.', ',') +
               ' kmol/h')
-    print('n_T' + '=' +
-          '{0:0.20g}'.format(sum((1-rlv) * n_8_v) / 1000.).replace('.', ',') +
-          ' kmol/h')
+    print('n_T' + '=' + '{0:0.20g}'.format(sum((1 - rlv) *
+                                               n_8_v) / 1000.).replace('.', ',') + ' kmol/h')
     print('')
-    for i, komb in enumerate(np.array((1-rlv) * n_8_v / sum((1-rlv) * n_8_v))):
+    for i, komb in enumerate(
+            np.array((1 - rlv) * n_8_v / sum((1 - rlv) * n_8_v))):
         print('y_{' + namen[i] + '}=' +
               '{0:0.20g}'.format(komb).replace('.', ',')
               )
     print('')
     print('T: ' + '{:g}'.format(t_aus_nh3_fl) + ' °K')
     print('p: ' + '{:g}'.format(p) + ' bar')
-    print('H: ' + '{0:0.6f}'.format(
-    sum((1-rlv) * n_8_v * h_8) / sum((1-rlv) * n_8_v) * 1000.) + ' J/kmol')
+    print('H: ' + '{0:0.6f}'.format(sum((1 - rlv) * n_8_v *
+                                        h_8) / sum((1 - rlv) * n_8_v) * 1000.) + ' J/kmol')
 
     print('========================================')
     for j in range(2):
         print('')
-
