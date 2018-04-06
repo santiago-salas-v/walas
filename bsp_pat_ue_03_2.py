@@ -1584,7 +1584,7 @@ for it_n in range(1, 25):
     print('========================================')
     for j in range(2):
         print('')
-    it_str = str(it_n) + ' ' + 'Iteration'
+    it_str = str(it_n) + '. ' + 'Iteration'
     print(
         '=' * int(np.ceil((40 - len(it_str)) / 2.)) +
         it_str +
