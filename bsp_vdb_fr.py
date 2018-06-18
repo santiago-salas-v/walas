@@ -48,7 +48,7 @@ nuij[[
     namen.index('CO'),
     namen.index('N2'),
 ], 1] = np.array([0, -2, +1, 0, -1, 0], dtype=float)
-# RWGS Rückwassergasshiftreaktion
+# WGS Wassergasshiftreaktion (als Vorwärtsreaktion)
 nuij[[
     namen.index('CO2'),
     namen.index('H2'),
@@ -62,6 +62,8 @@ nuij[[
 h_298 = np.array([
     -110540, -241820, -201160, 0, -393500, 0
 ], dtype=float)  # J/mol
+
+delta_h_r_298 = nuij.T.dot(h_298)  # J/mol
 
 # Parameter der Gleichung aus dem VDI-Wärmeatlas
 cp_konstanten = np.zeros([len(namen), 7])
@@ -101,11 +103,30 @@ def int_cp_durch_r_dt_minus_const(t):
     )
 
 
+def int_cp_durch_rt_dt_minus_const(t):
+    a, b, c, d, e, f, g = cp_konstanten.T
+    return b * np.log(t) + (c - b) * (
+        np.log(a + t) + (1 + d + e + f + g) * a / (a + t) +
+        -(d / 2 + e + 3 * f / 2 + 2 * g) * a**2 / (a + t)**2 +
+        +(e / 3 + f + 2 * g) * a**3 / (a + t)**3 +
+        -(f / 4 + g) * a**4 / (a + t)**4 +
+        +(g / 5) * a**5 / (a + t)**5
+    )
+
+
 def mcph(x, t0, t):
     return sum(x * (
         int_cp_durch_r_dt_minus_const(t) -
         int_cp_durch_r_dt_minus_const(t0))
     ) / sum(x) / (t - t0)
+
+
+def delta_h_r(t):
+    cp_m = (
+        int_cp_durch_r_dt_minus_const(t) -
+        int_cp_durch_r_dt_minus_const(298.15)
+    ) / (t - 298.15) * 8.3145  # J/mol/K
+    return delta_h_r_298 + nuij.T.dot(cp_m) * (t - 298.15)
 
 
 def mu(t, y_i):
@@ -220,7 +241,7 @@ def df_dt(y, t0_zeit):
     dt_dz = l_r * 1 / (
         u_s * cp_g
     ) * (
-        2 * u / (d_t / 2) * (t_r - t) + rho_b * 2222222222222222222222222222222222
+        2 * u / (d_t / 2) * (t_r - t) + rho_b * 0
     )
 
 
@@ -230,17 +251,23 @@ ax = fig.add_subplot(211)
 ax.plot(t_r, np.array(
     [mu(t, y_i0) for t in t_r]) / 1e-5, label='Berechnet')
 ax.plot(t_r, np.array(
-    [67.2e-7 + 0.21875e-7 * t for t in t_r]) / 1e-5, label='Bezugsdaten')
-ax.set_xlabel('T/K')
+    [67.2e-7 + 0.21875e-7 * t for t in t_r]) / 1e-5, label='Bezugdaten')
 ax.set_ylabel(r'$\frac{\mu}{(Pa s) \cdot 1e-5}$')
+plt.setp(ax.get_xticklabels(), visible=False)
 ax.legend()
 
-ax2 = fig.add_subplot(212)
-ax2.plot(t_r, np.array(
-    [sum(cp_ig_durch_r(t)*y_i0) * 8.3145/sum(mm/1000. * y_i0)
-     for t in t_r]) / 1e-5, label='Berechnet')
+ax2 = fig.add_subplot(212, sharex=ax)
+delta_h_r_t = np.array([delta_h_r(t) for t in t_r])
+print(delta_h_r(300))
+ax2.plot(t_r, delta_h_r_t[:, 0] / 1000.,
+         label='$\Delta_R H_1 CO2-Hydrierung - berechnet$')
+ax2.plot(t_r, delta_h_r_t[:, 2] / 1000.,
+         label='$\Delta_R H_3 WGS - berechnet$')
+ax2.plot(t_r, -(57980 + 35 * (t_r - 498.15)) / 1000.,
+         label='$\Delta_R H_{rx}^1 CO2-Hydrierung - Bezugsdaten$')
+ax2.plot(t_r, +(-39892 + 8 * (t_r - 498.15)) / 1000.,
+         label='$-\Delta H_{rx}^2 WGS - Bezugsdaten$')
 ax2.set_xlabel('T/K')
-ax2.set_ylabel(r'$C_{p_g} /(\frac{J}{kg K}})$')
-
-
+ax2.set_ylabel(r'$\frac{\Delta_R H(T)}{(J/mol) \cdot 10^3 }$')
+ax2.legend()
 plt.show()
