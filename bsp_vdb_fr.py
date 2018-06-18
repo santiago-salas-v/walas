@@ -114,11 +114,11 @@ def int_cp_durch_rt_dt_minus_const(t):
     )
 
 
-def mcph(x, t0, t):
+def mcph(x, t0_ref, t):
     return sum(x * (
         int_cp_durch_r_dt_minus_const(t) -
-        int_cp_durch_r_dt_minus_const(t0))
-    ) / sum(x) / (t - t0)
+        int_cp_durch_r_dt_minus_const(t0_ref))
+    ) / sum(x) / (t - t0_ref)
 
 
 def delta_h_r(t):
@@ -200,7 +200,7 @@ def r_i(t, p_i):
     p_h2 = p_i[namen.index('H2')]
     p_ch3oh = p_i[namen.index('MeOH')]
     p_h2o = p_i[namen.index('H2O')]
-    [k_1, k_2, k_3,
+    [k_1, _, k_3,
      k_h2, k_h2o, k_h2o_d_k_8_k_9_k_h2,
      k5a_k_2_k_3_k_4_k_h2, k1_strich] = k_t(t)
     r_meoh = k5a_k_2_k_3_k_4_k_h2 * p_co2 * p_h2 * (
@@ -220,30 +220,37 @@ def r_i(t, p_i):
     return np.array([r_meoh, 0, r_rwgs])
 
 
-def df_dt(y, t0_zeit):
+def df_dt(y, _):
     y_i = y[:-2]
     p = y[-2]
     t = y[-1]
     mm_m = sum(y_i * mm) * 1 / 1000.  # kg/mol
-    cp_m = sum(y_i * cp_ig_durch_r(t) * 8.3145) / mm  # J/kg/K
-    cp_g = cp_m / mm_m
+    cp_m = sum(y_i * cp_ig_durch_r(t) * 8.3145)  # J/mol/K
+    cp_g = cp_m / mm_m  # J/kg/K
     c_t = p / (8.3145 * 1e-5 * t)  # bar * mol/bar/m^3/K*K = mol/m^3
     p_i = y_i * p  # bar
+    delta_h_r_t = delta_h_r(t)
+    mu_t_y = mu(t, y_i)
     r_j = r_i(t, p_i)  # mol/kg Kat/s
     dyi_dz = l_r * rho_b * mm_m / u_s * (
         nuij.dot(r_j) - y_i * sum(nuij.dot(r_j))
     )   # m * kgKat/m^3 * kg/mol * m^2 s/kg * mol/kgKat/s = dimlos
     dp_dz = -l_r * u_s / (
-        c_t * mm_m / 1000. * d_p
+        c_t * mm_m * d_p
     ) * (1 - phi) / phi**3 * (
-        150 * (1 - phi) * mu(t, y_i) / d_p + 1.75 * u_s
+        150 * (1 - phi) * mu_t_y / d_p + 1.75 * u_s
     )
     dt_dz = l_r * 1 / (
         u_s * cp_g
     ) * (
-        2 * u / (d_t / 2) * (t_r - t) + rho_b * 0
+        2 * u / (d_t / 2) * (t_r - t) + rho_b * (-delta_h_r_t).dot(r_j)
     )
+    return np.array([*dyi_dz, dp_dz, dt_dz])
 
+
+z_d_l_r = np.linspace(0, 1, 200)
+soln = odeint(df_dt, np.array([*y_i0, p0, t0]), z_d_l_r)
+print(soln)
 
 t_r = np.linspace(100, 1000, 200)
 fig = plt.figure()
@@ -257,11 +264,10 @@ plt.setp(ax.get_xticklabels(), visible=False)
 ax.legend()
 
 ax2 = fig.add_subplot(212, sharex=ax)
-delta_h_r_t = np.array([delta_h_r(t) for t in t_r])
-print(delta_h_r(300))
-ax2.plot(t_r, delta_h_r_t[:, 0] / 1000.,
+delta_h_r_t_0 = np.array([delta_h_r(t) for t in t_r])
+ax2.plot(t_r, delta_h_r_t_0[:, 0] / 1000.,
          label='$\Delta_R H_1 CO2-Hydrierung - berechnet$')
-ax2.plot(t_r, delta_h_r_t[:, 2] / 1000.,
+ax2.plot(t_r, delta_h_r_t_0[:, 2] / 1000.,
          label='$\Delta_R H_3 WGS - berechnet$')
 ax2.plot(t_r, -(57980 + 35 * (t_r - 498.15)) / 1000.,
          label='$\Delta_R H_{rx}^1 CO2-Hydrierung - Bezugsdaten$')
