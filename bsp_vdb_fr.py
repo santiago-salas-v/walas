@@ -217,7 +217,7 @@ def r_i(t, p_i):
         1 + k_h2o_d_k_8_k_9_k_h2 * p_h2o / p_h2 +
         np.sqrt(k_h2 * p_h2) + k_h2o * p_h2o
     ) ** 1
-    return np.array([r_meoh, 0, r_rwgs])
+    return np.array([r_meoh, 0., r_rwgs])
 
 
 def df_dt(y, _):
@@ -235,12 +235,12 @@ def df_dt(y, _):
     dyi_dz = l_r * rho_b * mm_m / u_s * (
         nuij.dot(r_j) - y_i * sum(nuij.dot(r_j))
     )   # m * kgKat/m^3 * kg/mol * m^2 s/kg * mol/kgKat/s = dimlos
-    dp_dz = -l_r * u_s / (
+    dp_dz = -l_r * 1 / 10**5 * u_s / (
         c_t * mm_m * d_p
     ) * (1 - phi) / phi**3 * (
         150 * (1 - phi) * mu_t_y / d_p + 1.75 * u_s
-    )
-    dt_dz = l_r * 1 / (
+    )  # Pa * 1bar/(1e5 Pa) = bar
+    dt_dz = l_r / (
         u_s * cp_g
     ) * (
         2 * u / (d_t / 2) * (t_r - t) + rho_b * (-delta_h_r_t).dot(r_j)
@@ -250,10 +250,12 @@ def df_dt(y, _):
 
 z_d_l_r = np.linspace(0, 1, 200)
 soln = odeint(df_dt, np.array([*y_i0, p0, t0]), z_d_l_r)
-print(soln)
+y_i_soln = soln[:, :len(y_i0)]
+p_soln = soln[:, -2]
+t_soln = soln[:, -1]
 
 t_r = np.linspace(100, 1000, 200)
-fig = plt.figure()
+fig = plt.figure(1)
 ax = fig.add_subplot(211)
 ax.plot(t_r, np.array(
     [mu(t, y_i0) for t in t_r]) / 1e-5, label='Berechnet')
@@ -276,4 +278,13 @@ ax2.plot(t_r, +(-39892 + 8 * (t_r - 498.15)) / 1000.,
 ax2.set_xlabel('T/K')
 ax2.set_ylabel(r'$\frac{\Delta_R H(T)}{(J/mol) \cdot 10^3 }$')
 ax2.legend()
+
+fig2 = plt.figure(2)
+ax3 = fig2.add_subplot(121)
+for item in ['CO', 'H2O', 'MeOH', 'CO2']:
+    index = namen.index(item)
+    ax3.plot(z_d_l_r, y_i_soln[:, index], label=item)
+ax3 = fig2.add_subplot(122)
+ax3.plot(z_d_l_r, t_soln)
+ax3.legend()
 plt.show()
