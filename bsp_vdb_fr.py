@@ -1,6 +1,12 @@
 import numpy as np
 import matplotlib.pyplot as plt
+from matplotlib import lines
 from scipy.integrate import odeint
+
+# Journal of Catalysis, 1996, 161. Jg., Nr. 1, S. 1-10.
+
+# Bezugdaten: 'Løvik, Ingvild. "Modelling, estimation and optimization
+# of the methanol synthesis with catalyst deactivation." (2001).
 
 # Katalysator
 rho_b = 1775  # kg Kat/m^3 Feststoff
@@ -13,7 +19,7 @@ l_r = 0.15  # m Rohrlänge
 # Betriebsbedingungen
 t0 = 493.2  # K
 p0 = 50.  # bar
-m_dot = 1e-5  # kg/s
+m_dot = 2.8 * 1e-5  # kg/s
 # Zulaufbedingungen
 namen = ['CO', 'H2O', 'MeOH', 'H2', 'CO2', 'N2']
 y_i0 = np.array([
@@ -48,7 +54,8 @@ nuij[[
     namen.index('CO'),
     namen.index('N2'),
 ], 1] = np.array([0, -2, +1, 0, -1, 0], dtype=float)
-# WGS Wassergasshiftreaktion (als Vorwärtsreaktion)
+# RWGS Reverse-Wassergasshiftreaktion (muss gleich sein als die Vorwärtsreaktion,
+# wofür die Kinetik verfügbar ist)
 nuij[[
     namen.index('CO2'),
     namen.index('H2'),
@@ -56,7 +63,7 @@ nuij[[
     namen.index('H2O'),
     namen.index('CO'),
     namen.index('N2'),
-], 2] = np.array([+1, +1, 0, -1, -1, 0], dtype=float)
+], 2] = - np.array([+1, +1, 0, -1, -1, 0], dtype=float)
 
 # Quelle: Chemical thermodynamics for process simulation
 h_298 = np.array([
@@ -177,7 +184,7 @@ def k_t(t):
     # Angepasste Parameter des kinetischen Modells
     # A(i) exp(B(i)/RT)
     a = np.array([
-        0.499, 6.62e-11, 3453.38, 1.07, 1.22e-10
+        0.499, 6.62e-11, 3453.38, 1.07, 1.22e10
     ], dtype=float)
     b = np.array([
         17197, 124119, 0, 36696, -94765
@@ -198,13 +205,13 @@ def r_i(t, p_i):
     p_co2 = p_i[namen.index('CO2')]
     p_co = p_i[namen.index('CO')]
     p_h2 = p_i[namen.index('H2')]
-    p_ch3oh = p_i[namen.index('MeOH')]
+    p_meoh = p_i[namen.index('MeOH')]
     p_h2o = p_i[namen.index('H2O')]
     [k_1, _, k_3,
      k_h2, k_h2o, k_h2o_d_k_8_k_9_k_h2,
      k5a_k_2_k_3_k_4_k_h2, k1_strich] = k_t(t)
     r_meoh = k5a_k_2_k_3_k_4_k_h2 * p_co2 * p_h2 * (
-        1 - 1 / k_1 * p_h2o * p_ch3oh / (
+        1 - 1 / k_1 * p_h2o * p_meoh / (
             p_h2 ** 3 * p_co2
         )
     ) / (
@@ -221,7 +228,7 @@ def r_i(t, p_i):
 
 
 def df_dt(y, _):
-    y_i = y[:-2]
+    y_i = y[:-2] / sum(y[:-2])
     p = y[-2]
     t = y[-1]
     mm_m = sum(y_i * mm) * 1 / 1000.  # kg/mol
@@ -243,20 +250,30 @@ def df_dt(y, _):
     dt_dz = l_r / (
         u_s * cp_g
     ) * (
-        2 * u / (d_t / 2) * (t_r - t) + rho_b * (-delta_h_r_t).dot(r_j)
+        2 * u / (d_t / 2) * (t_r - t) + rho_b * -delta_h_r_t.dot(r_j)
     )
-    return np.array([*dyi_dz, dp_dz, dt_dz])
+    result = np.empty_like(y)
+    result[:-2] = dyi_dz
+    result[-2] = dp_dz
+    result[-1] = dt_dz
+    return result
 
 
+y_0 = np.empty([len(y_i0)+1+1])
+y_0[:-2] = y_i0
+y_0[-2] = p0
+y_0[-1] = t0
 z_d_l_r = np.linspace(0, 1, 200)
-soln = odeint(df_dt, np.array([*y_i0, p0, t0]), z_d_l_r)
+soln = odeint(df_dt, y_0, z_d_l_r)
 y_i_soln = soln[:, :len(y_i0)]
 p_soln = soln[:, -2]
 t_soln = soln[:, -1]
 
 t_r = np.linspace(100, 1000, 200)
 fig = plt.figure(1)
-ax = fig.add_subplot(211)
+fig.suptitle('Adiabates System (Journal of Catalysis, ' +
+             '1996, 161. Jg., Nr. 1, S. 1-10. )')
+ax = plt.subplot2grid([2, 3], [0, 0])
 ax.plot(t_r, np.array(
     [mu(t, y_i0) for t in t_r]) / 1e-5, label='Berechnet')
 ax.plot(t_r, np.array(
@@ -265,26 +282,39 @@ ax.set_ylabel(r'$\frac{\mu}{(Pa s) \cdot 1e-5}$')
 plt.setp(ax.get_xticklabels(), visible=False)
 ax.legend()
 
-ax2 = fig.add_subplot(212, sharex=ax)
+ax2 = plt.subplot2grid([2, 3], [1, 0], sharex=ax)
 delta_h_r_t_0 = np.array([delta_h_r(t) for t in t_r])
 ax2.plot(t_r, delta_h_r_t_0[:, 0] / 1000.,
-         label='$\Delta_R H_1 CO2-Hydrierung - berechnet$')
+         label='$\Delta_R H_1 Hyd. CO_2 - berechnet$')
 ax2.plot(t_r, delta_h_r_t_0[:, 2] / 1000.,
-         label='$\Delta_R H_3 WGS - berechnet$')
+         label='$\Delta_R H_3 RWGS - berechnet$')
 ax2.plot(t_r, -(57980 + 35 * (t_r - 498.15)) / 1000.,
-         label='$\Delta_R H_{rx}^1 CO2-Hydrierung - Bezugsdaten$')
-ax2.plot(t_r, +(-39892 + 8 * (t_r - 498.15)) / 1000.,
-         label='$-\Delta H_{rx}^2 WGS - Bezugsdaten$')
+         label='$\Delta_R H_{rx}^1 Hyd. CO_2 - Bezugsdaten$')
+ax2.plot(t_r, -(-39892 + 8 * (t_r - 498.15)) / 1000.,
+         label='$\Delta H_{rx}^2 RWGS - Bezugsdaten$')
 ax2.set_xlabel('T/K')
 ax2.set_ylabel(r'$\frac{\Delta_R H(T)}{(J/mol) \cdot 10^3 }$')
-ax2.legend()
+ax2.legend(fontsize='xx-small', loc='best')
+plt.tight_layout()
 
-fig2 = plt.figure(2)
-ax3 = fig2.add_subplot(121)
+
+ax3 = plt.subplot2grid([2, 3], [1, 1], colspan=2)
+ax3.set_ylabel('Konzentration / Mol%')
+ax3.set_xlabel('Reduzierte Position, $z/L_R$')
 for item in ['CO', 'H2O', 'MeOH', 'CO2']:
+    marker = np.random.choice(list(lines.lineMarkers.keys()))
     index = namen.index(item)
-    ax3.plot(z_d_l_r, y_i_soln[:, index], label=item)
-ax3 = fig2.add_subplot(122)
-ax3.plot(z_d_l_r, t_soln)
-ax3.legend()
+    ax3.plot(z_d_l_r, y_i_soln[:, index] * 100., label=item,
+             marker=marker)
+ax3.legend(loc=1)
+plt.tight_layout()
+ax4 = plt.subplot2grid([2, 3], [0, 1])
+ax4.set_ylabel('Temperatur / K')
+ax4.set_xlabel('Reduzierte Position, $z/L_R$')
+ax4.plot(z_d_l_r, t_soln, label='T / K')
+plt.tight_layout(rect=[0, 0, 1, 0.9])
+ax5 = plt.subplot2grid([3, 3], [0, 2], colspan=2)
+ax5.set_ylabel('Druck / bar')
+ax5.set_xlabel('Reduzierte Position, $z/L_R$')
+ax5.plot(z_d_l_r, p_soln, label='p / bar')
 plt.show()
