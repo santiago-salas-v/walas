@@ -88,6 +88,16 @@ for i in range(len(namen)):
             '–', '-').replace(',', '.').split(' '),
         dtype=float)
 
+# Lennard-Jones Parameter Prausnitz Anhang B
+    # epsilon / kB
+    l_j_epsilon_d_k = np.array([
+        91.7, 809.1, 481.8, 59.7, 195.2, 71.4
+    ])  # K
+    # sigma
+    l_j_sigma = np.array([
+        3.690, 2.641, 3.626, 2.827, 3.941, 3.798
+    ])  # Angstrom
+
 
 def cp_ig_durch_r(t):
     a, b, c, d, e, f, g = cp_konstanten.T
@@ -137,18 +147,6 @@ def delta_h_r(t):
 
 
 def mu(t, y_i):
-    mm_int = np.array([
-        28, 18, 32, 2, 44, 28
-    ], dtype=float)
-    # Lennard-Jones Parameter Prausnitz Anhang B
-    # epsilon / kB
-    l_j_epsilon_d_k = np.array([
-        91.7, 809.1, 481.8, 59.7, 195.2, 71.4
-    ])  # K
-    # sigma
-    l_j_sigma = np.array([
-        3.690, 2.641, 3.626, 2.827, 3.941, 3.798
-    ])  # Angstrom
     # T* = k T / epsilon
     t_st = t / l_j_epsilon_d_k  # J/K
     # Stoßintegral (Bird Tabelle E.2)
@@ -158,17 +156,17 @@ def mu(t, y_i):
     konst_1 = 5 / 16. * np.sqrt(
         8.3145 * 1000 * 100 ** 2 / np.pi
     ) * 10**16 / 6.022e23  # g/cm/s
-    mu_i = konst_1 * np.sqrt(mm_int * t) / (
+    mu_i = konst_1 * np.sqrt(mm * t) / (
         l_j_sigma**2 * omega_mu
     ) * 100 / 1000
     # g/cm/s * 100cm/m * 1kg/1000g = kg/m/s = Pa s
-    phi_ab = np.zeros([mm_int.size, mu_i.size])
+    phi_ab = np.zeros([mm.size, mu_i.size])
     for alpha in range(phi_ab.shape[0]):
         for beta in range(phi_ab.shape[1]):
             phi_ab[alpha, beta] = 1 / np.sqrt(8) * (
-                1 + mm_int[alpha] / mm_int[beta]) ** (-1 / 2.) * (
+                1 + mm[alpha] / mm[beta]) ** (-1 / 2.) * (
                 1 + (mu_i[alpha] / mu_i[beta]) ** (1 / 2.) * (
-                    mm_int[beta] / mm_int[alpha]) ** (1 / 4.)
+                    mm[beta] / mm[alpha]) ** (1 / 4.)
             ) ** 2
     mu_mix = sum(y_i * mu_i / phi_ab.dot(y_i))
     return mu_mix  # Pa s
@@ -317,4 +315,180 @@ ax5 = plt.subplot2grid([3, 3], [0, 2], colspan=2)
 ax5.set_ylabel('Druck / bar')
 ax5.set_xlabel('Reduzierte Position, $z/L_R$')
 ax5.plot(z_d_l_r, p_soln, label='p / bar')
+
+# Chem. Eng. Technol. 2011, 34, No. 5, 817–822
+
+# Katalysator
+rho_b = 1190  # kg Kat/m^3 Feststoff
+phi = 0.285  # m^3 Gas/m^3 Feststoff
+m_kat = 1190*(1-0.285)*np.pi/4*(
+    0.04)**2 * 7  # kg Kat (pro Rohr)
+d_p = 0.0054  # m Feststoff
+# Reaktor
+n_t = 1620  # Rohre
+d_t = 0.04  # m Rohrdurchmesser
+l_r = 7.  # m Rohrlänge
+# Betriebsbedingungen
+t0 = 225+273.15  # K
+p0 = 69.7  # bar
+m_dot = 57282.8 / 60**2 / n_t  # kg/s
+# Zulaufbedingungen
+namen = ['CO', 'CO2', 'H2', 'H2O', 'MeOH',
+         'CH4', 'N2', 'EthOH', 'PrOH', 'METHF']
+m_dot_i = np.array([
+    10727.9, 23684.2, 9586.5,
+    108.8, 756.7, 4333.1,
+    8072.0, 0.6, 0.0,
+    13.0
+], dtype=float)/ 60**2 /n_t   # kg/s
+m_dot = sum(m_dot_i)
+mm = np.array([
+    28.01, 44.01, 2.02,
+    18.02, 32.04, 16.04,
+    28.01, 46.07, 60.10,
+    60.05
+], dtype=float)  # g/mol
+y_i0 = m_dot_i/mm / sum(m_dot_i/mm)
+# Wärmetauschparameter
+t_r = 220+273.15  # K
+u = 118.44  # W/m^2/K
+
+# Berechnung der Parameter
+u_s = m_dot / (np.pi / 4 * d_t**2)  # kg/m^2/s
+# Stoechiometrische Koeffizienten
+nuij = np.zeros([len(namen), 3])
+# Hydrierung von CO2
+nuij[[
+    namen.index('CO2'),
+    namen.index('H2'),
+    namen.index('MeOH'),
+    namen.index('H2O'),
+    namen.index('CO'),
+    namen.index('N2'),
+], 0] = np.array([-1, -3, +1, +1, 0, 0], dtype=float)
+# Hydrierung von CO
+nuij[[
+    namen.index('CO2'),
+    namen.index('H2'),
+    namen.index('MeOH'),
+    namen.index('H2O'),
+    namen.index('CO'),
+    namen.index('N2'),
+], 1] = np.array([0, -2, +1, 0, -1, 0], dtype=float)
+# RWGS Reverse-Wassergasshiftreaktion (muss gleich sein als die Vorwärtsreaktion,
+# wofür die Kinetik verfügbar ist)
+nuij[[
+    namen.index('CO2'),
+    namen.index('H2'),
+    namen.index('MeOH'),
+    namen.index('H2O'),
+    namen.index('CO'),
+    namen.index('N2'),
+], 2] = - np.array([+1, +1, 0, -1, -1, 0], dtype=float)
+
+# Parameter der Gleichung aus dem VDI-Wärmeatlas
+cp_konstanten = np.zeros([len(namen), 7])
+cp_konstanten_text = [
+    '407,9796 3,5028 2,8524 –2,3018 32,9055 –100,1815 106,1141',
+    '514,5073 3,4923 –0,9306 –6,0861 54,1586 –97,5157 70,9687',
+    '392,8422 2,4906 –3,6262 –1,9624 35,6197 –81,3691 62,6668',
+    '706,3032 5,1703 –6,0865 –6,6011 36,2723 –63,0965 46,2085',
+    '846,6321 5,7309 –4,8842 –12,8501 78,9997 –127,3725 82,7107',
+    '1530,8043 4,2038 –16,6150 –3,5668 43,0563 –86,5507 65,5986',
+    '432,2027 3,5160 2,8021 –4,1924 42,0153 –114,2500 111,1019',
+    '1165,8648 4,7021 9,7786 –1,1769 –135,7676 322,7596 –247,7349',
+    '506,0032 12,1539 0,0041 –36,1389 175,9466 –276,1927 171,3886',
+    '650,0705 5,0360 –0,4487 –13,5453 126,9502 –219,5695 151,4586'
+]
+for i in range(len(namen)):
+    cp_konstanten[i, :] = np.array(
+        cp_konstanten_text[i].replace(
+            '–', '-').replace(',', '.').split(' '),
+        dtype=float)
+
+# Lennard-Jones Parameter Prausnitz Anhang B
+# epsilon / kB
+l_j_epsilon_d_k = np.array([
+    91.7, 195.2, 59.7,
+    809.1, 481.8, 148.6,
+    71.4, 362.6, 576.7,
+    469.8
+])  # K
+# sigma
+l_j_sigma = np.array([
+    3.69, 3.941, 2.827,
+    2.641, 3.626, 3.758,
+    3.798, 4.53, 4.549,
+    4.936
+])  # Angstrom
+# T* = k T / epsilon
+
+# Quelle: The properties of Gases and Liquids
+h_298 = np.array([
+    -110.53, -393.51, 0,
+    -241.81, -200.94, -74.52,
+    0, -234.95, -255.20,
+    -352.40
+], dtype=float)*1000.  # J/mol
+
+delta_h_r_298 = nuij.T.dot(h_298)  # J/mol
+
+t_reihe = np.linspace(100, 1000, 200)
+fig = plt.figure(2)
+fig.suptitle('Nicht adiabates System')
+ax = plt.subplot2grid([2, 3], [0, 0])
+ax.plot(t_reihe, np.array(
+    [mu(t, y_i0) for t in t_reihe]) / 1e-5, label='Berechnet')
+ax.plot(t_reihe, np.array(
+    [67.2e-7 + 0.21875e-7 * t for t in t_reihe]) / 1e-5, label='Bezugdaten')
+ax.set_ylabel(r'$\frac{\mu}{(Pa s) \cdot 1e-5}$')
+plt.setp(ax.get_xticklabels(), visible=False)
+ax.legend()
+
+y_0 = np.empty([len(y_i0)+1+1])
+y_0[:-2] = y_i0
+y_0[-2] = p0
+y_0[-1] = t0
+z_d_l_r = np.linspace(0, 1, 200)
+soln = odeint(df_dt, y_0, z_d_l_r)
+y_i_soln = soln[:, :len(y_i0)]
+p_soln = soln[:, -2]
+t_soln = soln[:, -1]
+
+n_i_soln = np.zeros_like(y_i_soln)
+m_i_soln = np.zeros_like(y_i_soln)
+n_soln = np.zeros_like(z_d_l_r)
+mm_m_soln = np.zeros_like(z_d_l_r)
+m_soln = np.zeros_like(z_d_l_r)
+for i in range(len(z_d_l_r)):
+    mm_m_soln[i] = sum(y_i_soln[i] * mm * 1/1000.)  # kg/mol
+    n_soln[i] = u_s * n_t * 60**2 * (np.pi/4 * d_t**2) / mm_m_soln[i]
+    # kg/s/m^2 * 60^2s/h * m^2 / kg*mol = mol/h
+    m_soln[i] = u_s * n_t * 60**2 * (np.pi/4 * d_t**2)  # kg/h
+    n_i_soln[i] = n_soln[i] * y_i_soln[i]  # mol/h
+    m_i_soln[i] = n_soln[i] * y_i_soln[i] * (mm * 1 / 1000.)
+    # mol/h * g/mol * 1kg/1000g
+
+ax3 = plt.subplot2grid([2, 3], [1, 1], colspan=2)
+ax3.set_ylabel('Massenstrom / (kg/h)')
+ax3.set_xlabel('Reduzierte Position, $z/L_R$')
+for item in ['CO', 'H2O', 'MeOH', 'CO2']:
+    marker = np.random.choice(list(lines.lineMarkers.keys()))
+    index = namen.index(item)
+    ax3.plot(z_d_l_r, m_i_soln[:, index], label=item,
+             marker=marker)
+ax3.legend(loc=1)
+plt.tight_layout()
+ax4 = plt.subplot2grid([2, 3], [0, 1])
+ax4.set_ylabel('Temperatur / °C')
+ax4.set_xlabel('Reduzierte Position, $z/L_R$')
+ax4.plot(z_d_l_r, t_soln-273.15, label='T / °C')
+plt.tight_layout(rect=[0, 0, 1, 0.9])
+ax5 = plt.subplot2grid([3, 3], [0, 2], colspan=2)
+ax5.set_ylabel('Druck / bar')
+ax5.set_xlabel('Reduzierte Position, $z/L_R$')
+ax5.plot(z_d_l_r, p_soln, label='p / bar')
+
+print('\n'.join([str(x) for x in m_i_soln[-1]]))
+
 plt.show()
