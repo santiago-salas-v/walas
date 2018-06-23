@@ -464,6 +464,7 @@ m_i_soln = np.zeros_like(y_i_soln)
 n_soln = np.zeros_like(z_d_l_r)
 mm_m_soln = np.zeros_like(z_d_l_r)
 m_soln = np.zeros_like(z_d_l_r)
+v_soln = np.zeros_like(z_d_l_r)
 for i in range(len(z_d_l_r)):
     mm_m_soln[i] = sum(y_i_soln[i] * mm * 1/1000.)  # kg/mol
     n_soln[i] = u_s * n_t * 60**2 * (np.pi/4 * d_t**2) / mm_m_soln[i]
@@ -472,6 +473,8 @@ for i in range(len(z_d_l_r)):
     n_i_soln[i] = n_soln[i] * y_i_soln[i]  # mol/h
     m_i_soln[i] = n_soln[i] * y_i_soln[i] * (mm * 1 / 1000.)
     # mol/h * g/mol * 1kg/1000g
+    v_soln[i] = n_soln[i] * 8.3145 * 1e-5 * t_soln[i] / p_soln[i]
+
 
 ax3 = plt.subplot2grid([2, 3], [1, 1], colspan=2)
 ax3.set_ylabel('Massenstrom / (kg/h)')
@@ -494,5 +497,8 @@ ax5.set_xlabel('Reduzierte Position, $z/L_R$')
 ax5.plot(z_d_l_r, p_soln, label='p / bar')
 
 print('\n'.join([str(x) for x in m_i_soln[-1]]))
-
+print('T='+str(t_soln[-1]-273.15)+'°C')
+print('P='+str(p_soln[-1])+'bar')
+print('V0='+ str(v_soln[0])+'m^3/h')
+print('V='+ str(v_soln[-1])+'m^3/h')
 plt.show()
