@@ -297,7 +297,6 @@ ax2.plot(t_r, -(-39892 + 8 * (t_r - 498.15)) / 1000.,
 ax2.set_xlabel('T/K')
 ax2.set_ylabel(r'$\frac{\Delta_R H(T)}{(J/mol) \cdot 10^3 }$')
 ax2.legend(fontsize='xx-small', loc='best')
-plt.tight_layout()
 
 
 ax3 = plt.subplot2grid([2, 3], [1, 1], colspan=2)
@@ -309,16 +308,16 @@ for item in ['CO', 'H2O', 'MeOH', 'CO2']:
     ax3.plot(z_d_l_r, y_i_soln[:, index] * 100., label=item,
              marker=marker)
 ax3.legend(loc=1)
-plt.tight_layout()
+
 ax4 = plt.subplot2grid([2, 3], [0, 1])
 ax4.set_ylabel('Temperatur / K')
 ax4.set_xlabel('Reduzierte Position, $z/L_R$')
 ax4.plot(z_d_l_r, t_soln, label='T / K')
-plt.tight_layout(rect=[0, 0, 1, 0.9])
-ax5 = plt.subplot2grid([3, 3], [0, 2], colspan=2)
+ax5 = plt.subplot2grid([2, 3], [0, 2], colspan=2)
 ax5.set_ylabel('Druck / bar')
 ax5.set_xlabel('Reduzierte Position, $z/L_R$')
 ax5.plot(z_d_l_r, p_soln, label='p / bar')
+plt.tight_layout(rect=[0, 0, 0.95, 0.9])
 
 # Chem. Eng. Technol. 2011, 34, No. 5, 817–822
 
@@ -437,17 +436,8 @@ h_298 = np.array([
 
 delta_h_r_298 = nuij.T.dot(h_298)  # J/mol
 
-t_reihe = np.linspace(100, 1000, 200)
 fig = plt.figure(2)
 fig.suptitle('Nicht adiabates System')
-ax = plt.subplot2grid([2, 3], [0, 0])
-ax.plot(t_reihe, np.array(
-    [mu(t, y_i0) for t in t_reihe]) / 1e-5, label='Berechnet')
-ax.plot(t_reihe, np.array(
-    [67.2e-7 + 0.21875e-7 * t for t in t_reihe]) / 1e-5, label='Bezugdaten')
-ax.set_ylabel(r'$\frac{\mu}{(Pa s) \cdot 1e-5}$')
-plt.setp(ax.get_xticklabels(), visible=False)
-ax.legend()
 
 y_0 = np.empty([len(y_i0)+1+1])
 y_0[:-2] = y_i0
@@ -476,6 +466,11 @@ for i in range(len(z_d_l_r)):
     v_soln[i] = n_soln[i] * 8.3145 * 1e-5 * t_soln[i] / p_soln[i]
 
 
+ax = plt.subplot2grid([2, 3], [0, 0])
+ax.plot(z_d_l_r, v_soln, label='$\dot V$')
+ax.set_ylabel(r'$\frac{\dot V}{m^3/h}$')
+ax.set_xlabel('Reduzierte Position, $z/L_R$')
+
 ax3 = plt.subplot2grid([2, 3], [1, 1], colspan=2)
 ax3.set_ylabel('Massenstrom / (kg/h)')
 ax3.set_xlabel('Reduzierte Position, $z/L_R$')
@@ -485,16 +480,15 @@ for item in ['CO', 'H2O', 'MeOH', 'CO2']:
     ax3.plot(z_d_l_r, m_i_soln[:, index], label=item,
              marker=marker)
 ax3.legend(loc=1)
-plt.tight_layout()
 ax4 = plt.subplot2grid([2, 3], [0, 1])
 ax4.set_ylabel('Temperatur / °C')
 ax4.set_xlabel('Reduzierte Position, $z/L_R$')
 ax4.plot(z_d_l_r, t_soln-273.15, label='T / °C')
-plt.tight_layout(rect=[0, 0, 1, 0.9])
-ax5 = plt.subplot2grid([3, 3], [0, 2], colspan=2)
+ax5 = plt.subplot2grid([2, 3], [0, 2], colspan=2)
 ax5.set_ylabel('Druck / bar')
 ax5.set_xlabel('Reduzierte Position, $z/L_R$')
 ax5.plot(z_d_l_r, p_soln, label='p / bar')
+plt.tight_layout(rect=[0, 0, 0.95, 0.9])
 
 print('\n'.join([str(x) for x in m_i_soln[-1]]))
 print('T='+str(t_soln[-1]-273.15)+'°C')
