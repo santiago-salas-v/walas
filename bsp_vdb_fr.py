@@ -2,6 +2,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib import lines
 from scipy.integrate import odeint
+import z_l_v
 
 # Journal of Catalysis, 1996, 161. Jg., Nr. 1, S. 1-10.
 
@@ -89,15 +90,19 @@ for i in range(len(namen)):
         dtype=float)
 
 # Lennard-Jones Parameter Prausnitz Anhang B
-    # epsilon / kB
-    l_j_epsilon_d_k = np.array([
-        91.7, 809.1, 481.8, 59.7, 195.2, 71.4
-    ])  # K
-    # sigma
-    l_j_sigma = np.array([
-        3.690, 2.641, 3.626, 2.827, 3.941, 3.798
-    ])  # Angstrom
+# epsilon / kB
+l_j_epsilon_d_k = np.array([
+    91.7, 809.1, 481.8, 59.7, 195.2, 71.4
+])  # K
+# sigma
+l_j_sigma = np.array([
+    3.690, 2.641, 3.626, 2.827, 3.941, 3.798
+])  # Angstrom
 
+
+def c_t_fun(t, p, _):
+    c_t = p / (8.3145 * 1e-5 * t) # mol/m^3
+    return c_t
 
 def cp_ig_durch_r(t):
     a, b, c, d, e, f, g = cp_konstanten.T
@@ -236,7 +241,7 @@ def df_dt(y, _):
     mm_m = sum(y_i * mm) * 1 / 1000.  # kg/mol
     cp_m = sum(y_i * cp_ig_durch_r(t) * 8.3145)  # J/mol/K
     cp_g = cp_m / mm_m  # J/kg/K
-    c_t = p / (8.3145 * 1e-5 * t)  # bar * mol/bar/m^3/K*K = mol/m^3
+    c_t = c_t_fun(t, p, y_i)  # mol/m^3
     p_i = y_i * p  # bar
     delta_h_r_t = delta_h_r(t)
     mu_t_y = mu(t, y_i)
@@ -346,15 +351,8 @@ m_dot_i = np.array([
     13.0
 ], dtype=float) / 60**2 /n_t   # kg/s
 m_dot = sum(m_dot_i)
-mm = np.array([
-    28.01, 44.01, 2.02,
-    18.02, 32.04, 16.04,
-    28.01, 46.07, 60.10,
-    60.05
-], dtype=float)  # g/mol
-y_i0 = m_dot_i/mm / sum(m_dot_i/mm)
 # Wärmetauschparameter
-t_r = 232+273.15  # K
+t_r = 231.8+273.15  # K
 u = 118.44  # W/m^2/K
 
 # Berechnung der Parameter
@@ -429,13 +427,60 @@ l_j_sigma = np.array([
 
 # Quelle: The properties of Gases and Liquids
 h_298 = np.array([
-    -110.53, -393.51, 0,
+    -110.53, -393.51, 0.0,
     -241.81, -200.94, -74.52,
-    0, -234.95, -255.20,
-    -352.40
+    0.0, -234.95, -255.2,
+    -352.4
+], dtype=float)*1000.  # J/mol
+
+g_298 = np.array([
+    -137.16, -394.38, 0.0,
+    -228.42, -162.24, -50.45,
+    0.0, -167.73, -159.81,
+    -294.9
 ], dtype=float)*1000.  # J/mol
 
 delta_h_r_298 = nuij.T.dot(h_298)  # J/mol
+
+mm = np.array([
+    28.01, 44.01, 2.016,
+    18.015, 32.042, 16.043,
+    28.014, 46.069, 60.096,
+    60.053
+], dtype=float)  # g/mol
+
+tc = np.array([
+    132.85, 304.12, 32.98,
+    647.14, 512.64, 190.56,
+    126.2, 513.92, 536.78,
+    487.2
+])  # K
+
+pc = np.array([
+    34.94, 73.74, 12.93,
+    220.64, 80.97, 45.99,
+    33.98, 61.48, 51.75,
+    60.0
+])  # bar
+
+omega_af = np.array([
+    0.045, 0.225, -0.217,
+    0.344, 0.565, 0.011,
+    0.037, 0.649, 0.629,
+    0.0
+])
+
+z_l_v.use_pr_eos()
+
+def c_t_fun(t, p, y_i):
+    # Z=P/RT * 1/c = c_t_id / c_t
+    c_t_id = p / (8.3145 * 1e-5 * t)  # mol/m^3
+    z = z_l_v.z_non_sat(t, p, y_i, tc, pc, omega_af)['z']
+    c_t = c_t_id / z
+    return c_t
+
+y_i0 = m_dot_i/mm / sum(m_dot_i/mm)
+
 
 t_reihe = np.linspace(100, 1000, 200)
 fig = plt.figure(2)
@@ -464,6 +509,7 @@ m_i_soln = np.zeros_like(y_i_soln)
 n_soln = np.zeros_like(z_d_l_r)
 mm_m_soln = np.zeros_like(z_d_l_r)
 m_soln = np.zeros_like(z_d_l_r)
+v_soln = np.zeros_like(z_d_l_r)
 for i in range(len(z_d_l_r)):
     mm_m_soln[i] = sum(y_i_soln[i] * mm * 1/1000.)  # kg/mol
     n_soln[i] = u_s * n_t * 60**2 * (np.pi/4 * d_t**2) / mm_m_soln[i]
@@ -472,6 +518,8 @@ for i in range(len(z_d_l_r)):
     n_i_soln[i] = n_soln[i] * y_i_soln[i]  # mol/h
     m_i_soln[i] = n_soln[i] * y_i_soln[i] * (mm * 1 / 1000.)
     # mol/h * g/mol * 1kg/1000g
+    z = z_l_v.z_non_sat(t_soln[i],p_soln[i],y_i_soln[i],tc,pc,omega_af)['z']
+    v_soln[i] = n_soln[i] * z * 8.3145*1e-5 * t_soln[i]/p_soln[i]
 
 ax3 = plt.subplot2grid([2, 3], [1, 1], colspan=2)
 ax3.set_ylabel('Massenstrom / (kg/h)')
@@ -493,6 +541,10 @@ ax5.set_ylabel('Druck / bar')
 ax5.set_xlabel('Reduzierte Position, $z/L_R$')
 ax5.plot(z_d_l_r, p_soln, label='p / bar')
 
+print('m_i/(kg/h)')
 print('\n'.join([str(x) for x in m_i_soln[-1]]))
-
+print('T='+str(t_soln[-1]-273.15)+'°C')
+print('P='+str(p_soln[-1])+'bar')
+print('V0='+ str(v_soln[0])+'m^3/h')
+print('V='+ str(v_soln[-1])+'m^3/h')
 plt.show()
