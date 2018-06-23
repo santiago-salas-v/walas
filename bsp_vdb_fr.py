@@ -470,7 +470,7 @@ omega_af = np.array([
     0.0
 ])
 
-z_l_v.use_pr_eos()
+z_l_v.use_srk_eos()
 
 def c_t_fun(t, p, y_i):
     # Z=P/RT * 1/c = c_t_id / c_t
