@@ -335,6 +335,17 @@ l_r = 7.  # m Rohrlänge
 t0 = 225+273.15  # K
 p0 = 69.7  # bar
 m_dot = 57282.8 / 60**2 / n_t  # kg/s
+# Wärmetauschparameter
+u = 118.44  # W/m^2/K
+# Kühlmitteleigenschaften (VDI-WA)
+t_r = (240-230)/(33.467-27.968)*(
+        29-33.467)+240+273.15  # K
+p_sat = 29 # bar
+h_sat_l = (1037.5-990.21)/(33.467-27.968)*(
+        29-33.467)+1037.5  # kJ/kg
+h_sat_v = (2803.1-2803.0)/(33.467-27.968)*(
+        29-33.467)+2803.1  # kJ/kg
+delta_h_sat = (h_sat_v - h_sat_l)
 # Zulaufbedingungen
 namen = ['CO', 'CO2', 'H2', 'H2O', 'MeOH',
          'CH4', 'N2', 'EthOH', 'PrOH', 'METHF']
@@ -346,15 +357,12 @@ m_dot_i = np.array([
 ], dtype=float) / 60**2 /n_t   # kg/s
 m_dot = sum(m_dot_i)
 mm = np.array([
-    28.01, 44.01, 2.02,
-    18.02, 32.04, 16.04,
-    28.01, 46.07, 60.10,
-    60.05
+    28.01, 44.01, 2.016,
+    18.015, 32.042, 16.043,
+    28.014, 46.069, 60.096,
+    60.053
 ], dtype=float)  # g/mol
 y_i0 = m_dot_i/mm / sum(m_dot_i/mm)
-# Wärmetauschparameter
-t_r = 232+273.15  # K
-u = 118.44  # W/m^2/K
 
 # Berechnung der Parameter
 u_s = m_dot / (np.pi / 4 * d_t**2)  # kg/m^2/s
@@ -437,7 +445,9 @@ h_298 = np.array([
 delta_h_r_298 = nuij.T.dot(h_298)  # J/mol
 
 fig = plt.figure(2)
-fig.suptitle('Nicht adiabates System')
+fig.suptitle('Nicht adiabates System' +
+             '(Chem. Eng. Technol. 2011, 34, No. 5, 817–822)'+
+             '\n$L_R = 7.0m$')
 
 y_0 = np.empty([len(y_i0)+1+1])
 y_0[:-2] = y_i0
@@ -455,6 +465,7 @@ n_soln = np.zeros_like(z_d_l_r)
 mm_m_soln = np.zeros_like(z_d_l_r)
 m_soln = np.zeros_like(z_d_l_r)
 v_soln = np.zeros_like(z_d_l_r)
+m_km_soln = np.zeros_like(z_d_l_r)
 for i in range(len(z_d_l_r)):
     mm_m_soln[i] = sum(y_i_soln[i] * mm * 1/1000.)  # kg/mol
     n_soln[i] = u_s * n_t * 60**2 * (np.pi/4 * d_t**2) / mm_m_soln[i]
@@ -464,12 +475,26 @@ for i in range(len(z_d_l_r)):
     m_i_soln[i] = n_soln[i] * y_i_soln[i] * (mm * 1 / 1000.)
     # mol/h * g/mol * 1kg/1000g
     v_soln[i] = n_soln[i] * 8.3145 * 1e-5 * t_soln[i] / p_soln[i]
+    dlr = 1/(len(z_d_l_r)-1) * l_r # m
+    m_km_soln[i] = u * (2 / (d_t / 2)) * (t_soln[i] - t_r) * (
+            np.pi/4 * d_t**2) * dlr / delta_h_sat * n_t * 60**2 / 1000.
+    # J/s/K/m^2 * 1/m * K * m^2 * m * kg/kJ * 60^2s/h * 1kJ/(1000J) = kg/h
 
 
 ax = plt.subplot2grid([2, 3], [0, 0])
 ax.plot(z_d_l_r, v_soln, label='$\dot V$')
 ax.set_ylabel(r'$\frac{\dot V}{m^3/h}$')
 ax.set_xlabel('Reduzierte Position, $z/L_R$')
+ax2 = plt.subplot2grid([2, 3], [1, 0])
+ax2.plot(z_d_l_r, m_km_soln, label='$\dot V$')
+ax2.fill(z_d_l_r, m_km_soln, color='orange')
+ax2.fill([0,1,1,0],
+         [m_km_soln[0],m_km_soln[-1],
+          m_km_soln[0],m_km_soln[0]], color='orange')
+ax2.text(0.3, 1/2.*(m_km_soln[0] + m_km_soln[-1]),
+         '{:g}'.format(sum(m_km_soln))+'kg/h')
+ax2.set_ylabel(r'$\frac{\dot m_{Kuehlmittel}}{kg/h}$')
+ax2.set_xlabel('Reduzierte Position, $z/L_R$')
 
 ax3 = plt.subplot2grid([2, 3], [1, 1], colspan=2)
 ax3.set_ylabel('Massenstrom / (kg/h)')
