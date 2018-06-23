@@ -226,7 +226,11 @@ def r_i(t, p_i):
 
 
 def df_dt(y, _):
-    y_i = y[:-2] / sum(y[:-2])
+    # FIXME: Normalize y_i on each iteration.
+    # Inerts should not change at all, but there is a 0.00056% increase already
+    # on the first time step. Test:
+    # u_s*60**2*n_t*(np.pi / 4 * d_t**2)/sum(y_i*mm/1000.)*y_i[6]*mm[6]/1000.
+    y_i = y[:-2]
     p = y[-2]
     t = y[-1]
     mm_m = sum(y_i * mm) * 1 / 1000.  # kg/mol
@@ -340,7 +344,7 @@ m_dot_i = np.array([
     108.8, 756.7, 4333.1,
     8072.0, 0.6, 0.0,
     13.0
-], dtype=float)/ 60**2 /n_t   # kg/s
+], dtype=float) / 60**2 /n_t   # kg/s
 m_dot = sum(m_dot_i)
 mm = np.array([
     28.01, 44.01, 2.02,
@@ -350,7 +354,7 @@ mm = np.array([
 ], dtype=float)  # g/mol
 y_i0 = m_dot_i/mm / sum(m_dot_i/mm)
 # Wärmetauschparameter
-t_r = 220+273.15  # K
+t_r = 232+273.15  # K
 u = 118.44  # W/m^2/K
 
 # Berechnung der Parameter
