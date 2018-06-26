@@ -450,6 +450,7 @@ y_0[:-2] = y_i0
 y_0[-2] = p0
 y_0[-1] = t0
 z_d_l_r = np.linspace(0, 1, 100)
+dlr = 1 / (len(z_d_l_r) - 1) * l_r  # m
 soln = odeint(df_dt, y_0, z_d_l_r)
 y_i_soln = soln[:, :len(y_i0)]
 p_soln = soln[:, -2]
@@ -471,10 +472,9 @@ for i in range(len(z_d_l_r)):
     m_i_soln[i] = n_soln[i] * y_i_soln[i] * (mm * 1 / 1000.)
     # mol/h * g/mol * 1kg/1000g
     v_soln[i] = n_soln[i] * 8.3145 * 1e-5 * t_soln[i] / p_soln[i]
-    dlr = 1 / (len(z_d_l_r) - 1) * l_r  # m
     m_km_soln[i] = u * (2 / (d_t / 2)) * (t_soln[i] - t_r) * (
-        np.pi / 4 * d_t**2) * dlr / delta_h_sat * n_t * 60**2 / 1000.
-    # J/s/K/m^2 * 1/m * K * m^2 * m * kg/kJ * 60^2s/h * 1kJ/(1000J) = kg/h
+        np.pi / 4 * d_t**2) / delta_h_sat * n_t * 60**2 / 1000.
+    # J/s/K/m^2 * 1/m * K * m^2 * kg/kJ * 60^2s/h * 1kJ/(1000J) = kg/h/m
 
 # Energie-Analyse
 t_m_1 = 1 / 2 * (36696 / 8.3145 - np.sqrt(36696 /
@@ -482,24 +482,32 @@ t_m_1 = 1 / 2 * (36696 / 8.3145 - np.sqrt(36696 /
 t_m_2 = 1 / 2 * (-94765 / 8.3145 - np.sqrt(-94765 /
                                            8.3145 * (-94765 / 8.3145 - 4 * t_r)))
 
+# Anzahl an Übertragungseinheiten (NTU)
+mm_m_0 = sum(y_i0 * mm) * 1 / 1000.  # kg/mol
+cp_m_0 = sum(y_i0 * cp_ig_durch_r(t0) * 8.3145)  # J/mol/K
+cp_g_0 = cp_m_0 / mm_m_0  # J/kg/K
+ntu = l_r * 1 / (u_s * cp_g_0) * 2 * u / (d_t / 2)
+# m * m^2 s/kg * kg K /J * J/s/m^2/K *1/m = [dimensionslose Einheiten]
 
 fig = plt.figure(2)
 fig.suptitle('Nicht adiabates System' +
              '(Chem. Eng. Technol. 2011, 34, No. 5, 817–822)' +
-             '\n$L_R = 7.0m$')
+             '\n$L_R = ' + '{:g}'.format(l_r) + 'm$' +
+             '\nNTU = ' + '{:g}'.format(ntu))
 ax = plt.subplot2grid([2, 3], [0, 0])
 ax.plot(z_d_l_r, v_soln, label='$\dot V$')
 ax.set_ylabel(r'$\frac{\dot V}{m^3/h}$')
 ax.set_xlabel('Reduzierte Position, $z/L_R$')
 ax2 = plt.subplot2grid([2, 3], [1, 0])
-ax2.plot(z_d_l_r, m_km_soln, label='$\dot V$')
+ax2.plot(z_d_l_r, m_km_soln)
 ax2.fill(z_d_l_r, m_km_soln, color='orange')
 ax2.fill([0, 1, 1, 0],
          [m_km_soln[0], m_km_soln[-1],
           m_km_soln[0], m_km_soln[0]], color='orange')
 ax2.text(0.3, 1 / 2. * (m_km_soln[0] + m_km_soln[-1]),
-         '{:g}'.format(sum(m_km_soln)) + 'kg/h')
-ax2.set_ylabel(r'$\frac{\dot m_{Kuehlmittel}}{kg/h}$')
+         '{:g}'.format(sum(m_km_soln * dlr)) + 'kg/h \n' +
+         r'$L_R\cdot\frac{U(2/R_R)}{u_s \cdot C_{p_g}}$')
+ax2.set_ylabel(r'$\frac{\dot m_{Kuehlmittel}}{\frac{kg}{h\cdot m}}$')
 ax2.set_xlabel('Reduzierte Position, $z/L_R$')
 
 ax3 = plt.subplot2grid([2, 3], [1, 1], colspan=2)
@@ -529,13 +537,14 @@ print('V=' + str(v_soln[-1]) + 'm^3/h')
 
 
 fig = plt.figure(3)
-fig.suptitle('Nicht adiabates System-Phasenebenen' +
+fig.suptitle('Nicht adiabates System' +
+             '\nPhasenebenen' +
              '\nCO/CO2 Verhältnis' +
              '\nbei $p_{CO}+p_{CO_2}= $' +
              '{:g}'.format(p0 * sum(
                  y_i0[[namen.index('CO'),
-                       namen.index('CO2')]])) + ' bar'
-             )
+                       namen.index('CO2')]])) + ' bar',
+             horizontalalignment='left')
 ax = plt.subplot(321)
 ax.set_xlabel(r'T / K')
 ax.set_ylabel('$p_{CO} / bar$')
@@ -610,12 +619,19 @@ for ratio_co_co2 in [1e-6, 0.15, 0.3, basis_ratio, 1.5, 7.5, 15]:
     ausb_soln = (y_i_soln[1:, namen.index('MeOH')] * n_soln[1:] -
                  y_i_soln[0, namen.index('MeOH')] * n_soln[0]) / (
         ums_soln[1:] * y_co_plus_co2 * ratio_co_co2 / (1 + ratio_co_co2) * n_soln[0])
+    # Anzahl an Übertragungseinheiten (NTU)
+    mm_m_0 = sum(y_0[:-2] * mm) * 1 / 1000.  # kg/mol
+    cp_m_0 = sum(y_0[:-2] * cp_ig_durch_r(t0) * 8.3145)  # J/mol/K
+    cp_g_0 = cp_m_0 / mm_m_0  # J/kg/K
+    ntu = l_r * 1 / (u_s * cp_g_0) * 2 * u / (d_t / 2)
+    # m * m^2 s/kg * kg K /J * J/s/m^2/K *1/m = [dimensionslose Einheiten]
     marker = np.random.choice(unfilled_markers)
     color = color_samples[np.random.choice(len(color_samples))]
     marker_color = color_samples[np.random.choice(len(color_samples))]
     marker_fill = np.random.choice(list(lines.fillStyles))
     line = ax.plot(t_soln, p_soln * y_i_soln[:, namen.index('CO')],
-                   label='$p_{CO}/p_{CO_2}=' + str(ratio_co_co2) + '$',
+                   label='$p_{CO}/p_{CO_2}=' + str(ratio_co_co2) +
+                         '\quad NTU= ' + '{:g}'.format(ntu) + '$',
                    marker=marker, markersize=3, color=color,
                    fillstyle=marker_fill, markerfacecolor=marker_color)[0]
     lines1.append(line)
@@ -646,14 +662,16 @@ ax2.plot([t_m_1, t_m_1], ax2.get_ylim(), color='black', ls='--')
 ax3.plot(ax2.get_xlim(), [t_m_1, t_m_1], color='black', ls='--')
 fig.legend(lines1, [x.get_label() for x in lines1], 'upper left',
            fontsize='xx-small')
-plt.tight_layout(rect=[0, 0, 0.95, 0.8])
+plt.tight_layout(rect=[0, 0, 0.95, 0.75])
 
 fig = plt.figure(4)
-fig.suptitle('Nicht adiabates System-Phasenebenen' +
-             '\nTotales CO+CO2' +
+fig.suptitle('Nicht adiabates System' +
+             '\nPhasenebenen' +
+             '\nStöchiometrische Zahl' +
              '\nbei $p_{CO}/p_{CO_2}$ Verhältnis ' +
-             '{:g}'.format(y_i0[namen.index('CO')] / y_i0[namen.index('CO2')])
-             )
+             '{:g}'.format(y_i0[namen.index('CO')] / y_i0[namen.index('CO2')]) +
+             '\n$L_R = ' + '{:g}'.format(l_r) + 'm$',
+             horizontalalignment='left')
 ax = plt.subplot(321)
 ax.set_xlabel(r'T / K')
 ax.set_ylabel('$p_{CO} / bar$')
@@ -733,13 +751,20 @@ for factor in [1e-16, 0.5, 1, optimaler_faktor, 2, 4, 5, 6,
     ausb_soln = (y_i_soln[1:, namen.index('MeOH')] * n_soln[1:] -
                  y_i_soln[0, namen.index('MeOH')] * n_soln[0]) / (
         ums_soln[1:] * y_co_plus_co2 * ratio_co_co2 / (1 + ratio_co_co2) * n_soln[0])
+    # Anzahl an Übertragungseinheiten (NTU)
+    mm_m_0 = sum(y_0[:-2] * mm) * 1 / 1000.  # kg/mol
+    cp_m_0 = sum(y_0[:-2] * cp_ig_durch_r(t0) * 8.3145)  # J/mol/K
+    cp_g_0 = cp_m_0 / mm_m_0  # J/kg/K
+    ntu = l_r * 1 / (u_s * cp_g_0) * 2 * u / (d_t / 2)
+    # m * m^2 s/kg * kg K /J * J/s/m^2/K *1/m = [dimensionslose Einheiten]
     marker = np.random.choice(unfilled_markers)
     color = color_samples[np.random.choice(len(color_samples))]
     marker_color = color_samples[np.random.choice(len(color_samples))]
     marker_fill = np.random.choice(list(lines.fillStyles))
     line = ax.plot(t_soln, p_soln * y_i_soln[:, namen.index('CO')],
                    label='$p_{CO}+p_{CO_2}=' + '{:0.3g}'.format(p0_co2_co) +
-                         ', SN= ' + '{:0.3g}'.format(sn) + '$',
+                         '\quad SN= ' + '{:0.3g}'.format(sn) +
+                         '\quad NTU= ' + '{:g}'.format(ntu) + '$',
                    marker=marker, markersize=3, color=color,
                    fillstyle=marker_fill, markerfacecolor=marker_color)[0]
     lines1.append(line)
@@ -785,7 +810,7 @@ ax2.plot([t_m_1, t_m_1], ax2.get_ylim(), color='black', ls='--')
 ax3.plot(ax2.get_xlim(), [t_m_1, t_m_1], color='black', ls='--')
 fig.legend(lines1, [x.get_label() for x in lines1], 'upper left',
            fontsize='xx-small')
-plt.tight_layout(rect=[0, 0, 0.95, 0.8])
+plt.tight_layout(rect=[0, 0, 0.95, 0.75])
 
 
 # Lösung der PAT-Übung 4
@@ -844,6 +869,7 @@ y_0[:-2] = y_i0
 y_0[-2] = p0
 y_0[-1] = t0
 z_d_l_r = np.linspace(0, 1, 100)
+dlr = 1 / (len(z_d_l_r) - 1) * l_r  # m
 
 
 def opt_dp():
@@ -879,10 +905,9 @@ for i in range(len(z_d_l_r)):
     m_i_soln[i] = n_soln[i] * y_i_soln[i] * (mm * 1 / 1000.)
     # mol/h * g/mol * 1kg/1000g
     v_soln[i] = n_soln[i] * 8.3145 * 1e-5 * t_soln[i] / p_soln[i]
-    dlr = 1 / (len(z_d_l_r) - 1) * l_r  # m
     m_km_soln[i] = u * (2 / (d_t / 2)) * (t_soln[i] - t_r) * (
-        np.pi / 4 * d_t**2) * dlr / delta_h_sat * n_t * 60**2 / 1000.
-    # J/s/K/m^2 * 1/m * K * m^2 * m * kg/kJ * 60^2s/h * 1kJ/(1000J) = kg/h
+        np.pi / 4 * d_t**2) / delta_h_sat * n_t * 60**2 / 1000. * dlr
+    # J/s/K/m^2 * 1/m * K * m^2 * kg/kJ * 60^2s/h * 1kJ/(1000J) = kg/h/m
 
 # Energie-Analyse
 t_m_1 = 1 / 2 * (36696 / 8.3145 - np.sqrt(36696 /
@@ -890,22 +915,30 @@ t_m_1 = 1 / 2 * (36696 / 8.3145 - np.sqrt(36696 /
 t_m_2 = 1 / 2 * (-94765 / 8.3145 - np.sqrt(-94765 /
                                            8.3145 * (-94765 / 8.3145 - 4 * t_r)))
 
+# Anzahl an Übertragungseinheiten (NTU)
+mm_m_0 = sum(y_i0 * mm) * 1 / 1000.  # kg/mol
+cp_m_0 = sum(y_i0 * cp_ig_durch_r(t0) * 8.3145)  # J/mol/K
+cp_g_0 = cp_m_0 / mm_m_0  # J/kg/K
+ntu = l_r * 1 / (u_s * cp_g_0) * 2 * u / (d_t / 2)
+# m * m^2 s/kg * kg K /J * J/s/m^2/K *1/m = [dimensionslose Einheiten]
 
 fig = plt.figure(5)
-fig.suptitle('Lösung der PAT-Übung 4')
+fig.suptitle('Lösung der PAT-Übung 4' +
+             '\n$L_R = ' + '{:g}'.format(l_r) + 'm$' +
+             '\nNTU = ' + '{:g}'.format(ntu))
 ax = plt.subplot2grid([2, 3], [0, 0])
 ax.plot(z_d_l_r, v_soln, label='$\dot V$')
 ax.set_ylabel(r'$\frac{\dot V}{m^3/h}$')
 ax.set_xlabel('Reduzierte Position, $z/L_R$')
 ax2 = plt.subplot2grid([2, 3], [1, 0])
-ax2.plot(z_d_l_r, m_km_soln, label='$\dot V$')
+ax2.plot(z_d_l_r, m_km_soln)
 ax2.fill(z_d_l_r, m_km_soln, color='orange')
 ax2.fill([0, 1, 1, 0],
          [m_km_soln[0], m_km_soln[-1],
           m_km_soln[0], m_km_soln[0]], color='orange')
 ax2.text(0.3, 1 / 2. * (m_km_soln[0] + m_km_soln[-1]),
-         '{:g}'.format(sum(m_km_soln)) + 'kg/h')
-ax2.set_ylabel(r'$\frac{\dot m_{Kuehlmittel}}{kg/h}$')
+         '{:g}'.format(sum(m_km_soln * dlr)) + 'kg/h')
+ax2.set_ylabel(r'$\frac{\dot m_{Kuehlmittel}}{\frac{kg}{h\cdot m}}$')
 ax2.set_xlabel('Reduzierte Position, $z/L_R$')
 
 ax3 = plt.subplot2grid([2, 3], [1, 1], colspan=2)
@@ -925,7 +958,7 @@ ax5 = plt.subplot2grid([2, 3], [0, 2], colspan=2)
 ax5.set_ylabel('Druck / bar')
 ax5.set_xlabel('Reduzierte Position, $z/L_R$')
 ax5.plot(z_d_l_r, p_soln, label='p / bar')
-plt.tight_layout(rect=[0, 0, 0.95, 0.9])
+plt.tight_layout(rect=[0, 0, 0.95, 0.85])
 
 print('\n'.join([
     namen[i] + ': ' + '{:g}'.format(x) + ' kg/h'
@@ -956,9 +989,9 @@ d_p = 0.0054 / 0.0054 * 0.16232576224693065  # m Feststoff
 # Reaktor
 n_t = 4800  # Rohre
 d_t = 0.03  # m Rohrdurchmesser
-n_t = 10000  # Rohre
-d_t = 0.04  # m Rohrdurchmesser
-l_r = 6.  # m Rohrlänge
+# n_t = 10000  # Rohre
+# d_t = 0.04  # m Rohrdurchmesser
+l_r = 6. * 3.09 / 0.460126  # m Rohrlänge
 # Betriebsbedingungen
 t0 = 220 + 273.15  # K
 p0 = 50  # bar
@@ -1002,6 +1035,7 @@ y_0[:-2] = y_i0
 y_0[-2] = p0
 y_0[-1] = t0
 z_d_l_r = np.linspace(0, 1, 100)
+dlr = 1 / (len(z_d_l_r) - 1) * l_r  # m
 
 
 def opt_dp():
@@ -1037,10 +1071,9 @@ for i in range(len(z_d_l_r)):
     m_i_soln[i] = n_soln[i] * y_i_soln[i] * (mm * 1 / 1000.)
     # mol/h * g/mol * 1kg/1000g
     v_soln[i] = n_soln[i] * 8.3145 * 1e-5 * t_soln[i] / p_soln[i]
-    dlr = 1 / (len(z_d_l_r) - 1) * l_r  # m
     m_km_soln[i] = u * (2 / (d_t / 2)) * (t_soln[i] - t_r) * (
-        np.pi / 4 * d_t**2) * dlr / delta_h_sat * n_t * 60**2 / 1000.
-    # J/s/K/m^2 * 1/m * K * m^2 * m * kg/kJ * 60^2s/h * 1kJ/(1000J) = kg/h
+        np.pi / 4 * d_t ** 2) / delta_h_sat * n_t * 60 ** 2 / 1000.
+    # J/s/K/m^2 * 1/m * K * m^2 * kg/kJ * 60^2s/h * 1kJ/(1000J) = kg/h
 
 # Energie-Analyse
 t_m_1 = 1 / 2 * (36696 / 8.3145 - np.sqrt(36696 /
@@ -1048,21 +1081,35 @@ t_m_1 = 1 / 2 * (36696 / 8.3145 - np.sqrt(36696 /
 t_m_2 = 1 / 2 * (-94765 / 8.3145 - np.sqrt(-94765 /
                                            8.3145 * (-94765 / 8.3145 - 4 * t_r)))
 
+# Anzahl an Übertragungseinheiten (NTU)
+mm_m_0 = sum(y_i0 * mm) * 1 / 1000.  # kg/mol
+cp_m_0 = sum(y_i0 * cp_ig_durch_r(t0) * 8.3145)  # J/mol/K
+cp_g_0 = cp_m_0 / mm_m_0  # J/kg/K
+ntu = l_r * 1 / (u_s * cp_g_0) * 2 * u / (d_t / 2)
+# m * m^2 s/kg * kg K /J * J/s/m^2/K *1/m = [dimensionslose Einheiten]
+ratio_h2_co2 = y_i0[namen.index('H2')] / y_i0[namen.index('CO2')]
+ratio_co_co2 = y_i0[namen.index('CO')] / y_i0[namen.index('CO2')]
 
 fig = plt.figure(6)
-fig.suptitle('Lösung der Zusammensetzung ')
+fig.suptitle('Lösung der Zusammensetzung \n' +
+             '{:d}'.format(round(ratio_h2_co2.item())) +
+             ':1:' +
+             '{:d}'.format(round(ratio_co_co2.item())) +
+             '(H2:CO2:CO)' +
+             '\n$L_R = ' + '{:g}'.format(l_r) + 'm$' +
+             '\nNTU = ' + '{:g}'.format(ntu))
 ax = plt.subplot2grid([2, 3], [0, 0])
 ax.plot(z_d_l_r, v_soln, label='$\dot V$')
 ax.set_ylabel(r'$\frac{\dot V}{m^3/h}$')
 ax.set_xlabel('Reduzierte Position, $z/L_R$')
 ax2 = plt.subplot2grid([2, 3], [1, 0])
-ax2.plot(z_d_l_r, m_km_soln, label='$\dot V$')
+ax2.plot(z_d_l_r, m_km_soln)
 ax2.fill(z_d_l_r, m_km_soln, color='orange')
 ax2.fill([0, 1, 1, 0],
          [m_km_soln[0], m_km_soln[-1],
           m_km_soln[0], m_km_soln[0]], color='orange')
 ax2.text(0.3, 1 / 2. * (m_km_soln[0] + m_km_soln[-1]),
-         '{:g}'.format(sum(m_km_soln)) + 'kg/h')
+         '{:g}'.format(sum(m_km_soln * dlr)) + 'kg/h')
 ax2.set_ylabel(r'$\frac{\dot m_{Kuehlmittel}}{kg/h}$')
 ax2.set_xlabel('Reduzierte Position, $z/L_R$')
 
@@ -1083,7 +1130,7 @@ ax5 = plt.subplot2grid([2, 3], [0, 2], colspan=2)
 ax5.set_ylabel('Druck / bar')
 ax5.set_xlabel('Reduzierte Position, $z/L_R$')
 ax5.plot(z_d_l_r, p_soln, label='p / bar')
-plt.tight_layout(rect=[0, 0, 0.95, 0.9])
+plt.tight_layout(rect=[0, 0, 0.95, 0.85])
 
 print('\n'.join([
     namen[i] + ': ' + '{:g}'.format(x) + ' kg/h'
