@@ -152,26 +152,12 @@ def z_non_sat(t, p, x_i, tc_i, pc_i, af_omega_i):
     b_i = omega * r * tc_i / pc_i
     beta_i = b_i * p / (r * t)
     q_i = a_i / (b_i * r * t)
-    a_ij = np.empty([len(x_i), len(x_i)])
-    for i in range(len(x_i)):
-        for j in range(len(x_i)):
-            a_ij[i, j] = np.sqrt(a_i[i] * a_i[j])
+    a_ij = np.sqrt(np.outer(a_i, a_i))
     b = sum(x_i * b_i)
-    a = 0
-    for i in range(len(x_i)):
-        for j in range(len(x_i)):
-            a = a + x_i[i] * x_i[j] * a_ij[i, j]
+    a = np.sum(np.outer(x_i, x_i) * a_ij)
     beta = b * p / (r * t)
     q = a / (b * r * t)
-    s_x_j_a_ij = np.empty([len(x_i)])
-    for i in range(len(x_i)):
-        s_x_j_a_ij[i] = 0
-        for j in range(len(x_i)):
-            if i != j:
-                s_x_j_a_ij[i] = s_x_j_a_ij[i] + x_i[j] * a_ij[i, j]
-            elif i == j:
-                # 0 summieren
-                pass
+    s_x_j_a_ij = a_ij.dot(x_i) - np.diag(np.diag(a_ij)).dot(x_i)
     a_mp_i = -a + 2 * s_x_j_a_ij + 2 * x_i * a_i  # partielles molares a_i
     b_mp_i = b_i  # partielles molares b_i
     q_mp_i = q * (1 + a_mp_i / a - b_i / b)  # partielles molares q_i
