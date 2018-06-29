@@ -264,6 +264,9 @@ u_s = m_dot / (np.pi / 4 * d_t**2) / n_t  # kg/m^2/s
 mm_m_0 = sum(y_i0 * mm) * 1 / 1000.  # kg/mol
 cp_m_0 = sum(y_i0 * cp_ig_durch_r(t0) * 8.3145)  # J/mol/K
 cp_g_0 = cp_m_0 / mm_m_0  # J/kg/K
+sn = (y_i0[namen.index('H2')] - y_i0[namen.index('CO2')]) / (
+    y_i0[namen.index('CO2')] + y_i0[namen.index('CO')]
+)
 
 y_0 = np.empty([len(y_i0) + 1 + 1])
 y_0[:-2] = y_i0
@@ -295,6 +298,7 @@ vars_3 = [
     # ['T_r', t_r-273.15, '°C_{Kühlmittel}'],
     # ['P_{Sät}', p_sat, 'bar_{Kühlmittel}'],
     # ['\Delta H_{Sät}', h_sat_l, r'\frac{kJ}{kg_{Kühlmittel}}'],
+    ['SN', sn, '']
 ]
 text_1 = '\n'.join(['$' + ' = '.join([line[0], '{:g}'.format(line[1]) +
                                       ' ' + line[2]]) + '$'
@@ -485,6 +489,13 @@ u_s = m_dot / (np.pi / 4 * d_t**2) / n_t  # kg/m^2/s
 mm_m_0 = sum(y_i0 * mm) * 1 / 1000.  # kg/mol
 cp_m_0 = sum(y_i0 * cp_ig_durch_r(t0) * 8.3145)  # J/mol/K
 cp_g_0 = cp_m_0 / mm_m_0  # J/kg/K
+# Anzahl an Übertragungseinheiten (NTU)
+ntu = l_r * 1 / (u_s * cp_g_0) * 2 * u / (d_t / 2)
+# m * m^2 s/kg * kg K /J * J/s/m^2/K *1/m = [dimensionslose Einheiten]
+# Stöchiometrische Zahl
+sn = (y_i0[namen.index('H2')] - y_i0[namen.index('CO2')]) / (
+    y_i0[namen.index('CO2')] + y_i0[namen.index('CO')]
+)
 
 y_0 = np.empty([len(y_i0) + 1 + 1])
 y_0[:-2] = y_i0
@@ -528,13 +539,6 @@ t_m_1 = 1 / 2 * (36696 / 8.3145 - np.sqrt(36696 /
 t_m_2 = 1 / 2 * (-94765 / 8.3145 - np.sqrt(-94765 /
                                            8.3145 * (-94765 / 8.3145 - 4 * t_r)))
 
-# Anzahl an Übertragungseinheiten (NTU)
-mm_m_0 = sum(y_i0 * mm) * 1 / 1000.  # kg/mol
-cp_m_0 = sum(y_i0 * cp_ig_durch_r(t0) * 8.3145)  # J/mol/K
-cp_g_0 = cp_m_0 / mm_m_0  # J/kg/K
-ntu = l_r * 1 / (u_s * cp_g_0) * 2 * u / (d_t / 2)
-# m * m^2 s/kg * kg K /J * J/s/m^2/K *1/m = [dimensionslose Einheiten]
-
 vars_1 = [
     [r'\rho_b', rho_b, r'\frac{kg_{Kat}}{m^3_{Fest}}'],
     ['\phi', phi, r'\frac{m^3_{Gas}}{m^3_{Fest}}'],
@@ -555,6 +559,7 @@ vars_3 = [
     ['T_r', t_r - 273.15, '°C_{Kühlmittel}'],
     ['P_{Sät}', p_sat, 'bar_{Kühlmittel}'],
     ['\Delta H_{Sät}', h_sat_l, r'\frac{kJ}{kg_{Kühlmittel}}'],
+    ['SN', sn, '']
 ]
 text_1 = '\n'.join(['$' + ' = '.join([line[0], '{:g}'.format(line[1]) +
                                       ' ' + line[2]]) + '$'
@@ -959,6 +964,13 @@ u_s = m_dot / (np.pi / 4 * d_t**2) / n_t  # kg/m^2/s
 mm_m_0 = sum(y_i0 * mm) * 1 / 1000.  # kg/mol
 cp_m_0 = sum(y_i0 * cp_ig_durch_r(t0) * 8.3145)  # J/mol/K
 cp_g_0 = cp_m_0 / mm_m_0  # J/kg/K
+# Anzahl an Übertragungseinheiten (NTU)
+ntu = l_r * 1 / (u_s * cp_g_0) * 2 * u / (d_t / 2)
+# m * m^2 s/kg * kg K /J * J/s/m^2/K *1/m = [dimensionslose Einheiten]
+# Stöchiometrische Zahl
+sn = (y_i0[namen.index('H2')] - y_i0[namen.index('CO2')]) / (
+    y_i0[namen.index('CO2')] + y_i0[namen.index('CO')]
+)
 # Restliche Koeffizienten und stoffliche Parameter
 # bleiben ungeändert, wie oben.
 
@@ -1017,10 +1029,6 @@ t_m_1 = 1 / 2 * (36696 / 8.3145 - np.sqrt(36696 /
 t_m_2 = 1 / 2 * (-94765 / 8.3145 - np.sqrt(-94765 /
                                            8.3145 * (-94765 / 8.3145 - 4 * t_r)))
 
-# Anzahl an Übertragungseinheiten (NTU)
-ntu = l_r * 1 / (u_s * cp_g_0) * 2 * u / (d_t / 2)
-# m * m^2 s/kg * kg K /J * J/s/m^2/K *1/m = [dimensionslose Einheiten]
-
 vars_1 = [
     [r'\rho_b', rho_b, r'\frac{kg_{Kat}}{m^3_{Fest}}'],
     ['\phi', phi, r'\frac{m^3_{Gas}}{m^3_{Fest}}'],
@@ -1041,6 +1049,7 @@ vars_3 = [
     ['T_r', t_r - 273.15, '°C_{Kühlmittel}'],
     ['P_{Sät}', p_sat, 'bar_{Kühlmittel}'],
     ['\Delta H_{Sät}', h_sat_l, r'\frac{kJ}{kg_{Kühlmittel}}'],
+    ['SN', sn, '']
 ]
 text_1 = '\n'.join(['$' + ' = '.join([line[0], '{:g}'.format(line[1]) +
                                       ' ' + line[2]]) + '$'
@@ -1172,6 +1181,10 @@ cp_g_0 = cp_m_0 / mm_m_0  # J/kg/K
 # Anzahl an Übertragungseinheiten (NTU)
 ntu = l_r * 1 / (u_s * cp_g_0) * 2 * u / (d_t / 2)
 # m * m^2 s/kg * kg K /J * J/s/m^2/K *1/m = [dimensionslose Einheiten]
+# Stöchiometrische Zahl
+sn = (y_i0[namen.index('H2')] - y_i0[namen.index('CO2')]) / (
+    y_i0[namen.index('CO2')] + y_i0[namen.index('CO')]
+)
 ratio_h2_co2 = y_i0[namen.index('H2')] / y_i0[namen.index('CO2')]
 ratio_co_co2 = y_i0[namen.index('CO')] / y_i0[namen.index('CO2')]
 
@@ -1252,6 +1265,7 @@ vars_3 = [
     ['T_r', t_r - 273.15, '°C_{Kühlmittel}'],
     ['P_{Sät}', p_sat, 'bar_{Kühlmittel}'],
     ['\Delta H_{Sät}', h_sat_l, r'\frac{kJ}{kg_{Kühlmittel}}'],
+    ['SN', sn, '']
 ]
 text_1 = '\n'.join(['$' + ' = '.join([line[0], '{:g}'.format(line[1]) +
                                       ' ' + line[2]]) + '$'
@@ -1397,6 +1411,10 @@ cp_g_0 = cp_m_0 / mm_m_0  # J/kg/K
 # Anzahl an Übertragungseinheiten (NTU)
 ntu = l_r * 1 / (u_s * cp_g_0) * 2 * u / (d_t / 2)
 # m * m^2 s/kg * kg K /J * J/s/m^2/K *1/m = [dimensionslose Einheiten]
+# Stöchiometrische Zahl
+sn = (y_i0[namen.index('H2')] - y_i0[namen.index('CO2')]) / (
+    y_i0[namen.index('CO2')] + y_i0[namen.index('CO')]
+)
 ratio_h2_co2 = y_i0[namen.index('H2')] / y_i0[namen.index('CO2')]
 ratio_co_co2 = y_i0[namen.index('CO')] / y_i0[namen.index('CO2')]
 # Restliche Koeffizienten und stoffliche Parameter
@@ -1477,6 +1495,7 @@ vars_3 = [
     ['T_r', t_r - 273.15, '°C_{Kühlmittel}'],
     ['P_{Sät}', p_sat, 'bar_{Kühlmittel}'],
     ['\Delta H_{Sät}', h_sat_l, r'\frac{kJ}{kg_{Kühlmittel}}'],
+    ['SN', sn, '']
 ]
 text_1 = '\n'.join(['$' + ' = '.join([line[0], '{:g}'.format(line[1]) +
                                       ' ' + line[2]]) + '$'
