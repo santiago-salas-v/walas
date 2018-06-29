@@ -324,7 +324,7 @@ ax.plot(t_r, np.array(
     [67.2e-7 + 0.21875e-7 * t for t in t_r]) / 1e-5, label='Bezugdaten')
 ax.set_ylabel(r'$\frac{\mu}{(Pa s) \cdot 1e-5}$')
 plt.setp(ax.get_xticklabels(), visible=False)
-ax.legend()
+ax.legend(fontsize='xx-small')
 
 ax2 = plt.subplot2grid([2, 3], [1, 0], sharex=ax)
 delta_h_r_t_0 = np.array([delta_h_r(t) for t in t_r])
@@ -558,7 +558,7 @@ vars_3 = [
     ['P_0', p0, 'bar'],
     ['T_r', t_r - 273.15, '°C_{Kühlmittel}'],
     ['P_{Sät}', p_sat, 'bar_{Kühlmittel}'],
-    ['\Delta H_{Sät}', h_sat_l, r'\frac{kJ}{kg_{Kühlmittel}}'],
+    ['\Delta H_{Sät}', delta_h_sat, r'\frac{kJ}{kg_{Kühlmittel}}'],
     ['SN', sn, '']
 ]
 text_1 = '\n'.join(['$' + ' = '.join([line[0], '{:g}'.format(line[1]) +
@@ -662,7 +662,7 @@ ax4 = plt.subplot(323)
 ax4.set_xlabel(r'Reduzierte Position, $z/L_R$')
 ax4.set_ylabel('$X(CO)$')
 ax4.set_xlim([0, 1])
-ax4.set_ylim([0, 1])
+ax4.set_ylim([0, ax4.get_ylim()[1]])
 
 ax5 = plt.subplot(324)
 ax5.set_xlabel(r'Reduzierte Position, $z/L_R$')
@@ -694,9 +694,9 @@ color_samples = np.array([
 unfilled_markers = [m for m in Line2D.markers
                     if type(m) == str and
                     m not in ['None', 'nothing', None, ' ', '']]
-for ratio_co_co2 in [1e-6, 0.15, 0.45, basis_ratio, 1.5, 7.5, 15]:
+for verhaeltnis_co_co2 in [1e-6, 0.15, 0.45, basis_ratio, 1.5, 7.5, 15]:
     y_0[:-2][[namen.index('CO'), namen.index('CO2')]] = np.array(
-        [ratio_co_co2 / (1 + ratio_co_co2), 1 / (1 + ratio_co_co2)]) * y_co_plus_co2
+        [verhaeltnis_co_co2 / (1 + verhaeltnis_co_co2), 1 / (1 + verhaeltnis_co_co2)]) * y_co_plus_co2
     p0_co2_co = sum(y_0[:-2][indexes_co_co2] * p0).item()
     # Keep mass of all other components m' = m (1-y1-y2)/(1-y1'-y2')
     u_s_new = (1 - sum(y_i0[indexes_co_co2])) / (
@@ -712,47 +712,51 @@ for ratio_co_co2 in [1e-6, 0.15, 0.45, basis_ratio, 1.5, 7.5, 15]:
     m_i_soln = np.array([
         n_soln * y_i_soln[:, i] * (mm[i] * 1 / 1000.)
         for i in range(y_i_soln.shape[1])]).T
-    ums_soln = (y_co_plus_co2 * ratio_co_co2 / (1 + ratio_co_co2) * n_soln[0] - (
+    ums_soln = (y_co_plus_co2 * verhaeltnis_co_co2 / (1 + verhaeltnis_co_co2) * n_soln[0] - (
         y_i_soln[:, namen.index('CO')]) * n_soln) / (
-        y_co_plus_co2 * ratio_co_co2 / (1 + ratio_co_co2) * n_soln[0]
+                       y_co_plus_co2 * verhaeltnis_co_co2 / (1 + verhaeltnis_co_co2) * n_soln[0]
     )
     ausb_soln = (y_i_soln[1:, namen.index('MeOH')] * n_soln[1:] -
                  y_i_soln[0, namen.index('MeOH')] * n_soln[0]) / (
-        ums_soln[1:] * y_co_plus_co2 * ratio_co_co2 / (1 + ratio_co_co2) * n_soln[0])
+        ums_soln[1:] * y_co_plus_co2 * verhaeltnis_co_co2 / (1 + verhaeltnis_co_co2) * n_soln[0])
     # Anzahl an Übertragungseinheiten (NTU)
     mm_m_0 = sum(y_0[:-2] * mm) * 1 / 1000.  # kg/mol
     cp_m_0 = sum(y_0[:-2] * cp_ig_durch_r(t0) * 8.3145)  # J/mol/K
     cp_g_0 = cp_m_0 / mm_m_0  # J/kg/K
     ntu = l_r * 1 / (u_s * cp_g_0) * 2 * u / (d_t / 2)
+    sn = (y_0[:-2][namen.index('H2')] - y_0[:-2][namen.index('CO2')]) / (
+            y_0[:-2][namen.index('CO2')] + y_0[:-2][namen.index('CO')]
+    )
     # m * m^2 s/kg * kg K /J * J/s/m^2/K *1/m = [dimensionslose Einheiten]
     marker = np.random.choice(unfilled_markers)
     color = color_samples[np.random.choice(len(color_samples))]
     marker_color = color_samples[np.random.choice(len(color_samples))]
     marker_fill = np.random.choice(list(lines.fillStyles))
     line = ax.plot(t_soln, p_soln * y_i_soln[:, namen.index('CO')],
-                   label='$p_{CO}/p_{CO_2}=' + str(ratio_co_co2) +
-                         '\quad NTU= ' + '{:g}'.format(ntu) + '$',
+                   label='$p_{CO}/p_{CO_2}=' + str(verhaeltnis_co_co2) +
+                         '\quad NTU= ' + '{:g}'.format(ntu) +
+                         '\quad SN= ' + '{:g}'.format(sn) + '$',
                    marker=marker, markersize=3, color=color,
                    fillstyle=marker_fill, markerfacecolor=marker_color)[0]
     lines1.append(line)
     ax2.plot(t_soln, p_soln * y_i_soln[:, namen.index('CO2')],
-             label='$p_{CO}/p_{CO_2}=' + str(ratio_co_co2) + '$',
+             label='$p_{CO}/p_{CO_2}=' + str(verhaeltnis_co_co2) + '$',
              marker=marker, markersize=3, color=color,
              fillstyle=marker_fill, markerfacecolor=marker_color)
     ax3.plot(z_d_l_r, t_soln,
-             label='$p_{CO}/p_{CO_2}=' + str(ratio_co_co2) + '$',
+             label='$p_{CO}/p_{CO_2}=' + str(verhaeltnis_co_co2) + '$',
              marker=marker, markersize=3, color=color,
              fillstyle=marker_fill, markerfacecolor=marker_color)
     ax4.plot(z_d_l_r, ums_soln,
-             label='$p_{CO}/p_{CO_2}=' + str(ratio_co_co2) + '$',
+             label='$p_{CO}/p_{CO_2}=' + str(verhaeltnis_co_co2) + '$',
              marker=marker, markersize=3, color=color,
              fillstyle=marker_fill, markerfacecolor=marker_color)
     ax5.plot(z_d_l_r[1:], ausb_soln,
-             label='$p_{CO}/p_{CO_2}=' + str(ratio_co_co2) + '$',
+             label='$p_{CO}/p_{CO_2}=' + str(verhaeltnis_co_co2) + '$',
              marker=marker, markersize=3, color=color,
              fillstyle=marker_fill, markerfacecolor=marker_color)
     ax6.plot(z_d_l_r, m_i_soln[:, namen.index('MeOH')],
-             label='$p_{CO}/p_{CO_2}=' + str(ratio_co_co2) + '$',
+             label='$p_{CO}/p_{CO_2}=' + str(verhaeltnis_co_co2) + '$',
              marker=marker, markersize=3, color=color,
              fillstyle=marker_fill, markerfacecolor=marker_color)
 
@@ -789,7 +793,7 @@ ax4 = plt.subplot(323)
 ax4.set_xlabel(r'Reduzierte Position, $z/L_R$')
 ax4.set_ylabel('$X(CO)$')
 ax4.set_xlim([0, 1])
-ax4.set_ylim([0, 1])
+ax4.set_ylim([0, ax4.get_ylim()[1]])
 
 ax5 = plt.subplot(324)
 ax5.set_xlabel(r'Reduzierte Position, $z/L_R$')
@@ -802,7 +806,7 @@ ax6.set_xlabel(r'Reduzierte Position, $z/L_R$')
 ax6.set_ylabel(r'$\frac{\dot m(CH_3OH/CO)}{kg/h}$')
 ax6.set_xlim([0, 1])
 
-ratio_co_co2 = y_i0[namen.index('CO')] / y_i0[namen.index('CO2')]
+verhaeltnis_co_co2 = y_i0[namen.index('CO')] / y_i0[namen.index('CO2')]
 ratio_h2_co2 = y_i0[namen.index('H2')] / y_i0[namen.index('CO2')]
 basis_y_co_plus_co2 = sum(y_i0[[namen.index('CO'), namen.index('CO2')]])
 
@@ -810,15 +814,15 @@ basis_y_co_plus_co2 = sum(y_i0[[namen.index('CO'), namen.index('CO2')]])
 # SN = 2,05 = (y_{H_2}-y_{CO_2})/(y_{CO}+y_{CO_2})
 # y_CO
 optimaler_faktor = ratio_h2_co2 / (
-    (1 - basis_y_co_plus_co2) * (2.05 * (1 + ratio_co_co2) + 1) +
-    ratio_h2_co2 * basis_y_co_plus_co2
+        (1 - basis_y_co_plus_co2) * (2.05 * (1 + verhaeltnis_co_co2) + 1) +
+        ratio_h2_co2 * basis_y_co_plus_co2
 )
 
 lines1 = []
-for factor in [1e-16, 0.5, 1, optimaler_faktor, 2, 4, 5, 6,
+for factor in [1e-16, 1, optimaler_faktor, 4, 5, 6,
                0.99 / basis_y_co_plus_co2]:
     y_0[:-2][indexes_co_co2] = np.array(
-        [ratio_co_co2 / (1 + ratio_co_co2), 1 / (1 + ratio_co_co2)]
+        [verhaeltnis_co_co2 / (1 + verhaeltnis_co_co2), 1 / (1 + verhaeltnis_co_co2)]
     ) * basis_y_co_plus_co2 * factor
     y_0[:-2][indexes_not_co_co2] = y_i0[indexes_not_co_co2] * (
         1 - factor * basis_y_co_plus_co2
@@ -844,13 +848,13 @@ for factor in [1e-16, 0.5, 1, optimaler_faktor, 2, 4, 5, 6,
     m_i_soln = np.array([
         n_soln * y_i_soln[:, i] * (mm[i] * 1 / 1000.)
         for i in range(y_i_soln.shape[1])]).T
-    ums_soln = (y_co_plus_co2 * ratio_co_co2 / (1 + ratio_co_co2) * n_soln[0] - (
+    ums_soln = (y_co_plus_co2 * verhaeltnis_co_co2 / (1 + verhaeltnis_co_co2) * n_soln[0] - (
         y_i_soln[:, namen.index('CO')]) * n_soln) / (
-        y_co_plus_co2 * ratio_co_co2 / (1 + ratio_co_co2) * n_soln[0]
+                       y_co_plus_co2 * verhaeltnis_co_co2 / (1 + verhaeltnis_co_co2) * n_soln[0]
     )
     ausb_soln = (y_i_soln[1:, namen.index('MeOH')] * n_soln[1:] -
                  y_i_soln[0, namen.index('MeOH')] * n_soln[0]) / (
-        ums_soln[1:] * y_co_plus_co2 * ratio_co_co2 / (1 + ratio_co_co2) * n_soln[0])
+        ums_soln[1:] * y_co_plus_co2 * verhaeltnis_co_co2 / (1 + verhaeltnis_co_co2) * n_soln[0])
     # Anzahl an Übertragungseinheiten (NTU)
     mm_m_0 = sum(y_0[:-2] * mm) * 1 / 1000.  # kg/mol
     cp_m_0 = sum(y_0[:-2] * cp_ig_durch_r(t0) * 8.3145)  # J/mol/K
@@ -886,7 +890,7 @@ for factor in [1e-16, 0.5, 1, optimaler_faktor, 2, 4, 5, 6,
              marker=marker, markersize=3, color=color,
              fillstyle=marker_fill, markerfacecolor=marker_color)
     ax6.plot(z_d_l_r, m_i_soln[:, namen.index('MeOH')],
-             label='$p_{CO}/p_{CO_2}=' + str(ratio_co_co2) + '$',
+             label='$p_{CO}/p_{CO_2}=' + str(verhaeltnis_co_co2) + '$',
              marker=marker, markersize=3, color=color,
              fillstyle=marker_fill, markerfacecolor=marker_color)
 
@@ -951,9 +955,9 @@ mm = np.array([
     60.053
 ], dtype=float)  # g/mol
 n_dot_i = np.array([
-    1223.38, 1845.03, 12686.8,
-    402.59, 119.061, 0,
-    1249.8, 0, 0, 0
+    1386.42, 1871.83, 13085.1,
+    402.271, 112.237, 0,
+    1249.91, 0, 0, 0
 ]) * 1000 / 60**2  # mol/s
 m_dot_i = n_dot_i * mm / 1000.  # kg/s
 m_dot = sum(m_dot_i)
@@ -1048,7 +1052,7 @@ vars_3 = [
     ['P_0', p0, 'bar'],
     ['T_r', t_r - 273.15, '°C_{Kühlmittel}'],
     ['P_{Sät}', p_sat, 'bar_{Kühlmittel}'],
-    ['\Delta H_{Sät}', h_sat_l, r'\frac{kJ}{kg_{Kühlmittel}}'],
+    ['\Delta H_{Sät}', delta_h_sat, r'\frac{kJ}{kg_{Kühlmittel}}'],
     ['SN', sn, '']
 ]
 text_1 = '\n'.join(['$' + ' = '.join([line[0], '{:g}'.format(line[1]) +
@@ -1164,7 +1168,7 @@ mm = np.array([
     60.053
 ], dtype=float)  # g/mol
 n_dot_i = np.array([
-    3394.174, 3767.258, 65334.34,
+    3394.174, 3767.258+1013.2, 65334.34,
     230.9895, 845.4556, 0,
     0, 0, 0,
     0
@@ -1186,7 +1190,7 @@ sn = (y_i0[namen.index('H2')] - y_i0[namen.index('CO2')]) / (
     y_i0[namen.index('CO2')] + y_i0[namen.index('CO')]
 )
 ratio_h2_co2 = y_i0[namen.index('H2')] / y_i0[namen.index('CO2')]
-ratio_co_co2 = y_i0[namen.index('CO')] / y_i0[namen.index('CO2')]
+verhaeltnis_co_co2 = y_i0[namen.index('CO')] / y_i0[namen.index('CO2')]
 
 # Restliche Koeffizienten und stoffliche Parameter
 # bleiben ungeändert, wie oben.
@@ -1264,7 +1268,7 @@ vars_3 = [
     ['P_0', p0, 'bar'],
     ['T_r', t_r - 273.15, '°C_{Kühlmittel}'],
     ['P_{Sät}', p_sat, 'bar_{Kühlmittel}'],
-    ['\Delta H_{Sät}', h_sat_l, r'\frac{kJ}{kg_{Kühlmittel}}'],
+    ['\Delta H_{Sät}', delta_h_sat, r'\frac{kJ}{kg_{Kühlmittel}}'],
     ['SN', sn, '']
 ]
 text_1 = '\n'.join(['$' + ' = '.join([line[0], '{:g}'.format(line[1]) +
@@ -1281,7 +1285,7 @@ fig = plt.figure(6)
 fig.suptitle('Lösung der Zusammensetzung ' +
              '{:d}'.format(round(ratio_h2_co2.item())) +
              ':1:' +
-             '{:d}'.format(round(ratio_co_co2.item())) +
+             '{:d}'.format(round(verhaeltnis_co_co2.item())) +
              '(H2:CO2:CO)')
 fig.text(0.05, 0.945, text_1, va='top', fontsize=8)
 fig.text(0.33, 0.935, text_2, va='top', fontsize=8)
@@ -1365,7 +1369,7 @@ m_kat = 1190 * (1 - 0.3) * np.pi / 4 * (
 # Delta P gesamt=-3bar, denn dies ist der Parameter
 d_p = 0.0054 / 0.0054 * 0.16232576224693065  # m Feststoff
 # Reaktor
-n_t = 4800 * 3.09 / 0.460126  # Rohre
+n_t = 4800 * 1.82 / 0.460126  # Rohre
 d_t = 0.03  # m Rohrdurchmesser
 # n_t = 10000  # Rohre
 # d_t = 0.04  # m Rohrdurchmesser
@@ -1416,7 +1420,7 @@ sn = (y_i0[namen.index('H2')] - y_i0[namen.index('CO2')]) / (
     y_i0[namen.index('CO2')] + y_i0[namen.index('CO')]
 )
 ratio_h2_co2 = y_i0[namen.index('H2')] / y_i0[namen.index('CO2')]
-ratio_co_co2 = y_i0[namen.index('CO')] / y_i0[namen.index('CO2')]
+verhaeltnis_co_co2 = y_i0[namen.index('CO')] / y_i0[namen.index('CO2')]
 # Restliche Koeffizienten und stoffliche Parameter
 # bleiben ungeändert, wie oben.
 
@@ -1494,7 +1498,7 @@ vars_3 = [
     ['P_0', p0, 'bar'],
     ['T_r', t_r - 273.15, '°C_{Kühlmittel}'],
     ['P_{Sät}', p_sat, 'bar_{Kühlmittel}'],
-    ['\Delta H_{Sät}', h_sat_l, r'\frac{kJ}{kg_{Kühlmittel}}'],
+    ['\Delta H_{Sät}', delta_h_sat, r'\frac{kJ}{kg_{Kühlmittel}}'],
     ['SN', sn, '']
 ]
 text_1 = '\n'.join(['$' + ' = '.join([line[0], '{:g}'.format(line[1]) +
@@ -1512,7 +1516,7 @@ fig = plt.figure(7)
 fig.suptitle('Lösung der Zusammensetzung ' +
              '{:d}'.format(round(ratio_h2_co2.item())) +
              ':1:' +
-             '{:d}'.format(round(ratio_co_co2.item())) +
+             '{:d}'.format(round(verhaeltnis_co_co2.item())) +
              '(H2:CO2:CO)')
 fig.text(0.05, 0.945, text_1, va='top', fontsize=8)
 fig.text(0.33, 0.935, text_2, va='top', fontsize=8)
