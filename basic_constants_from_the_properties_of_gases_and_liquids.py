@@ -17,13 +17,13 @@ test_exp_ig_heat_capacities = test_exp_descriptors + \
     '[\||\ ](\-?\ ?[0-9]+\.?[0-9]+)?' * 7  # 7 numeric columns
 
 file_name_basic_constants_i = os.path.abspath(
-    '../basic_constants_i_properties_of_gases_and_liquids.csv'
+    './data/basic_constants_i_properties_of_gases_and_liquids.csv'
 )
 file_name_basic_constants_ii = os.path.abspath(
-    '../basic_constants_ii_properties_of_gases_and_liquids.csv'
+    './data/basic_constants_ii_properties_of_gases_and_liquids.csv'
 )
 file_name_ig_heat_capacities = os.path.abspath(
-    '../ig_l_heat_capacities_properties_of_gases_and_liquids.csv'
+    './data/ig_l_heat_capacities_properties_of_gases_and_liquids.csv'
 )
 
 file = open(file_name_basic_constants_i, mode='r', encoding='utf-8-sig')

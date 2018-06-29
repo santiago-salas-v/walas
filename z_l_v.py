@@ -374,6 +374,21 @@ def isot_flash(t, p, x_i, y_i, z_i, tc_i, pc_i, af_omega_i):
     return soln
 
 
+def isot_flash_solve(t, p, z_i, tc_i, pc_i, af_omega_i, max_it=20,
+                     x_i=None, y_i=None):
+    if not x_i:
+        x_i = np.ones(len(z_i)) / len(z_i)
+    if not y_i:
+        y_i = np.ones(len(z_i)) / len(z_i)
+    for i in range(max_it):
+        soln = isot_flash(t, p, x_i, y_i, z_i, tc_i, pc_i, af_omega_i)
+        y_i = soln['y_i']
+        x_i = soln['x_i']
+        v_f = soln['v_f']
+        k_i = soln['k_i']
+    return soln
+
+
 def beispiel_wdi_atlas():
     use_pr_eos()
     print(
