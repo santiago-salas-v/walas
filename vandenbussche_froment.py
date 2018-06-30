@@ -583,10 +583,7 @@ ax.set_ylabel(r'$\frac{\dot V}{m^3/h}$')
 ax.set_xlabel('Reduzierte Position, $z/L_R$')
 ax2 = plt.subplot2grid([2, 3], [1, 0])
 ax2.plot(z_d_l_r, m_km_soln)
-ax2.fill(z_d_l_r, m_km_soln, color='orange')
-ax2.fill([0, 1, 1, 0],
-         [m_km_soln[0], m_km_soln[-1],
-          m_km_soln[0], m_km_soln[0]], color='orange')
+ax2.fill_between(z_d_l_r, 0, m_km_soln, color='orange')
 ax2.text(0.3, 1 / 2. * (m_km_soln[0] + m_km_soln[-1]),
          '{:g}'.format(sum(m_km_soln * dlr)) + 'kg/h \n')
 ax2.set_ylabel(r'$\frac{\dot m_{Kuehlmittel}}{\frac{kg}{h\cdot m}}$')
@@ -1076,10 +1073,7 @@ ax.set_ylabel(r'$\frac{\dot V}{m^3/h}$')
 ax.set_xlabel('Reduzierte Position, $z/L_R$')
 ax2 = plt.subplot2grid([2, 3], [1, 0])
 ax2.plot(z_d_l_r, m_km_soln)
-ax2.fill(z_d_l_r, m_km_soln, color='orange')
-ax2.fill([0, 1, 1, 0],
-         [m_km_soln[0], m_km_soln[-1],
-          m_km_soln[0], m_km_soln[0]], color='orange')
+ax2.fill_between(z_d_l_r, 0, m_km_soln, color='orange')
 ax2.text(0.3, 1 / 2. * (m_km_soln[0] + m_km_soln[-1]),
          '{:g}'.format(sum(m_km_soln * dlr)) + 'kg/h')
 ax2.set_ylabel(r'$\frac{\dot m_{Kuehlmittel}}{\frac{kg}{h\cdot m}}$')
@@ -1307,10 +1301,7 @@ ax.set_ylabel(r'$\frac{\dot V}{m^3/h}$')
 ax.set_xlabel('Reduzierte Position, $z/L_R$')
 ax2 = plt.subplot2grid([2, 3], [1, 0])
 ax2.plot(z_d_l_r, m_km_soln)
-ax2.fill(z_d_l_r, m_km_soln, color='orange')
-ax2.fill([0, 1, 1, 0],
-         [m_km_soln[0], m_km_soln[-1],
-          m_km_soln[0], m_km_soln[0]], color='orange')
+ax2.fill_between(z_d_l_r, 0, m_km_soln, color='orange')
 ax2.text(0.3, 1 / 2. * (m_km_soln[0] + m_km_soln[-1]),
          '{:g}'.format(sum(m_km_soln * dlr)) + 'kg/h')
 ax2.set_ylabel(r'$\frac{\dot m_{Kuehlmittel}}{kg/h}$')
@@ -1531,10 +1522,7 @@ ax.set_ylabel(r'$\frac{\dot V}{m^3/h}$')
 ax.set_xlabel('Reduzierte Position, $z/L_R$')
 ax2 = plt.subplot2grid([2, 3], [1, 0])
 ax2.plot(z_d_l_r, m_km_soln)
-ax2.fill(z_d_l_r, m_km_soln, color='orange')
-ax2.fill([0, 1, 1, 0],
-         [m_km_soln[0], m_km_soln[-1],
-          m_km_soln[0], m_km_soln[0]], color='orange')
+ax2.fill_between(z_d_l_r, 0, m_km_soln, color='orange')
 ax2.text(0.3, 1 / 2. * (m_km_soln[0] + m_km_soln[-1]),
          '{:g}'.format(sum(m_km_soln * dlr)) + 'kg/h')
 ax2.set_ylabel(r'$\frac{\dot m_{Kuehlmittel}}{kg/h}$')
