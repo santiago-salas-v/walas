@@ -1,7 +1,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib import lines
-from matplotlib.lines import Line2D
 from scipy.integrate import odeint
 import z_l_v
 import locale
@@ -20,7 +19,7 @@ d_p = 0.0054 / 0.0054 * 0.16232576224693065  # m Feststoff
 # Reaktor
 n_t = 1620  # Rohre
 d_t = 0.04  # m Rohrdurchmesser
-sn_param = 3.44  #2.05  # dimensionslos
+sn_param = 3.44  # 2.05  # dimensionslos
 ntu_param = 1.82  # Parameter
 verhaeltnis_co_co2 = 0.74   # Parameter
 l_r = 7.  # m Rohrlänge
@@ -211,8 +210,9 @@ def mu(t, y_i):
     ) * 100 / 1000
     # g/cm/s * 100cm/m * 1kg/1000g = kg/m/s = Pa s
     phi_ab = 1 / np.sqrt(8) * (
-            1 + np.outer(mm, 1 / mm)) ** (-1 / 2.) * (
-            1 + np.outer(mu_i, 1 / mu_i) ** (1 / 2.) * np.outer(1 / mm, mm) ** (1 / 4.)
+        1 + np.outer(mm, 1 / mm)) ** (-1 / 2.) * (
+        1 + np.outer(mu_i, 1 / mu_i) ** (1 / 2.) *
+        np.outer(1 / mm, mm) ** (1 / 4.)
     ) ** 2
     mu_mix = np.sum(y_i * mu_i / phi_ab.dot(y_i))
     return mu_mix  # Pa s
@@ -308,6 +308,7 @@ def df_dt(y, _):
     result[-1] = dt_dz
     return result
 
+
 # Init.
 n_i_1 = n_i_0  # mol/s
 p1 = p0
@@ -327,7 +328,7 @@ for i in range(26):
     cp_m_1 = sum(y_i1 * cp_ig_durch_r(t1) * 8.3145)  # J/mol/K
     cp_g_1 = cp_m_1 / mm_m_1  # J/kg/K
     n_t = ntu_param / (2 * np.pi * d_t / 2 * l_r * u) * (
-            m_dot * cp_g_1
+        m_dot * cp_g_1
     )
     u_s = m_dot / (np.pi / 4 * d_t ** 2) / n_t  # kg/m^2/s
     ntu = l_r * 1 / (u_s * cp_g_1) * 2 * u / (d_t / 2)
@@ -342,8 +343,8 @@ for i in range(26):
     # D_p{n+1} = D_p{n} * int(1/D_p{n}*f(D_p{n}) dz) / -3bar
     for j in range(5):
         soln_dp = odeint(df_dt, y_0, z_d_l_r)
-        dp_dz = (soln_dp[-1, -2] - soln_dp[0, -2]).item()
-        d_p = dp_dz * d_p / -3.0
+        deltap_deltaz = (soln_dp[-1][-2] - soln_dp[0][-2]).item()
+        d_p = deltap_deltaz * d_p / -3.0
 
     soln = odeint(df_dt, y_0, z_d_l_r)
     y_i_soln = soln[:, :len(y_i1)]
@@ -360,12 +361,11 @@ for i in range(26):
     v_soln = n_soln * 8.3145 * 1e-5 * t_soln / p_soln
     # mol/s * 8,3145Pa m^3/mol/K * 1e-5bar/Pa * K/bar = m^3/s
 
-    m_km_soln = np.zeros_like(z_d_l_r)
     ums_soln = (n_i_soln[0, namen.index('CO')] -
                 n_i_soln[:, namen.index('CO')]
                 ) / n_i_soln[0, namen.index('CO')]
     m_km_soln = u * (2 / (d_t / 2)) * (t_soln - t_r) * (
-            np.pi / 4 * d_t ** 2) / delta_h_sat * n_t * 60 ** 2 / 1000.
+        np.pi / 4 * d_t ** 2) / delta_h_sat * n_t * 60 ** 2 / 1000.
     # J/s/K/m^2 * 1/m * K * m^2 * kg/kJ * 60^2s/h * 1kJ/(1000J) = kg/h/m
     n_i_2 = n_i_soln[-1]  # mol/s
 
@@ -376,19 +376,19 @@ for i in range(26):
     z_i = y_i_soln[-1]  # dimensionslos
     verfluessigung = z_l_v.isot_flash_solve(
         t_2, p_2, z_i, tc, pc, omega_af)
-    v_f = verfluessigung['v_f']
-    x_i = verfluessigung['x_i']
-    y_i = verfluessigung['y_i']
+    v_f_flash = verfluessigung['v_f']
+    x_i_flash = verfluessigung['x_i']
+    y_i_flash = verfluessigung['y_i']
 
-    y_co2_r = y_i[namen.index('CO2')]
-    y_co_r = y_i[namen.index('CO')]
-    y_h2_r = y_i[namen.index('H2')]
+    y_co2_r = y_i_flash[namen.index('CO2')]
+    y_co_r = y_i_flash[namen.index('CO')]
+    y_h2_r = y_i_flash[namen.index('H2')]
 
     y_h2_0 = n_i_0[namen.index('H2')] / n_0
     y_co_0 = n_i_0[namen.index('CO')] / n_0
     y_co2_0 = n_i_0[namen.index('CO2')] / n_0
 
-    n_i_1 = n_i_0 + v_f * n_2 * y_i
+    n_i_1 = n_i_0 + v_f_flash * n_2 * y_i_flash
     n_1 = sum(n_i_1)
     y_i_1 = n_i_1 / n_1
 
@@ -396,48 +396,48 @@ for i in range(26):
     y_co2_1 = y_i_1[namen.index('CO2')]
 
     n_co_zus = n_1 * (
-            verhaeltnis_co_co2 * y_co2_1 - y_co_1
+        verhaeltnis_co_co2 * y_co2_1 - y_co_1
     )
 
-    n_h2_zus = v_f * n_2 * (
-            sn_param * (y_co2_r + y_co_r) +
-            y_co2_r - y_h2_r
+    n_h2_zus = v_f_flash * n_2 * (
+        sn_param * (y_co2_r + y_co_r) +
+        y_co2_r - y_h2_r
     ) + n_0 * (
-                       sn_param * (y_co2_0 + y_co_0) +
-                       y_co2_0 - y_h2_0
-               )
+        sn_param * (y_co2_0 + y_co_0) +
+        y_co2_0 - y_h2_0
+    )
 
     n_i_1[namen.index('H2')] = \
         n_i_1[namen.index('H2')] + n_h2_zus
     n_i_1[namen.index('CO')] = \
         n_i_1[namen.index('CO')] + n_co_zus
 
-    n_i_r = v_f * sum(n_i_2) * y_i
+    n_i_r = v_f_flash * sum(n_i_2) * y_i_flash
     mm_0 = sum(n_i_0 / sum(n_i_0) * mm) / 1000.  # kg/mol
     mm_1 = sum(n_i_1 / sum(n_i_1) * mm) / 1000.  # kg/mol
     mm_2 = sum(n_i_2 / sum(n_i_2) * mm) / 1000.  # kg/mol
     mm_r = sum(n_i_r / sum(n_i_r) * mm) / 1000.  # kg/mol
     bilanz = sum(n_i_1 * mm_1) - sum(n_i_r * mm_r) \
-          - sum(n_i_0 * mm_0) \
-          - n_h2_zus * mm[namen.index('H2')]/1000. \
-          - n_co_zus * mm[namen.index('CO')]/1000.
+        - sum(n_i_0 * mm_0) \
+        - n_h2_zus * mm[namen.index('H2')] / 1000. \
+        - n_co_zus * mm[namen.index('CO')] / 1000.
     aend = sum(n_i_1 - n_i_1_n_m_1) / sum(n_i_1) * 100
     umsatz = 1 - n_i_2[namen.index('CO')] - n_i_1[namen.index('CO')]
     print('It.  ' + '{:2d}'.format(i) + ', Bilanz: ' +
           '{:g}'.format(np.sqrt(bilanz.dot(bilanz))) + '\t' +
-          ' Änderung: '+
+          ' Änderung: ' +
           '{:5.4g}'.format(np.sqrt(aend**2)) + '%\t')
 
 v_soln_real = np.empty_like(v_soln)
 for i in range(len(z_d_l_r)):
-    z_realgas_f = z_l_v.z_non_sat(
+    z = z_l_v.z_non_sat(
         t_soln[i], p_soln[i], y_i_soln[i],
         tc, pc, omega_af)['z']
-    v_soln_real[i] = v_soln[i] * z_realgas_f
+    v_soln_real[i] = v_soln[i] * z
 
 # Tatsächliche stöchiometrische Zahl
 sn = (y_i1[namen.index('H2')] - y_i1[namen.index('CO2')]) / (
-        y_i1[namen.index('CO2')] + y_i1[namen.index('CO')]
+    y_i1[namen.index('CO2')] + y_i1[namen.index('CO')]
 )
 verhaeltnis_h2_co2 = y_i1[namen.index('H2')] / y_i1[namen.index('CO2')]
 verhaeltnis_co_co2 = y_i1[namen.index('CO')] / y_i1[namen.index('CO2')]
@@ -556,35 +556,35 @@ print('Kühlmittel: Gesättigtes H_2O(l) ' +
       '{:g}'.format(sum(m_km_soln * dlr)) + 'kg/h')
 
 print('')
-print('======'*3)
+print('======' * 3)
 print('=== MAKEUP-STROM ===')
 print('\n'.join([
     namen[i] + ': ' + locale.format('%.8g', x) + ' kg/h'
     for i, x in enumerate(n_i_0 * mm / 1000. * 60**2)
 ]))
 print('')
-print('======'*3)
+print('======' * 3)
 print('=== RÜCKLAUFSTROM ===')
 print('\n'.join([
     namen[i] + ': ' + locale.format('%.8g', x) + ' kg/h'
     for i, x in enumerate(n_i_r * mm / 1000. * 60**2)
 ]))
 print('')
-print('======'*3)
+print('======' * 3)
 print('=== ERFORDERLICHE CO UND H2 STRÖME, UM SN UND CO/CO2 ANZUPASSEN ===')
 print('H2: ' +
       locale.format('%.8g', n_h2_zus.item() * mm[namen.index('H2')] /
-          1000. * 60 ** 2) + ' kg/h')
+                    1000. * 60 ** 2) + ' kg/h')
 print('CO: ' +
       locale.format('%.8g', n_co_zus.item() * mm[namen.index('CO')] /
-          1000. * 60**2) + ' kg/h')
+                    1000. * 60**2) + ' kg/h')
 print('auf kmol/h')
 print('H2: ' +
       locale.format('%.8g', n_h2_zus.item() / 1000. * 60 ** 2) + ' kmol/h')
 print('CO: ' +
       locale.format('%.8g', n_co_zus.item() / 1000. * 60 ** 2) + ' kmol/h')
 print('')
-print('======'*3)
+print('======' * 3)
 print('=== REAKTOR ZULAUFSTROM ===')
 print('\n'.join([
     namen[i] + ': ' + locale.format('%.8g', x) + ' kg/h'

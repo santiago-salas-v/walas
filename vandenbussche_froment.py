@@ -1514,9 +1514,9 @@ text_3 = '\n'.join(['$' + ' = '.join([line[0], '{:g}'.format(line[1]) +
 fig = plt.figure(7)
 
 fig.suptitle('Lösung der Zusammensetzung ' +
-             '{:d}'.format(round(ratio_h2_co2.item())) +
+             '{:.2f}'.format(round(ratio_h2_co2.item(), 2)) +
              ':1:' +
-             '{:d}'.format(round(verhaeltnis_co_co2.item())) +
+             '{:.2f}'.format(round(verhaeltnis_co_co2.item(), 2)) +
              '(H2:CO2:CO)')
 fig.text(0.05, 0.945, text_1, va='top', fontsize=8)
 fig.text(0.33, 0.935, text_2, va='top', fontsize=8)
