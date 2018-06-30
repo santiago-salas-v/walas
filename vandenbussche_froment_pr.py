@@ -6,19 +6,55 @@ from scipy.integrate import odeint
 import z_l_v
 import locale
 
-locale.setlocale(locale.LC_ALL, '')
-
-z_l_v.use_pr_eos()
-# Zulaufbedingungen
+# Lösung der ChP-Übung. Reaktor angepasst.
 namen = ['CO', 'CO2', 'H2', 'H2O', 'MeOH',
          'CH4', 'N2', 'EthOH', 'PrOH', 'METHF']
+# Katalysator
+rho_b = 1190  # kg Kat/m^3 Feststoff
+phi = 0.3  # m^3 Gas/m^3 Feststoff
+m_kat = 1190 * (1 - 0.3) * np.pi / 4 * (
+    0.03)**2 * 7  # kg Kat (pro Rohr)
+# Partikeldurchmesser wählen, damit
+# Delta P gesamt=-3bar, denn dies ist der Parameter
+d_p = 0.0054 / 0.0054 * 0.16232576224693065  # m Feststoff
+# Reaktor
+n_t = 1620  # Rohre
+d_t = 0.04  # m Rohrdurchmesser
+sn_param = 3.44  #2.05  # dimensionslos
+ntu_param = 1.82  # Parameter
+verhaeltnis_co_co2 = 0.74   # Parameter
+l_r = 7.  # m Rohrlänge
+# Betriebsbedingungen
+t0 = 220 + 273.15  # K
+p0 = 50  # bar
+# Wärmetauschparameter
+u = 118.44  # W/m^2/K
+# Kühlmitteleigenschaften (VDI-WA)
+t_r = (240 - 230) / (33.467 - 27.968) * (
+    29 - 33.467) + 240 + 273.15  # K
+p_sat = 29  # bar
+h_sat_l = (1037.5 - 990.21) / (33.467 - 27.968) * (
+    29 - 33.467) + 1037.5  # kJ/kg
+h_sat_v = (2803.1 - 2803.0) / (33.467 - 27.968) * (
+    29 - 33.467) + 2803.1  # kJ/kg
+delta_h_sat = (h_sat_v - h_sat_l)
+# Zulaufbedingungen
+n_i_0 = np.array([
+    1171.15, 1178.85, 3058.84,
+    100.65, 0, 0,
+    0, 0, 0,
+    0
+]) / 60**2 * 1000  # mol/s
+
+
+z_l_v.use_pr_eos()
 mm = np.array([
     28.01, 44.01, 2.016,
     18.015, 32.042, 16.043,
     28.014, 46.069, 60.096,
     60.053
 ], dtype=float)  # g/mol
-# Parameter der Gleichung aus dem VDI-Wärmeatlas
+# Parameter der Wärmekapazität-Gleichung aus dem VDI-Wärmeatlas
 cp_konstanten = np.zeros([len(namen), 7])
 cp_konstanten_text = [
     '407,9796 3,5028 2,8524 –2,3018 32,9055 –100,1815 106,1141',
@@ -38,7 +74,8 @@ for i in range(len(namen)):
             '–', '-').replace(',', '.').split(' '),
         dtype=float)
 
-# Lennard-Jones Parameter Prausnitz Anhang B
+# Quelle: The properties of Gases and Liquids Poling Prausnitz
+# Lennard-Jones Parameter Anhang B
 # epsilon / kB
 l_j_epsilon_d_k = np.array([
     91.7, 195.2, 59.7,
@@ -54,8 +91,6 @@ l_j_sigma = np.array([
     4.936
 ])  # Angstrom
 # T* = k T / epsilon
-
-# Quelle: The properties of Gases and Liquids
 h_298 = np.array([
     -110.53, -393.51, 0,
     -241.81, -200.94, -74.52,
@@ -272,108 +307,67 @@ def df_dt(y, _):
     result[-2] = dp_dz
     result[-1] = dt_dz
     return result
-# Lösung der ChP-Übung. Reaktor angepasst.
-# Katalysator
-rho_b = 1190  # kg Kat/m^3 Feststoff
-phi = 0.3  # m^3 Gas/m^3 Feststoff
-m_kat = 1190 * (1 - 0.3) * np.pi / 4 * (
-    0.03)**2 * 7  # kg Kat (pro Rohr)
-# Partikeldurchmesser wählen, damit
-# Delta P gesamt=-3bar, denn dies ist der Parameter
-d_p = 0.0054 / 0.0054 * 0.16232576224693065  # m Feststoff
-# Reaktor
-n_t = 1620  # Rohre
-d_t = 0.04  # m Rohrdurchmesser
-sn_param = 3.44  #2.05  # dimensionslos
-ntu_param = 1.82  # Parameter
-verhaeltnis_co_co2 = 0.74   # Parameter
-l_r = 7.  # m Rohrlänge
-# Betriebsbedingungen
-t0 = 220 + 273.15  # K
-p0 = 50  # bar
-# Wärmetauschparameter
-u = 118.44  # W/m^2/K
-# Kühlmitteleigenschaften (VDI-WA)
-t_r = (240 - 230) / (33.467 - 27.968) * (
-    29 - 33.467) + 240 + 273.15  # K
-p_sat = 29  # bar
-h_sat_l = (1037.5 - 990.21) / (33.467 - 27.968) * (
-    29 - 33.467) + 1037.5  # kJ/kg
-h_sat_v = (2803.1 - 2803.0) / (33.467 - 27.968) * (
-    29 - 33.467) + 2803.1  # kJ/kg
-delta_h_sat = (h_sat_v - h_sat_l)
 
-n_i_0 = np.array([
-    1171.15, 1178.85, 3058.84,
-    100.65, 0, 0,
-    0, 0, 0,
-    0
-]) / 60**2 * 1000  # mol/s
+# Init.
+n_i_1 = n_i_0  # mol/s
+p1 = p0
+t1 = t0
 
+z_d_l_r = np.linspace(0, 1, 100)
+dlr = 1 / (len(z_d_l_r) - 1) * l_r  # m
+y_0 = np.empty([len(namen) + 1 + 1])
 
-def solve_n_t_n_h2(n_dot_i):
-    global u_s, mm, d_p, l_r, phi, t_r, rho_b, u, n_i_0
-    m_dot_i = n_dot_i * mm / 1000. # kg/s
+for i in range(26):
+    n_i_1_n_m_1 = n_i_1
+    m_dot_i = n_i_1 * mm / 1000.  # kg/s
     m_dot = sum(m_dot_i)
-    y_i0 = m_dot_i / mm / sum(m_dot_i / mm)
-    # Anzahl an Übertragungseinheiten (NTU)
-    mm_m_0 = sum(y_i0 * mm) * 1 / 1000.  # kg/mol
-    cp_m_0 = sum(y_i0 * cp_ig_durch_r(t0) * 8.3145)  # J/mol/K
-    cp_g_0 = cp_m_0 / mm_m_0  # J/kg/K
-    n_t = ntu_param / (2 * np.pi * d_t / 2 * l_r * u) * (
-        m_dot * cp_g_0
-    )
+    y_i1 = m_dot_i / mm / sum(m_dot_i / mm)
     # Berechnung der Parameter
+    mm_m_1 = sum(y_i1 * mm) * 1 / 1000.  # kg/mol
+    cp_m_1 = sum(y_i1 * cp_ig_durch_r(t1) * 8.3145)  # J/mol/K
+    cp_g_1 = cp_m_1 / mm_m_1  # J/kg/K
+    n_t = ntu_param / (2 * np.pi * d_t / 2 * l_r * u) * (
+            m_dot * cp_g_1
+    )
     u_s = m_dot / (np.pi / 4 * d_t ** 2) / n_t  # kg/m^2/s
-    ntu = l_r * 1 / (u_s * cp_g_0) * 2 * u / (d_t / 2)
+    ntu = l_r * 1 / (u_s * cp_g_1) * 2 * u / (d_t / 2)
+    # m * m^2 s/kg * kg K /J * J/s/m^2/K *1/m = [dimensionslose Einheiten]
 
-    y_0 = np.empty([len(y_i0) + 1 + 1])
-    y_0[:-2] = y_i0
-    y_0[-2] = p0
-    y_0[-1] = t0
-    z_d_l_r = np.linspace(0, 1, 100)
-    dlr = 1 / (len(z_d_l_r) - 1) * l_r  # m
+    y_0[:-2] = y_i1
+    y_0[-2] = p1
+    y_0[-1] = t1
 
-    def opt_dp():
-        # Partikeldurchmesser nach Parameter Delta_P=3bar optimisieren.
-        # Es wird direkt Fixpunkt-Iteration angewendet, nach der Form der Ergun Gl.
-        # D_p{n+1} = D_p{n} * int(1/D_p{n}*f(D_p{n}) dz) / -3bar
-        global d_p
-        for i in range(5):
-            soln_dp = odeint(df_dt, y_0, z_d_l_r)
-            dp_dz = (soln_dp[-1, -2] - soln_dp[0, -2]).item()
-            d_p = dp_dz * d_p / -3.0
+    # Partikeldurchmesser nach Parameter Delta_P=3bar optimisieren.
+    # Es wird direkt Fixpunkt-Iteration angewendet, nach der Form der Ergun Gl.
+    # D_p{n+1} = D_p{n} * int(1/D_p{n}*f(D_p{n}) dz) / -3bar
+    for j in range(5):
+        soln_dp = odeint(df_dt, y_0, z_d_l_r)
+        dp_dz = (soln_dp[-1, -2] - soln_dp[0, -2]).item()
+        d_p = dp_dz * d_p / -3.0
 
-    opt_dp()
     soln = odeint(df_dt, y_0, z_d_l_r)
-    y_i_soln = soln[:, :len(y_i0)]
+    y_i_soln = soln[:, :len(y_i1)]
     p_soln = soln[:, -2]
     t_soln = soln[:, -1]
 
-    n_i_soln = np.zeros_like(y_i_soln)
-    m_i_soln = np.zeros_like(y_i_soln)
-    n_soln = np.zeros_like(z_d_l_r)
-    mm_m_soln = np.zeros_like(z_d_l_r)
-    m_soln = np.zeros_like(z_d_l_r)
-    v_soln = np.zeros_like(z_d_l_r)
+    mm_m_soln = np.sum(y_i_soln * mm * 1 / 1000., axis=1)  # kg/mol
+    n_soln = u_s * n_t * (np.pi / 4 * d_t ** 2) / mm_m_soln
+    # kg/s/m^2 * m^2 / kg*mol = mol/s
+    m_soln = u_s * n_t * (np.pi / 4 * d_t ** 2)  # kg/s
+    n_i_soln = (y_i_soln.T * n_soln).T  # mol/s
+    m_i_soln = n_i_soln * (mm * 1 / 1000.) * 60**2  # kg/h
+    # mol/h * g/mol * 1kg/1000g = 1/1000 kg/h
+    v_soln = n_soln * 8.3145 * 1e-5 * t_soln / p_soln
+    # mol/s * 8,3145Pa m^3/mol/K * 1e-5bar/Pa * K/bar = m^3/s
+
     m_km_soln = np.zeros_like(z_d_l_r)
-    ums_soln = np.zeros_like(z_d_l_r)
-    for i in range(len(z_d_l_r)):
-        mm_m_soln[i] = sum(y_i_soln[i] * mm * 1 / 1000.)  # kg/mol
-        n_soln[i] = u_s * n_t * (np.pi / 4 * d_t**2) / mm_m_soln[i]
-        # kg/s/m^2 * m^2 / kg*mol = mol/s
-        m_soln[i] = u_s * n_t * (np.pi / 4 * d_t**2)  # kg/s
-        n_i_soln[i] = n_soln[i] * y_i_soln[i]  # mol/s
-        m_i_soln[i] = n_soln[i] * y_i_soln[i] * (mm * 1 / 1000.)
-        # mol/h * g/mol * 1kg/1000g
-        v_soln[i] = n_soln[i] * 8.3145 * 1e-5 * t_soln[i] / p_soln[i]
-        ums_soln[i] = (n_i_soln[0][namen.index('CO')] -
-                       n_i_soln[i][namen.index('CO')]
-                       ) / n_i_soln[0][namen.index('CO')]
-        m_km_soln[i] = u * (2 / (d_t / 2)) * (t_soln[i] - t_r) * (
-            np.pi / 4 * d_t**2) / delta_h_sat * n_t * 60**2 / 1000.
-        # J/s/K/m^2 * 1/m * K * m^2 * kg/kJ * 60^2s/h * 1kJ/(1000J) = kg/h/m
-    n_i_2 = n_i_soln[-1] # mol/s
+    ums_soln = (n_i_soln[0, namen.index('CO')] -
+                n_i_soln[:, namen.index('CO')]
+                ) / n_i_soln[0, namen.index('CO')]
+    m_km_soln = u * (2 / (d_t / 2)) * (t_soln - t_r) * (
+            np.pi / 4 * d_t ** 2) / delta_h_sat * n_t * 60 ** 2 / 1000.
+    # J/s/K/m^2 * 1/m * K * m^2 * kg/kJ * 60^2s/h * 1kJ/(1000J) = kg/h/m
+    n_i_2 = n_i_soln[-1]  # mol/s
 
     n_0 = sum(n_i_0)  # mol/h
     n_2 = sum(n_i_2)  # mol/h
@@ -402,31 +396,22 @@ def solve_n_t_n_h2(n_dot_i):
     y_co2_1 = y_i_1[namen.index('CO2')]
 
     n_co_zus = n_1 * (
-        verhaeltnis_co_co2 * y_co2_1 - y_co_1
+            verhaeltnis_co_co2 * y_co2_1 - y_co_1
     )
 
     n_h2_zus = v_f * n_2 * (
-        sn_param * (y_co2_r + y_co_r) +
-        y_co2_r - y_h2_r
+            sn_param * (y_co2_r + y_co_r) +
+            y_co2_r - y_h2_r
     ) + n_0 * (
-        sn_param * (y_co2_0 + y_co_0) +
-        y_co2_0 - y_h2_0
-    )
+                       sn_param * (y_co2_0 + y_co_0) +
+                       y_co2_0 - y_h2_0
+               )
 
     n_i_1[namen.index('H2')] = \
         n_i_1[namen.index('H2')] + n_h2_zus
     n_i_1[namen.index('CO')] = \
         n_i_1[namen.index('CO')] + n_co_zus
 
-    return n_i_1, n_i_2, n_h2_zus, n_co_zus, \
-           n_t, v_f, y_i, x_i, soln
-
-
-n_i_1 = n_i_0  # mol/s
-for i in range(25):
-    n_i_1_n_m_1 = n_i_1
-    n_i_1, n_i_2,  n_h2_zus, n_co_zus, \
-        n_t, v_f, y_i, x_i, soln = solve_n_t_n_h2(n_i_1)
     n_i_r = v_f * sum(n_i_2) * y_i
     mm_0 = sum(n_i_0 / sum(n_i_0) * mm) / 1000.  # kg/mol
     mm_1 = sum(n_i_1 / sum(n_i_1) * mm) / 1000.  # kg/mol
@@ -443,64 +428,19 @@ for i in range(25):
           ' Änderung: '+
           '{:5.4g}'.format(np.sqrt(aend**2)) + '%\t')
 
-m_dot_i = n_i_1 * mm / 1000.  # kg/s
-m_dot = sum(m_dot_i)
-m_dot = m_dot
-y_i0 = m_dot_i / mm / sum(m_dot_i / mm)
-
-# Berechnung der Parameter
-u_s = m_dot / (np.pi / 4 * d_t**2) / n_t  # kg/m^2/s
-mm_m_0 = sum(y_i0 * mm) * 1 / 1000.  # kg/mol
-cp_m_0 = sum(y_i0 * cp_ig_durch_r(t0) * 8.3145)  # J/mol/K
-cp_g_0 = cp_m_0 / mm_m_0  # J/kg/K
-# Anzahl an Übertragungseinheiten (NTU)
-ntu = l_r * 1 / (u_s * cp_g_0) * 2 * u / (d_t / 2)
-# m * m^2 s/kg * kg K /J * J/s/m^2/K *1/m = [dimensionslose Einheiten]
-# Stöchiometrische Zahl
-sn = (y_i0[namen.index('H2')] - y_i0[namen.index('CO2')]) / (
-    y_i0[namen.index('CO2')] + y_i0[namen.index('CO')]
-)
-verhaeltnis_co_co2 = y_i0[namen.index('CO')] / y_i0[namen.index('CO2')]
-
-y_0 = np.empty([len(y_i0) + 1 + 1])
-y_0[:-2] = y_i0
-y_0[-2] = p0
-y_0[-1] = t0
-z_d_l_r = np.linspace(0, 1, 100)
-dlr = 1 / (len(z_d_l_r) - 1) * l_r  # m
-
-y_i_soln = soln[:, :len(y_i0)]
-p_soln = soln[:, -2]
-t_soln = soln[:, -1]
-
-n_i_soln = np.zeros_like(y_i_soln)
-m_i_soln = np.zeros_like(y_i_soln)
-n_soln = np.zeros_like(z_d_l_r)
-mm_m_soln = np.zeros_like(z_d_l_r)
-m_soln = np.zeros_like(z_d_l_r)
-v_soln = np.zeros_like(z_d_l_r)
-v_soln_real = np.zeros_like(z_d_l_r)
-m_km_soln = np.zeros_like(z_d_l_r)
-ums_soln = np.zeros_like(z_d_l_r)
+v_soln_real = np.empty_like(v_soln)
 for i in range(len(z_d_l_r)):
-    mm_m_soln[i] = sum(y_i_soln[i] * mm * 1 / 1000.)  # kg/mol
-    n_soln[i] = u_s * n_t * 60**2 * (np.pi / 4 * d_t**2) / mm_m_soln[i]
-    # kg/s/m^2 * 60^2s/h * m^2 / kg*mol = mol/h
-    m_soln[i] = u_s * n_t * 60**2 * (np.pi / 4 * d_t**2)  # kg/h
-    n_i_soln[i] = n_soln[i] * y_i_soln[i]  # mol/h
-    m_i_soln[i] = n_soln[i] * y_i_soln[i] * (mm * 1 / 1000.)
-    # mol/h * g/mol * 1kg/1000g
-    v_soln[i] = n_soln[i] * 8.3145 * 1e-5 * t_soln[i] / p_soln[i]
-    z_realgas_f = z_l_v.z_non_sat(t_soln[i], p_soln[i], y_i_soln[i],
-                                  tc, pc, omega_af)['z']
+    z_realgas_f = z_l_v.z_non_sat(
+        t_soln[i], p_soln[i], y_i_soln[i],
+        tc, pc, omega_af)['z']
     v_soln_real[i] = v_soln[i] * z_realgas_f
-    ums_soln[i] = (n_i_soln[0][namen.index('CO')] -
-                   n_i_soln[i][namen.index('CO')]
-                   ) / n_i_soln[0][namen.index('CO')]
-    m_km_soln[i] = u * (2 / (d_t / 2)) * (t_soln[i] - t_r) * (
-        np.pi / 4 * d_t**2) / delta_h_sat * n_t * 60**2 / 1000.
-    # J/s/K/m^2 * 1/m * K * m^2 * kg/kJ * 60^2s/h * 1kJ/(1000J) = kg/h/m
 
+# Tatsächliche stöchiometrische Zahl
+sn = (y_i1[namen.index('H2')] - y_i1[namen.index('CO2')]) / (
+        y_i1[namen.index('CO2')] + y_i1[namen.index('CO')]
+)
+verhaeltnis_h2_co2 = y_i1[namen.index('H2')] / y_i1[namen.index('CO2')]
+verhaeltnis_co_co2 = y_i1[namen.index('CO')] / y_i1[namen.index('CO2')]
 
 # Energie-Analyse
 t_m_1 = 1 / 2 * (36696 / 8.3145 - np.sqrt(36696 /
@@ -519,7 +459,7 @@ vars_2 = [
     ['n_T', n_t, ''],
     ['U', u, r'\frac{W}{m^2\cdot K}'],
     ['\dot m', m_dot, 'kg/s'],
-    ['C_{p_g}', cp_g_0 / 1000., r'\frac{kJ}{kg\cdot K}'],
+    ['C_{p_g}', cp_g_1 / 1000., r'\frac{kJ}{kg\cdot K}'],
     ['NTU', ntu, ''],
 ]
 vars_3 = [
@@ -543,7 +483,7 @@ text_3 = '\n'.join(['$' + ' = '.join([line[0], '{:g}'.format(line[1]) +
 
 fig = plt.figure(1)
 fig.suptitle('Lösung der Zusammensetzung ' +
-             '{:g}'.format(round(verhaeltnis_co_co2.item(), 2)) +
+             '{:g}'.format(round(verhaeltnis_h2_co2.item(), 2)) +
              ':1:' +
              '{:g}'.format(round(verhaeltnis_co_co2.item(), 2)) +
              '(H2:CO2:CO)')
@@ -589,6 +529,8 @@ ax5.set_xlabel('Reduzierte Position, $z/L_R$')
 ax5.plot(z_d_l_r, p_soln, label='p / bar')
 plt.tight_layout(rect=[0, 0, 0.95, 0.75])
 
+locale.setlocale(locale.LC_ALL, '')
+
 print('')
 print('=== GAS AUS REAKTOR ===')
 print('SN= ' + str(sn))
@@ -602,7 +544,7 @@ print('T= ' + str(t_soln[-1] - 273.15) + '°C')
 print('P= ' + str(p_soln[-1]) + 'bar')
 print('V0= ' + str(v_soln[0]) + 'm^3/h')
 print('V= ' + str(v_soln[-1]) + 'm^3/h')
-print('Cpg= ' + str(cp_g_0) + 'J/kg/K')
+print('Cpg= ' + str(cp_g_1) + 'J/kg/K')
 print('Partikeldurchmesser für (DeltaP= ' +
       '{:g}'.format(p_soln[0] - p_soln[-1]) + ' bar): ' +
       '{:g}'.format(d_p) + ' m'
