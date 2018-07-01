@@ -44,15 +44,14 @@ n_i_0 = np.array([
     0, 0, 0,
     0
 ]) / 60**2 * 1000  # mol/s
-
-
-z_l_v.use_pr_eos()
 mm = np.array([
     28.01, 44.01, 2.016,
     18.015, 32.042, 16.043,
     28.014, 46.069, 60.096,
     60.053
 ], dtype=float)  # g/mol
+
+z_l_v.use_pr_eos()
 # Parameter der Wärmekapazität-Gleichung aus dem VDI-Wärmeatlas
 cp_konstanten = np.zeros([len(namen), 7])
 cp_konstanten_text = [
@@ -271,7 +270,7 @@ def r_i(t, p_i):
     return np.array([r_meoh, 0., r_rwgs])
 
 
-def df_dt(y, _, u_s, d_p):
+def df_dt(y, _, u_s, d_p, l_r):
     # FIXME: Normalize y_i on each iteration.
     # Inerts should not change at all, but there is a 0.00056% increase already
     # on the first time step. Test:
@@ -309,33 +308,36 @@ def df_dt(y, _, u_s, d_p):
     return result
 
 
-def profile(n_i_1_ein, d_p_ein):
+def profile(n_i_1_ein, d_p_ein, optimisieren_nach='n_t'):
     m_dot_i_ein = n_i_1_ein * mm / 1000.  # kg/s
     m_dot_ein = sum(m_dot_i_ein)
     y_i1_ein = m_dot_i_ein / mm / sum(m_dot_i_ein / mm)
     # Berechnung der Parameter
-    mm_m_1 = sum(y_i1_ein * mm) * 1 / 1000.  # kg/mol
-    cp_m_1 = sum(y_i1_ein * cp_ig_durch_r(t1) * 8.3145)  # J/mol/K
-    cp_g_1 = cp_m_1 / mm_m_1  # J/kg/K
-    n_t_aus = ntu_param / (2 * np.pi * d_t / 2 * l_r * u) * (
-        m_dot_ein * cp_g_1
-    )
-    u_s_neu = m_dot_ein / (np.pi / 4 * d_t ** 2) / n_t_aus  # kg/m^2/s
+    mm_m_1_ein = sum(y_i1_ein * mm) * 1 / 1000.  # kg/mol
+    cp_m_1_ein = sum(y_i1_ein * cp_ig_durch_r(t1) * 8.3145)  # J/mol/K
+    cp_g_1_ein = cp_m_1_ein / mm_m_1_ein  # J/kg/K
+    if optimisieren_nach == 'n_t':
+        # Anzahl an Rohre anpassen
+        n_t_aus = ntu_param / (2 * np.pi * d_t / 2 * l_r * u) * (
+            m_dot_ein * cp_g_1_ein
+        )
+        l_r_aus = l_r
+    elif optimisieren_nach == 'l_r_n_t':
+        # Anzahl an Rohre und Länge anpassen
+        verhaeltnis = 1 / (l_r * n_t) * (
+                ntu_param * m_dot_ein * cp_g_1_ein / (
+                2 * np.pi * d_t / 2 * u)
+        )
+        l_r_aus = np.sqrt(verhaeltnis) * l_r
+        n_t_aus = np.sqrt(verhaeltnis) * n_t
 
+    u_s_neu = m_dot_ein / (np.pi / 4 * d_t ** 2) / n_t_aus  # kg/m^2/s
+    y_0 = np.empty([len(namen) + 1 + 1])
     y_0[:-2] = y_i1_ein
     y_0[-2] = p1
     y_0[-1] = t1
 
-    # Partikeldurchmesser nach Parameter Delta_P=3bar optimisieren.
-    # Es wird direkt Fixpunkt-Iteration angewendet, nach der Form der Ergun Gl.
-    # D_p{n+1} = D_p{n} * int(1/D_p{n}*f(D_p{n}) dz) / -3bar
-    for j in range(1):
-        soln_dp = odeint(lambda y, z0: df_dt(y, z0, u_s_neu, d_p_ein),
-                         y_0, z_d_l_r)
-        deltap_deltaz = (soln_dp[-1][-2] - soln_dp[0][-2]).item()
-        d_p_aus = deltap_deltaz * d_p_ein / -3.0
-
-    soln = odeint(lambda y, z0: df_dt(y, z0, u_s_neu, d_p_aus),
+    soln = odeint(lambda y, z0: df_dt(y, z0, u_s_neu, d_p_ein, l_r_aus),
                   y_0, z_d_l_r)
     y_i_soln = soln[:, :len(y_i1_ein)]
     p_soln = soln[:, -2]
@@ -391,43 +393,60 @@ def profile(n_i_1_ein, d_p_ein):
     n_i_1_aus[namen.index('CO')] = \
         n_i_1_aus[namen.index('CO')] + n_co_zus_aus
 
-    n_i_r = v_f_flash * sum(n_i_2) * y_i_flash
+    # Partikeldurchmesser nach Parameter Delta_P=3bar optimisieren.
+    # Es wird direkt Fixpunkt-Iteration angewendet, nach der Form der Ergun Gl.
+    # D_p{n+1} = D_p{n} * int(1/D_p{n}*f(D_p{n}) dz) / -3bar
+    deltap_deltaz = (soln[-1][-2] - soln[0][-2]).item()
+    d_p_aus = deltap_deltaz * d_p_ein / -3.0
+
+    n_i_r_aus = v_f_flash * sum(n_i_2) * y_i_flash
     mm_0 = sum(n_i_0 / sum(n_i_0) * mm) / 1000.  # kg/mol
     mm_1 = sum(n_i_1_aus / sum(n_i_1_aus) * mm) / 1000.  # kg/mol
     mm_2 = sum(n_i_2 / sum(n_i_2) * mm) / 1000.  # kg/mol
-    mm_r = sum(n_i_r / sum(n_i_r) * mm) / 1000.  # kg/mol
-    bilanz = sum(n_i_1_aus * mm_1) - sum(n_i_r * mm_r) \
-             - sum(n_i_0 * mm_0) \
-             - n_h2_zus_aus * mm[namen.index('H2')] / 1000. \
-             - n_co_zus_aus * mm[namen.index('CO')] / 1000.
+    mm_r = sum(n_i_r_aus / sum(n_i_r_aus) * mm) / 1000.  # kg/mol
+    bilanz = sum(n_i_1_aus * mm_1) - sum(n_i_r_aus * mm_r) \
+        - sum(n_i_0 * mm_0) \
+        - n_h2_zus_aus * mm[namen.index('H2')] / 1000. \
+        - n_co_zus_aus * mm[namen.index('CO')] / 1000.
     aend = sum(n_i_1_aus - n_i_1_ein) / sum(n_i_1_ein) * 100
     umsatz = 1 - n_i_2[namen.index('CO')] / n_i_1_aus[namen.index('CO')]
     print('It.  ' + '{:2d}'.format(i) + ', Bilanz: ' +
           '{:g}'.format(np.sqrt(bilanz.dot(bilanz))) + '\t' +
-          ' Änderung: ' +
+          ' Änderung(n_1): ' +
           '{:5.4g}'.format(np.sqrt(aend**2)) + '%\t' +
           'Umsatz: ' +
-          '{:g}'.format(umsatz))
-    return n_i_1_aus, y_i1_ein, n_t_aus, d_p_aus, u_s_neu, cp_g_1, \
-        m_dot_ein, t_soln, p_soln, n_soln, n_i_soln, y_i_soln, \
-        n_i_r, n_h2_zus_aus, n_co_zus_aus
+          '{:g}'.format(umsatz) + '\t' + 'd_p= ' +
+          '{:g}'.format(d_p_aus) + 'm')
+    return n_i_1_aus, y_i1_ein, n_t_aus, l_r_aus, d_p_aus, u_s_neu, \
+        cp_g_1_ein, m_dot_ein, t_soln, p_soln, \
+        n_soln, n_i_soln, y_i_soln, \
+        n_i_r_aus, n_h2_zus_aus, n_co_zus_aus
 
 
 # Init.
+m_dot_i_0 = n_i_0 * mm / 1000.  # kg/s
+m_dot_0 = sum(m_dot_i_0)
+y_i0 = m_dot_i_0 / mm / sum(m_dot_i_0 / mm)
+# Berechnung der Parameter
+mm_m_0 = sum(y_i0 * mm) * 1 / 1000.  # kg/mol
+cp_m_0 = sum(y_i0 * cp_ig_durch_r(t0) * 8.3145)  # J/mol/K
+cp_g_0 = cp_m_0 / mm_m_0  # J/kg/K
+
 n_i_1 = n_i_0  # mol/s
 p1 = p0
 t1 = t0
 
 z_d_l_r = np.linspace(0, 1, 100)
 dlr = 1 / (len(z_d_l_r) - 1) * l_r  # m
-y_0 = np.empty([len(namen) + 1 + 1])
 
 for i in range(25):
-    n_i_1, y_i1, n_t, d_p, u_s, cp_g, \
+    n_i_1, y_i1, n_t, l_r, d_p, u_s, cp_g_1, \
         m_dot, t_z, p_z, n_z, n_i_z, \
-        y_i_z, n_i_r, n_h2_zus, n_co_zus = profile(n_i_1, n_t)
+        y_i_z, n_i_r, n_h2_zus, n_co_zus = profile(
+            n_i_1, d_p, optimisieren_nach='l_r_n_t'
+        )
 
-ntu = l_r * 1 / (u_s * cp_g) * 2 * u / (d_t / 2)
+ntu = l_r * 1 / (u_s * cp_g_1) * 2 * u / (d_t / 2)
 # m * m^2 s/kg * kg K /J * J/s/m^2/K *1/m = [dimensionslose Einheiten]
 m_i_z = n_i_z * (mm * 1 / 1000.) * 60**2  # kg/h
 # mol/h * g/mol * 1kg/1000g = 1/1000 kg/h
@@ -435,7 +454,7 @@ m_z = u_s * n_t * (np.pi / 4 * d_t ** 2)  # kg/s
 v_z = n_z * 8.3145 * 1e-5 * t_z / p_z
 # mol/s * 8,3145Pa m^3/mol/K * 1e-5bar/Pa * K/bar = m^3/s
 ums_z = 1 - n_i_z[:, namen.index('CO')] / \
-        n_i_z[0, namen.index('CO')]
+    n_i_z[0, namen.index('CO')]
 m_km_z = u * (2 / (d_t / 2)) * (t_z - t_r) * (
     np.pi / 4 * d_t ** 2) / delta_h_sat * n_t * 60 ** 2 / 1000.
 # J/s/K/m^2 * 1/m * K * m^2 * kg/kJ * 60^2s/h * 1kJ/(1000J) = kg/h/m
@@ -470,7 +489,7 @@ vars_2 = [
     ['n_T', n_t, ''],
     ['U', u, r'\frac{W}{m^2\cdot K}'],
     ['\dot m', m_dot, 'kg/s'],
-    ['C_{p_g}', cp_g / 1000., r'\frac{kJ}{kg\cdot K}'],
+    ['C_{p_g}', cp_g_1 / 1000., r'\frac{kJ}{kg\cdot K}'],
     ['NTU', ntu, ''],
 ]
 vars_3 = [
@@ -552,7 +571,7 @@ print('T= ' + str(t_z[-1] - 273.15) + '°C')
 print('P= ' + str(p_z[-1]) + 'bar')
 print('V0= ' + str(v_z[0]) + 'm^3/h')
 print('V= ' + str(v_z[-1]) + 'm^3/h')
-print('Cpg= ' + str(cp_g) + 'J/kg/K')
+print('Cpg= ' + str(cp_g_1) + 'J/kg/K')
 print('Partikeldurchmesser für (DeltaP= ' +
       '{:g}'.format(p_z[0] - p_z[-1]) + ' bar): ' +
       '{:g}'.format(d_p) + ' m'
