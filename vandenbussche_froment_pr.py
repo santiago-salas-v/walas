@@ -2,8 +2,15 @@ import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib import lines
 from scipy.integrate import odeint
+from scipy import optimize
 import z_l_v
 import locale
+
+# Parameter
+sn_param = 4.6  # 2.05  # dimensionslos
+ntu_param = 3.09  # Parameter
+verhaeltnis_co_co2 = 0.71   # Parameter
+delta_p_param = -3.0  # bar
 
 # Lösung der ChP-Übung. Reaktor angepasst.
 namen = ['CO', 'CO2', 'H2', 'H2O', 'MeOH',
@@ -12,16 +19,13 @@ namen = ['CO', 'CO2', 'H2', 'H2O', 'MeOH',
 rho_b = 1190  # kg Kat/m^3 Feststoff
 phi = 0.3  # m^3 Gas/m^3 Feststoff
 m_kat = 1190 * (1 - 0.3) * np.pi / 4 * (
-    0.03)**2 * 7  # kg Kat (pro Rohr)
+    0.04)**2 * 7  # kg Kat (pro Rohr)
 # Partikeldurchmesser wählen, damit
 # Delta P gesamt=-3bar, denn dies ist der Parameter
-d_p = 0.0054 / 0.0054 * 0.16232576224693065  # m Feststoff
+d_p = 0.0054 # m Feststoff
 # Reaktor
 n_t = 1620  # Rohre
 d_t = 0.04  # m Rohrdurchmesser
-sn_param = 4.6  # 2.05  # dimensionslos
-ntu_param = 3.09  # Parameter
-verhaeltnis_co_co2 = 0.71   # Parameter
 l_r = 7.  # m Rohrlänge
 # Betriebsbedingungen
 t0 = 220 + 273.15  # K
@@ -309,7 +313,9 @@ def df_dt(y, _, u_s, d_p):
     return result
 
 
-def profile(n_i_1_ein, d_p_ein):
+def profile(n_i_1_ein_d_p_ein, ausfuehrlich=True):
+    n_i_1_ein = n_i_1_ein_d_p_ein[:-1]
+    d_p_ein = n_i_1_ein_d_p_ein[-1]
     m_dot_i_ein = n_i_1_ein * mm / 1000.  # kg/s
     m_dot_ein = sum(m_dot_i_ein)
     y_i1_ein = m_dot_i_ein / mm / sum(m_dot_i_ein / mm)
@@ -320,8 +326,9 @@ def profile(n_i_1_ein, d_p_ein):
     n_t_aus = ntu_param / (2 * np.pi * d_t / 2 * l_r * u) * (
         m_dot_ein * cp_g_1
     )
-    u_s_neu = m_dot_ein / (np.pi / 4 * d_t ** 2) / n_t_aus  # kg/m^2/s
+    u_s_aus = m_dot_ein / (np.pi / 4 * d_t ** 2) / n_t_aus  # kg/m^2/s
 
+    y_0 = np.empty([len(namen) + 1 + 1])
     y_0[:-2] = y_i1_ein
     y_0[-2] = p1
     y_0[-1] = t1
@@ -329,20 +336,21 @@ def profile(n_i_1_ein, d_p_ein):
     # Partikeldurchmesser nach Parameter Delta_P=3bar optimisieren.
     # Es wird direkt Fixpunkt-Iteration angewendet, nach der Form der Ergun Gl.
     # D_p{n+1} = D_p{n} * int(1/D_p{n}*f(D_p{n}) dz) / -3bar
-    for j in range(1):
-        soln_dp = odeint(lambda y, z0: df_dt(y, z0, u_s_neu, d_p_ein),
-                         y_0, z_d_l_r)
-        deltap_deltaz = (soln_dp[-1][-2] - soln_dp[0][-2]).item()
-        d_p_aus = deltap_deltaz * d_p_ein / -3.0
+    #for j in range(1):
+    #    print(d_p_ein)
+    #    soln_dp = odeint(lambda y, z0: df_dt(y, z0, u_s_aus, d_p_ein),
+    #                     y_0, z_d_l_r)
+    #    deltap_deltaz = (soln_dp[-1][-2] - soln_dp[0][-2]).item()
+    #    d_p_aus = deltap_deltaz * d_p_ein / delta_p_param
 
-    soln = odeint(lambda y, z0: df_dt(y, z0, u_s_neu, d_p_aus),
+    soln = odeint(lambda y, z0: df_dt(y, z0, u_s_aus, d_p_ein),
                   y_0, z_d_l_r)
     y_i_soln = soln[:, :len(y_i1_ein)]
     p_soln = soln[:, -2]
     t_soln = soln[:, -1]
 
     mm_m_soln = np.sum(y_i_soln * mm * 1 / 1000., axis=1)  # kg/mol
-    n_soln = u_s_neu * n_t_aus * (np.pi / 4 * d_t ** 2) / mm_m_soln
+    n_soln = u_s_aus * n_t_aus * (np.pi / 4 * d_t ** 2) / mm_m_soln
     # kg/s/m^2 * m^2 / kg*mol = mol/s
     n_i_soln = (y_i_soln.T * n_soln).T  # mol/s
 
@@ -407,10 +415,18 @@ def profile(n_i_1_ein, d_p_ein):
           ' Änderung: ' +
           '{:5.4g}'.format(np.sqrt(aend**2)) + '%\t' +
           'Umsatz: ' +
-          '{:g}'.format(umsatz))
-    return n_i_1_aus, y_i1_ein, n_t_aus, d_p_aus, u_s_neu, cp_g_1, \
-        m_dot_ein, t_soln, p_soln, n_soln, n_i_soln, y_i_soln, \
-        n_i_r, n_h2_zus_aus, n_co_zus_aus
+          '{:g}'.format(umsatz) + '\t' 
+          'd_p: ' + '{:g}'.format(d_p_ein) + '\t')
+    if ausfuehrlich:
+        return n_i_1_aus, y_i1_ein, n_t_aus, d_p_aus, u_s_aus, cp_g_1, \
+            m_dot_ein, t_soln, p_soln, n_soln, n_i_soln, y_i_soln, \
+            n_i_r, n_h2_zus_aus, n_co_zus_aus
+    else:
+        result = np.zeros(len(n_i_1_ein)+1)
+        result[:-1] = n_i_1_ein - n_i_1_aus
+        result[-1] = 1 - (soln[-1][-2] -
+                      soln[0][-2]).item() / delta_p_param
+        return result
 
 
 # Init.
@@ -420,12 +436,17 @@ t1 = t0
 
 z_d_l_r = np.linspace(0, 1, 100)
 dlr = 1 / (len(z_d_l_r) - 1) * l_r  # m
-y_0 = np.empty([len(namen) + 1 + 1])
+x_0 = np.empty(len(n_i_1)+1)
+x_0[:-1] = n_i_1
+x_0[-1] = d_p
+soln = optimize.root(lambda n_i_1_var_d_p_var:
+                     profile(n_i_1_var_d_p_var,
+                             ausfuehrlich=False), x0=x_0)
 
-for i in range(25):
-    n_i_1, y_i1, n_t, d_p, u_s, cp_g, \
-        m_dot, t_z, p_z, n_z, n_i_z, \
-        y_i_z, n_i_r, n_h2_zus, n_co_zus = profile(n_i_1, n_t)
+#for i in range(25):
+#    n_i_1, y_i1, n_t, d_p, u_s, cp_g, \
+#        m_dot, t_z, p_z, n_z, n_i_z, \
+#        y_i_z, n_i_r, n_h2_zus, n_co_zus = profile(n_i_1, d_p)
 
 ntu = l_r * 1 / (u_s * cp_g) * 2 * u / (d_t / 2)
 # m * m^2 s/kg * kg K /J * J/s/m^2/K *1/m = [dimensionslose Einheiten]
