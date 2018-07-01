@@ -271,7 +271,7 @@ def r_i(t, p_i):
     return np.array([r_meoh, 0., r_rwgs])
 
 
-def df_dt(y, _):
+def df_dt(y, _, u_s, d_p):
     # FIXME: Normalize y_i on each iteration.
     # Inerts should not change at all, but there is a 0.00056% increase already
     # on the first time step. Test:
@@ -309,32 +309,20 @@ def df_dt(y, _):
     return result
 
 
-# Init.
-n_i_1 = n_i_0  # mol/s
-p1 = p0
-t1 = t0
-
-z_d_l_r = np.linspace(0, 1, 100)
-dlr = 1 / (len(z_d_l_r) - 1) * l_r  # m
-y_0 = np.empty([len(namen) + 1 + 1])
-
-for i in range(25):
-    n_i_1_n_m_1 = n_i_1
-    m_dot_i = n_i_1 * mm / 1000.  # kg/s
-    m_dot = sum(m_dot_i)
-    y_i1 = m_dot_i / mm / sum(m_dot_i / mm)
+def profile(n_i_1_ein, d_p_ein):
+    m_dot_i_ein = n_i_1_ein * mm / 1000.  # kg/s
+    m_dot_ein = sum(m_dot_i_ein)
+    y_i1_ein = m_dot_i_ein / mm / sum(m_dot_i_ein / mm)
     # Berechnung der Parameter
-    mm_m_1 = sum(y_i1 * mm) * 1 / 1000.  # kg/mol
-    cp_m_1 = sum(y_i1 * cp_ig_durch_r(t1) * 8.3145)  # J/mol/K
+    mm_m_1 = sum(y_i1_ein * mm) * 1 / 1000.  # kg/mol
+    cp_m_1 = sum(y_i1_ein * cp_ig_durch_r(t1) * 8.3145)  # J/mol/K
     cp_g_1 = cp_m_1 / mm_m_1  # J/kg/K
-    n_t = ntu_param / (2 * np.pi * d_t / 2 * l_r * u) * (
-        m_dot * cp_g_1
+    n_t_aus = ntu_param / (2 * np.pi * d_t / 2 * l_r * u) * (
+        m_dot_ein * cp_g_1
     )
-    u_s = m_dot / (np.pi / 4 * d_t ** 2) / n_t  # kg/m^2/s
-    ntu = l_r * 1 / (u_s * cp_g_1) * 2 * u / (d_t / 2)
-    # m * m^2 s/kg * kg K /J * J/s/m^2/K *1/m = [dimensionslose Einheiten]
+    u_s_neu = m_dot_ein / (np.pi / 4 * d_t ** 2) / n_t_aus  # kg/m^2/s
 
-    y_0[:-2] = y_i1
+    y_0[:-2] = y_i1_ein
     y_0[-2] = p1
     y_0[-1] = t1
 
@@ -342,17 +330,19 @@ for i in range(25):
     # Es wird direkt Fixpunkt-Iteration angewendet, nach der Form der Ergun Gl.
     # D_p{n+1} = D_p{n} * int(1/D_p{n}*f(D_p{n}) dz) / -3bar
     for j in range(1):
-        soln_dp = odeint(df_dt, y_0, z_d_l_r)
+        soln_dp = odeint(lambda y, z0: df_dt(y, z0, u_s_neu, d_p_ein),
+                         y_0, z_d_l_r)
         deltap_deltaz = (soln_dp[-1][-2] - soln_dp[0][-2]).item()
-        d_p = deltap_deltaz * d_p / -3.0
+        d_p_aus = deltap_deltaz * d_p_ein / -3.0
 
-    soln = odeint(df_dt, y_0, z_d_l_r)
-    y_i_soln = soln[:, :len(y_i1)]
+    soln = odeint(lambda y, z0: df_dt(y, z0, u_s_neu, d_p_aus),
+                  y_0, z_d_l_r)
+    y_i_soln = soln[:, :len(y_i1_ein)]
     p_soln = soln[:, -2]
     t_soln = soln[:, -1]
 
     mm_m_soln = np.sum(y_i_soln * mm * 1 / 1000., axis=1)  # kg/mol
-    n_soln = u_s * n_t * (np.pi / 4 * d_t ** 2) / mm_m_soln
+    n_soln = u_s_neu * n_t_aus * (np.pi / 4 * d_t ** 2) / mm_m_soln
     # kg/s/m^2 * m^2 / kg*mol = mol/s
     n_i_soln = (y_i_soln.T * n_soln).T  # mol/s
 
@@ -377,64 +367,84 @@ for i in range(25):
     y_co_0 = n_i_0[namen.index('CO')] / n_0
     y_co2_0 = n_i_0[namen.index('CO2')] / n_0
 
-    n_i_1 = n_i_0 + v_f_flash * n_2 * y_i_flash
-    n_1 = sum(n_i_1)
-    y_i_1 = n_i_1 / n_1
+    n_i_1_aus = n_i_0 + v_f_flash * n_2 * y_i_flash
+    n_1 = sum(n_i_1_aus)
+    y_i_1 = n_i_1_aus / n_1
 
     y_co_1 = y_i_1[namen.index('CO')]
     y_co2_1 = y_i_1[namen.index('CO2')]
 
-    n_co_zus = n_1 * (
+    n_co_zus_aus = n_1 * (
         verhaeltnis_co_co2 * y_co2_1 - y_co_1
     )
 
-    n_h2_zus = v_f_flash * n_2 * (
+    n_h2_zus_aus = v_f_flash * n_2 * (
         sn_param * (y_co2_r + y_co_r) +
         y_co2_r - y_h2_r
     ) + n_0 * (
         sn_param * (y_co2_0 + y_co_0) +
         y_co2_0 - y_h2_0
-    ) + sn_param * n_co_zus
+    ) + sn_param * n_co_zus_aus
 
-    n_i_1[namen.index('H2')] = \
-        n_i_1[namen.index('H2')] + n_h2_zus
-    n_i_1[namen.index('CO')] = \
-        n_i_1[namen.index('CO')] + n_co_zus
+    n_i_1_aus[namen.index('H2')] = \
+        n_i_1_aus[namen.index('H2')] + n_h2_zus_aus
+    n_i_1_aus[namen.index('CO')] = \
+        n_i_1_aus[namen.index('CO')] + n_co_zus_aus
 
     n_i_r = v_f_flash * sum(n_i_2) * y_i_flash
     mm_0 = sum(n_i_0 / sum(n_i_0) * mm) / 1000.  # kg/mol
-    mm_1 = sum(n_i_1 / sum(n_i_1) * mm) / 1000.  # kg/mol
+    mm_1 = sum(n_i_1_aus / sum(n_i_1_aus) * mm) / 1000.  # kg/mol
     mm_2 = sum(n_i_2 / sum(n_i_2) * mm) / 1000.  # kg/mol
     mm_r = sum(n_i_r / sum(n_i_r) * mm) / 1000.  # kg/mol
-    bilanz = sum(n_i_1 * mm_1) - sum(n_i_r * mm_r) \
-        - sum(n_i_0 * mm_0) \
-        - n_h2_zus * mm[namen.index('H2')] / 1000. \
-        - n_co_zus * mm[namen.index('CO')] / 1000.
-    aend = sum(n_i_1 - n_i_1_n_m_1) / sum(n_i_1) * 100
-    umsatz = 1 - n_i_2[namen.index('CO')] / n_i_1[namen.index('CO')]
+    bilanz = sum(n_i_1_aus * mm_1) - sum(n_i_r * mm_r) \
+             - sum(n_i_0 * mm_0) \
+             - n_h2_zus_aus * mm[namen.index('H2')] / 1000. \
+             - n_co_zus_aus * mm[namen.index('CO')] / 1000.
+    aend = sum(n_i_1_aus - n_i_1_ein) / sum(n_i_1_ein) * 100
+    umsatz = 1 - n_i_2[namen.index('CO')] / n_i_1_aus[namen.index('CO')]
     print('It.  ' + '{:2d}'.format(i) + ', Bilanz: ' +
           '{:g}'.format(np.sqrt(bilanz.dot(bilanz))) + '\t' +
           ' Änderung: ' +
           '{:5.4g}'.format(np.sqrt(aend**2)) + '%\t' +
           'Umsatz: ' +
           '{:g}'.format(umsatz))
+    return n_i_1_aus, y_i1_ein, n_t_aus, d_p_aus, u_s_neu, cp_g_1, \
+        m_dot_ein, t_soln, p_soln, n_soln, n_i_soln, y_i_soln, \
+        n_i_r, n_h2_zus_aus, n_co_zus_aus
 
-m_i_soln = n_i_soln * (mm * 1 / 1000.) * 60**2  # kg/h
+
+# Init.
+n_i_1 = n_i_0  # mol/s
+p1 = p0
+t1 = t0
+
+z_d_l_r = np.linspace(0, 1, 100)
+dlr = 1 / (len(z_d_l_r) - 1) * l_r  # m
+y_0 = np.empty([len(namen) + 1 + 1])
+
+for i in range(25):
+    n_i_1, y_i1, n_t, d_p, u_s, cp_g, \
+        m_dot, t_z, p_z, n_z, n_i_z, \
+        y_i_z, n_i_r, n_h2_zus, n_co_zus = profile(n_i_1, n_t)
+
+ntu = l_r * 1 / (u_s * cp_g) * 2 * u / (d_t / 2)
+# m * m^2 s/kg * kg K /J * J/s/m^2/K *1/m = [dimensionslose Einheiten]
+m_i_z = n_i_z * (mm * 1 / 1000.) * 60**2  # kg/h
 # mol/h * g/mol * 1kg/1000g = 1/1000 kg/h
-m_soln = u_s * n_t * (np.pi / 4 * d_t ** 2)  # kg/s
-v_soln = n_soln * 8.3145 * 1e-5 * t_soln / p_soln
+m_z = u_s * n_t * (np.pi / 4 * d_t ** 2)  # kg/s
+v_z = n_z * 8.3145 * 1e-5 * t_z / p_z
 # mol/s * 8,3145Pa m^3/mol/K * 1e-5bar/Pa * K/bar = m^3/s
-ums_soln = 1 - n_i_soln[:, namen.index('CO')] / \
-           n_i_soln[0, namen.index('CO')]
-m_km_soln = u * (2 / (d_t / 2)) * (t_soln - t_r) * (
+ums_z = 1 - n_i_z[:, namen.index('CO')] / \
+        n_i_z[0, namen.index('CO')]
+m_km_z = u * (2 / (d_t / 2)) * (t_z - t_r) * (
     np.pi / 4 * d_t ** 2) / delta_h_sat * n_t * 60 ** 2 / 1000.
 # J/s/K/m^2 * 1/m * K * m^2 * kg/kJ * 60^2s/h * 1kJ/(1000J) = kg/h/m
-v_soln_real = np.empty_like(v_soln)
+v_z_real = np.empty_like(v_z)
 for i in range(len(z_d_l_r)):
     z = z_l_v.z_non_sat(
-        t_soln[i], p_soln[i], y_i_soln[i],
+        t_z[i], p_z[i], y_i_z[i],
         tc, pc, omega_af)['z']
-    v_soln_real[i] = v_soln[i] * z
+    v_z_real[i] = v_z[i] * z
 
 # Tatsächliche stöchiometrische Zahl
 sn = (y_i1[namen.index('H2')] - y_i1[namen.index('CO2')]) / (
@@ -460,7 +470,7 @@ vars_2 = [
     ['n_T', n_t, ''],
     ['U', u, r'\frac{W}{m^2\cdot K}'],
     ['\dot m', m_dot, 'kg/s'],
-    ['C_{p_g}', cp_g_1 / 1000., r'\frac{kJ}{kg\cdot K}'],
+    ['C_{p_g}', cp_g / 1000., r'\frac{kJ}{kg\cdot K}'],
     ['NTU', ntu, ''],
 ]
 vars_3 = [
@@ -492,16 +502,16 @@ fig.text(0.05, 0.945, text_1, va='top', fontsize=8)
 fig.text(0.33, 0.935, text_2, va='top', fontsize=8)
 fig.text(0.66, 0.930, text_3, va='top', fontsize=8)
 ax = plt.subplot2grid([2, 3], [0, 0])
-ax.plot(z_d_l_r, v_soln, label='$Idealgas$')
-ax.plot(z_d_l_r, v_soln_real, label='$Realgas$')
+ax.plot(z_d_l_r, v_z, label='$Idealgas$')
+ax.plot(z_d_l_r, v_z_real, label='$Realgas$')
 ax.set_ylabel(r'$\frac{\dot V}{m^3/h}$')
 ax.set_xlabel('Reduzierte Position, $z/L_R$')
 ax.legend(fontsize='xx-small')
 ax2 = plt.subplot2grid([2, 3], [1, 0])
-ax2.plot(z_d_l_r, m_km_soln)
-ax2.fill_between(z_d_l_r, 0, m_km_soln, color='orange')
-ax2.text(0.3, 1 / 2. * (m_km_soln[0] + m_km_soln[-1]),
-         '{:g}'.format(sum(m_km_soln * dlr)) + 'kg/h')
+ax2.plot(z_d_l_r, m_km_z)
+ax2.fill_between(z_d_l_r, 0, m_km_z, color='orange')
+ax2.text(0.3, 1 / 2. * (m_km_z[0] + m_km_z[-1]),
+         '{:g}'.format(sum(m_km_z * dlr)) + 'kg/h')
 ax2.set_ylabel(r'$\frac{\dot m_{Kuehlmittel}}{kg/h}$')
 ax2.set_xlabel('Reduzierte Position, $z/L_R$')
 
@@ -511,7 +521,7 @@ ax3.set_xlabel('Reduzierte Position, $z/L_R$')
 for item in ['CO', 'H2O', 'MeOH', 'CO2']:
     marker = np.random.choice(list(lines.lineMarkers.keys()))
     index = namen.index(item)
-    ax3.plot(z_d_l_r, m_i_soln[:, index], label=item,
+    ax3.plot(z_d_l_r, m_i_z[:, index], label=item,
              marker=marker)
 ax3.legend(loc=1)
 ax4 = plt.subplot2grid([2, 3], [0, 1])
@@ -519,12 +529,12 @@ ax4_1 = ax4.twinx()
 ax4_1.set_ylabel('Umsatz (CO)')
 ax4.set_ylabel('Temperatur / °C')
 ax4.set_xlabel('Reduzierte Position, $z/L_R$')
-ax4.plot(z_d_l_r, t_soln - 273.15, label='T / °C')
-ax4_1.plot(z_d_l_r, ums_soln, label='Umsatz (CO)', ls='--', color='gray')
+ax4.plot(z_d_l_r, t_z - 273.15, label='T / °C')
+ax4_1.plot(z_d_l_r, ums_z, label='Umsatz (CO)', ls='--', color='gray')
 ax5 = plt.subplot2grid([2, 3], [0, 2], colspan=2)
 ax5.set_ylabel('Druck / bar')
 ax5.set_xlabel('Reduzierte Position, $z/L_R$')
-ax5.plot(z_d_l_r, p_soln, label='p / bar')
+ax5.plot(z_d_l_r, p_z, label='p / bar')
 plt.tight_layout(rect=[0, 0, 0.95, 0.75])
 
 locale.setlocale(locale.LC_ALL, '')
@@ -536,22 +546,22 @@ print('NTU= ' + str(ntu))
 print('y(CO)/y(CO2)= ' + str(verhaeltnis_co_co2))
 print('\n'.join([
     namen[i] + ': ' + locale.format('%.8g', x) + ' kg/h'
-    for i, x in enumerate(m_i_soln[-1])
+    for i, x in enumerate(m_i_z[-1])
 ]))
-print('T= ' + str(t_soln[-1] - 273.15) + '°C')
-print('P= ' + str(p_soln[-1]) + 'bar')
-print('V0= ' + str(v_soln[0]) + 'm^3/h')
-print('V= ' + str(v_soln[-1]) + 'm^3/h')
-print('Cpg= ' + str(cp_g_1) + 'J/kg/K')
+print('T= ' + str(t_z[-1] - 273.15) + '°C')
+print('P= ' + str(p_z[-1]) + 'bar')
+print('V0= ' + str(v_z[0]) + 'm^3/h')
+print('V= ' + str(v_z[-1]) + 'm^3/h')
+print('Cpg= ' + str(cp_g) + 'J/kg/K')
 print('Partikeldurchmesser für (DeltaP= ' +
-      '{:g}'.format(p_soln[0] - p_soln[-1]) + ' bar): ' +
+      '{:g}'.format(p_z[0] - p_z[-1]) + ' bar): ' +
       '{:g}'.format(d_p) + ' m'
       )
 print('Kühlmittel: Gesättigtes H_2O(l) ' +
       ' bei ' + '{:g}'.format(p_sat) + ' bar' + '\n' +
       'Verdampfungsenthalpie: ' + '{:g}'.format(delta_h_sat) +
       'kJ/kg' + '\n' + 'Kühlmittelmassenstrom: ' +
-      '{:g}'.format(sum(m_km_soln * dlr)) + 'kg/h')
+      '{:g}'.format(sum(m_km_z * dlr)) + 'kg/h')
 
 print('')
 print('======' * 3)
