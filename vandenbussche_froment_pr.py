@@ -19,9 +19,9 @@ d_p = 0.0054 / 0.0054 * 0.16232576224693065  # m Feststoff
 # Reaktor
 n_t = 1620  # Rohre
 d_t = 0.04  # m Rohrdurchmesser
-sn_param = 3.44  # 2.05  # dimensionslos
-ntu_param = 1.82  # Parameter
-verhaeltnis_co_co2 = 0.74   # Parameter
+sn_param = 4.6  # 2.05  # dimensionslos
+ntu_param = 3.09  # Parameter
+verhaeltnis_co_co2 = 0.71   # Parameter
 l_r = 7.  # m Rohrlänge
 # Betriebsbedingungen
 t0 = 220 + 273.15  # K
@@ -318,7 +318,7 @@ z_d_l_r = np.linspace(0, 1, 100)
 dlr = 1 / (len(z_d_l_r) - 1) * l_r  # m
 y_0 = np.empty([len(namen) + 1 + 1])
 
-for i in range(26):
+for i in range(25):
     n_i_1_n_m_1 = n_i_1
     m_dot_i = n_i_1 * mm / 1000.  # kg/s
     m_dot = sum(m_dot_i)
@@ -341,7 +341,7 @@ for i in range(26):
     # Partikeldurchmesser nach Parameter Delta_P=3bar optimisieren.
     # Es wird direkt Fixpunkt-Iteration angewendet, nach der Form der Ergun Gl.
     # D_p{n+1} = D_p{n} * int(1/D_p{n}*f(D_p{n}) dz) / -3bar
-    for j in range(5):
+    for j in range(1):
         soln_dp = odeint(df_dt, y_0, z_d_l_r)
         deltap_deltaz = (soln_dp[-1][-2] - soln_dp[0][-2]).item()
         d_p = deltap_deltaz * d_p / -3.0
@@ -354,19 +354,8 @@ for i in range(26):
     mm_m_soln = np.sum(y_i_soln * mm * 1 / 1000., axis=1)  # kg/mol
     n_soln = u_s * n_t * (np.pi / 4 * d_t ** 2) / mm_m_soln
     # kg/s/m^2 * m^2 / kg*mol = mol/s
-    m_soln = u_s * n_t * (np.pi / 4 * d_t ** 2)  # kg/s
     n_i_soln = (y_i_soln.T * n_soln).T  # mol/s
-    m_i_soln = n_i_soln * (mm * 1 / 1000.) * 60**2  # kg/h
-    # mol/h * g/mol * 1kg/1000g = 1/1000 kg/h
-    v_soln = n_soln * 8.3145 * 1e-5 * t_soln / p_soln
-    # mol/s * 8,3145Pa m^3/mol/K * 1e-5bar/Pa * K/bar = m^3/s
 
-    ums_soln = (n_i_soln[0, namen.index('CO')] -
-                n_i_soln[:, namen.index('CO')]
-                ) / n_i_soln[0, namen.index('CO')]
-    m_km_soln = u * (2 / (d_t / 2)) * (t_soln - t_r) * (
-        np.pi / 4 * d_t ** 2) / delta_h_sat * n_t * 60 ** 2 / 1000.
-    # J/s/K/m^2 * 1/m * K * m^2 * kg/kJ * 60^2s/h * 1kJ/(1000J) = kg/h/m
     n_i_2 = n_i_soln[-1]  # mol/s
 
     n_0 = sum(n_i_0)  # mol/h
@@ -405,7 +394,7 @@ for i in range(26):
     ) + n_0 * (
         sn_param * (y_co2_0 + y_co_0) +
         y_co2_0 - y_h2_0
-    )
+    ) + sn_param * n_co_zus
 
     n_i_1[namen.index('H2')] = \
         n_i_1[namen.index('H2')] + n_h2_zus
@@ -422,12 +411,24 @@ for i in range(26):
         - n_h2_zus * mm[namen.index('H2')] / 1000. \
         - n_co_zus * mm[namen.index('CO')] / 1000.
     aend = sum(n_i_1 - n_i_1_n_m_1) / sum(n_i_1) * 100
-    umsatz = 1 - n_i_2[namen.index('CO')] - n_i_1[namen.index('CO')]
+    umsatz = 1 - n_i_2[namen.index('CO')] / n_i_1[namen.index('CO')]
     print('It.  ' + '{:2d}'.format(i) + ', Bilanz: ' +
           '{:g}'.format(np.sqrt(bilanz.dot(bilanz))) + '\t' +
           ' Änderung: ' +
-          '{:5.4g}'.format(np.sqrt(aend**2)) + '%\t')
+          '{:5.4g}'.format(np.sqrt(aend**2)) + '%\t' +
+          'Umsatz: ' +
+          '{:g}'.format(umsatz))
 
+m_i_soln = n_i_soln * (mm * 1 / 1000.) * 60**2  # kg/h
+# mol/h * g/mol * 1kg/1000g = 1/1000 kg/h
+m_soln = u_s * n_t * (np.pi / 4 * d_t ** 2)  # kg/s
+v_soln = n_soln * 8.3145 * 1e-5 * t_soln / p_soln
+# mol/s * 8,3145Pa m^3/mol/K * 1e-5bar/Pa * K/bar = m^3/s
+ums_soln = 1 - n_i_soln[:, namen.index('CO')] / \
+           n_i_soln[0, namen.index('CO')]
+m_km_soln = u * (2 / (d_t / 2)) * (t_soln - t_r) * (
+    np.pi / 4 * d_t ** 2) / delta_h_sat * n_t * 60 ** 2 / 1000.
+# J/s/K/m^2 * 1/m * K * m^2 * kg/kJ * 60^2s/h * 1kJ/(1000J) = kg/h/m
 v_soln_real = np.empty_like(v_soln)
 for i in range(len(z_d_l_r)):
     z = z_l_v.z_non_sat(
