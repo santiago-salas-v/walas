@@ -6,6 +6,11 @@ import z_l_v
 import locale
 
 # Lösung der ChP-Übung. Reaktor angepasst.
+sn_param = 4.6  # 2.05  # dimensionslos
+ntu_param = 3.09  # Parameter
+verhaeltnis_co_co2 = 0.71   # Parameter
+optimisieren_nach_param = ['n_t', 'l_r_n_t'][0]
+
 namen = ['CO', 'CO2', 'H2', 'H2O', 'MeOH',
          'CH4', 'N2', 'EthOH', 'PrOH', 'METHF']
 # Katalysator
@@ -19,9 +24,6 @@ d_p = 0.0054 / 0.0054 * 0.16232576224693065  # m Feststoff
 # Reaktor
 n_t = 1620  # Rohre
 d_t = 0.04  # m Rohrdurchmesser
-sn_param = 4.6  # 2.05  # dimensionslos
-ntu_param = 3.09  # Parameter
-verhaeltnis_co_co2 = 0.71   # Parameter
 l_r = 7.  # m Rohrlänge
 # Betriebsbedingungen
 t0 = 220 + 273.15  # K
@@ -357,7 +359,7 @@ def profile(n_i_1_ein, d_p_ein, optimisieren_nach='n_t'):
     z_i = y_i_soln[-1]  # dimensionslos
     verfluessigung = z_l_v.isot_flash_solve(
         t_2, p_2, z_i, tc, pc, omega_af)
-    v_f_flash = verfluessigung['v_f']
+    v_f_flash = verfluessigung['v_f'].item()
     x_i_flash = verfluessigung['x_i']
     y_i_flash = verfluessigung['y_i']
 
@@ -399,28 +401,36 @@ def profile(n_i_1_ein, d_p_ein, optimisieren_nach='n_t'):
     deltap_deltaz = (soln[-1][-2] - soln[0][-2]).item()
     d_p_aus = deltap_deltaz * d_p_ein / -3.0
 
-    n_i_r_aus = v_f_flash * sum(n_i_2) * y_i_flash
+    n_i_r_rueckf = v_f_flash * sum(n_i_2) * y_i_flash
+
+    n_i_0_vollst = n_i_0
+    n_i_0_vollst[namen.index('H2')] += n_h2_zus_aus
+    n_i_0_vollst[namen.index('CO')] += n_co_zus_aus
+
     mm_0 = sum(n_i_0 / sum(n_i_0) * mm) / 1000.  # kg/mol
-    mm_1 = sum(n_i_1_aus / sum(n_i_1_aus) * mm) / 1000.  # kg/mol
+    mm_0_vollst = sum(n_i_0_vollst / sum(n_i_0_vollst) * mm) / 1000.  # kg/mol
     mm_2 = sum(n_i_2 / sum(n_i_2) * mm) / 1000.  # kg/mol
-    mm_r = sum(n_i_r_aus / sum(n_i_r_aus) * mm) / 1000.  # kg/mol
-    bilanz = sum(n_i_1_aus * mm_1) - sum(n_i_r_aus * mm_r) \
-        - sum(n_i_0 * mm_0) \
-        - n_h2_zus_aus * mm[namen.index('H2')] / 1000. \
-        - n_co_zus_aus * mm[namen.index('CO')] / 1000.
+    mm_v = sum(n_i_r_rueckf / sum(n_i_r_rueckf) * mm) / 1000.  # kg/mol
+    mm_1 = (v_f_flash * sum(n_i_2) / sum(n_i_0) * mm_v + mm_0) /(
+        v_f_flash * sum(n_i_2) / sum(n_i_0) + 1
+    )
+    massenbilanz = mm_1 * sum(n_i_1_aus) - mm_v * sum(n_i_r_rueckf) \
+        - mm_0_vollst * sum(n_i_0_vollst)
+    mengenbilanz = sum(n_i_1_aus) - sum(n_i_r_rueckf) \
+                   - sum(n_i_0_vollst)
     aend = sum(n_i_1_aus - n_i_1_ein) / sum(n_i_1_ein) * 100
     umsatz = 1 - n_i_2[namen.index('CO')] / n_i_1_aus[namen.index('CO')]
-    print('It.  ' + '{:2d}'.format(i) + ', Bilanz: ' +
-          '{:g}'.format(np.sqrt(bilanz.dot(bilanz))) + '\t' +
-          ' Änderung(n_1): ' +
-          '{:5.4g}'.format(np.sqrt(aend**2)) + '%\t' +
+    print('It.  ' + '{:2d}'.format(i) + ' Änderung(n_1): ' +
+          '{:5.4f}'.format(np.sqrt(aend**2)) + '%\t' + ', Massenbilanz: ' +
+          '{:3.3e}'.format(np.sqrt(massenbilanz**2)) + '\t' + ', Mengenbilanz: ' +
+          '{:3.3e}'.format(np.sqrt(mengenbilanz**2)) + '\t' +
           'Umsatz: ' +
-          '{:g}'.format(umsatz) + '\t' + 'd_p= ' +
-          '{:g}'.format(d_p_aus) + 'm')
+          '{:3.4f}'.format(umsatz) + '\t' + 'd_p= ' +
+          '{:3.4f}'.format(d_p_aus) + 'm')
     return n_i_1_aus, y_i1_ein, n_t_aus, l_r_aus, d_p_aus, u_s_neu, \
         cp_g_1_ein, m_dot_ein, t_soln, p_soln, \
         n_soln, n_i_soln, y_i_soln, \
-        n_i_r_aus, n_h2_zus_aus, n_co_zus_aus
+        n_i_r_rueckf, n_h2_zus_aus, n_co_zus_aus
 
 
 # Init.
@@ -443,7 +453,8 @@ for i in range(25):
     n_i_1, y_i1, n_t, l_r, d_p, u_s, cp_g_1, \
         m_dot, t_z, p_z, n_z, n_i_z, \
         y_i_z, n_i_r, n_h2_zus, n_co_zus = profile(
-            n_i_1, d_p, optimisieren_nach='l_r_n_t'
+            n_i_1, d_p,
+        optimisieren_nach=optimisieren_nach_param
         )
 
 ntu = l_r * 1 / (u_s * cp_g_1) * 2 * u / (d_t / 2)
