@@ -5,7 +5,9 @@ from scipy.integrate import odeint
 import z_l_v
 import locale
 
-# Lösung der ChP-Übung. Reaktor angepasst.
+# Theorie und Aufstellung der Gleichungen:
+# https://git.io/fdKBI
+
 sn_param = 4.6  # 2.05  # dimensionslos
 ntu_param = 3.09  # Parameter
 verhaeltnis_co_co2 = 0.71   # Parameter
