@@ -272,11 +272,11 @@ def r_i(t, p_i):
     return np.array([r_meoh, 0., r_rwgs])
 
 
-def df_dt(y, _, u_s, d_p, l_r):
+def df_dt(y, _, g, d_p, l_r):
     # FIXME: Normalize y_i on each iteration.
     # Inerts should not change at all, but there is a 0.00056% increase already
     # on the first time step. Test:
-    # u_s*60**2*n_t*(np.pi / 4 * d_t**2)/sum(y_i*mm/1000.)*y_i[6]*mm[6]/1000.
+    # g*60**2*n_t*(np.pi / 4 * d_t**2)/sum(y_i*mm/1000.)*y_i[6]*mm[6]/1000.
     y_i = y[:-2]
     p = y[-2]
     t = y[-1]
@@ -290,16 +290,16 @@ def df_dt(y, _, u_s, d_p, l_r):
     delta_h_r_t = delta_h_r(t)
     mu_t_y = mu(t, y_i)
     r_j = r_i(t, p_i)  # mol/kg Kat/s
-    dyi_dz = l_r * rho_b * mm_m / u_s * (
+    dyi_dz = l_r * rho_b * mm_m / g * (
         nuij.dot(r_j) - y_i * sum(nuij.dot(r_j))
     )   # m * kgKat/m^3 * kg/mol * m^2 s/kg * mol/kgKat/s = dimlos
-    dp_dz = -l_r * 1 / 10**5 * u_s / (
+    dp_dz = -l_r * 1 / 10**5 * g / (
         c_t * mm_m * d_p
     ) * (1 - phi) / phi**3 * (
-        150 * (1 - phi) * mu_t_y / d_p + 1.75 * u_s
+        150 * (1 - phi) * mu_t_y / d_p + 1.75 * g
     )  # Pa * 1bar/(1e5 Pa) = bar
     dt_dz = l_r / (
-        u_s * cp_g
+        g * cp_g
     ) * (
         2 * u / (d_t / 2) * (t_r - t) + rho_b * -delta_h_r_t.dot(r_j)
     )
@@ -327,33 +327,33 @@ def profile(n_i_1_ein, d_p_ein, optimisieren_nach='n_t'):
     elif optimisieren_nach == 'l_r_n_t':
         # Anzahl an Rohre und Länge anpassen
         verhaeltnis = 1 / (l_r * n_t) * (
-                ntu_param * m_dot_ein * cp_g_1_ein / (
+            ntu_param * m_dot_ein * cp_g_1_ein / (
                 2 * np.pi * d_t / 2 * u)
         )
         l_r_aus = np.sqrt(verhaeltnis) * l_r
         n_t_aus = np.sqrt(verhaeltnis) * n_t
 
-    u_s_neu = m_dot_ein / (np.pi / 4 * d_t ** 2) / n_t_aus  # kg/m^2/s
+    g_neu = m_dot_ein / (np.pi / 4 * d_t ** 2) / n_t_aus  # kg/m^2/s
     y_0 = np.empty([len(namen) + 1 + 1])
     y_0[:-2] = y_i1_ein
     y_0[-2] = p1
     y_0[-1] = t1
 
-    soln = odeint(lambda y, z0: df_dt(y, z0, u_s_neu, d_p_ein, l_r_aus),
+    soln = odeint(lambda y, z0: df_dt(y, z0, g_neu, d_p_ein, l_r_aus),
                   y_0, z_d_l_r)
     y_i_soln = soln[:, :len(y_i1_ein)]
     p_soln = soln[:, -2]
     t_soln = soln[:, -1]
 
     mm_m_soln = np.sum(y_i_soln * mm * 1 / 1000., axis=1)  # kg/mol
-    n_soln = u_s_neu * n_t_aus * (np.pi / 4 * d_t ** 2) / mm_m_soln
+    n_soln = g_neu * n_t_aus * (np.pi / 4 * d_t ** 2) / mm_m_soln
     # kg/s/m^2 * m^2 / kg*mol = mol/s
     n_i_soln = (y_i_soln.T * n_soln).T  # mol/s
 
     n_i_2 = n_i_soln[-1]  # mol/s
 
-    n_0 = sum(n_i_0)  # mol/h
-    n_2 = sum(n_i_2)  # mol/h
+    n_0 = sum(n_i_0)  # mol/s
+    n_2 = sum(n_i_2)  # mol/s
     t_2 = 60 + 273.15  # K
     p_2 = p_soln[-1]  # bar
     z_i = y_i_soln[-1]  # dimensionslos
@@ -411,13 +411,13 @@ def profile(n_i_1_ein, d_p_ein, optimisieren_nach='n_t'):
     mm_0_vollst = sum(n_i_0_vollst / sum(n_i_0_vollst) * mm) / 1000.  # kg/mol
     mm_2 = sum(n_i_2 / sum(n_i_2) * mm) / 1000.  # kg/mol
     mm_v = sum(n_i_r_rueckf / sum(n_i_r_rueckf) * mm) / 1000.  # kg/mol
-    mm_1 = (v_f_flash * sum(n_i_2) / sum(n_i_0) * mm_v + mm_0) /(
+    mm_1 = (v_f_flash * sum(n_i_2) / sum(n_i_0) * mm_v + mm_0) / (
         v_f_flash * sum(n_i_2) / sum(n_i_0) + 1
     )
     massenbilanz = mm_1 * sum(n_i_1_aus) - mm_v * sum(n_i_r_rueckf) \
         - mm_0_vollst * sum(n_i_0_vollst)
     mengenbilanz = sum(n_i_1_aus) - sum(n_i_r_rueckf) \
-                   - sum(n_i_0_vollst)
+        - sum(n_i_0_vollst)
     aend = sum(n_i_1_aus - n_i_1_ein) / sum(n_i_1_ein) * 100
     umsatz = 1 - n_i_2[namen.index('CO')] / n_i_1_aus[namen.index('CO')]
     print('It.  ' + '{:2d}'.format(i) + ' Änderung(n_1): ' +
@@ -427,7 +427,7 @@ def profile(n_i_1_ein, d_p_ein, optimisieren_nach='n_t'):
           'Umsatz: ' +
           '{:3.4f}'.format(umsatz) + '\t' + 'd_p= ' +
           '{:3.4f}'.format(d_p_aus) + 'm')
-    return n_i_1_aus, y_i1_ein, n_t_aus, l_r_aus, d_p_aus, u_s_neu, \
+    return n_i_1_aus, y_i1_ein, n_t_aus, l_r_aus, d_p_aus, g_neu, \
         cp_g_1_ein, m_dot_ein, t_soln, p_soln, \
         n_soln, n_i_soln, y_i_soln, \
         n_i_r_rueckf, n_h2_zus_aus, n_co_zus_aus
@@ -450,18 +450,18 @@ z_d_l_r = np.linspace(0, 1, 100)
 dlr = 1 / (len(z_d_l_r) - 1) * l_r  # m
 
 for i in range(25):
-    n_i_1, y_i1, n_t, l_r, d_p, u_s, cp_g_1, \
+    n_i_1, y_i1, n_t, l_r, d_p, g, cp_g_1, \
         m_dot, t_z, p_z, n_z, n_i_z, \
         y_i_z, n_i_r, n_h2_zus, n_co_zus = profile(
             n_i_1, d_p,
-        optimisieren_nach=optimisieren_nach_param
+            optimisieren_nach=optimisieren_nach_param
         )
 
-ntu = l_r * 1 / (u_s * cp_g_1) * 2 * u / (d_t / 2)
+ntu = l_r * 1 / (g * cp_g_1) * 2 * u / (d_t / 2)
 # m * m^2 s/kg * kg K /J * J/s/m^2/K *1/m = [dimensionslose Einheiten]
 m_i_z = n_i_z * (mm * 1 / 1000.) * 60**2  # kg/h
 # mol/h * g/mol * 1kg/1000g = 1/1000 kg/h
-m_z = u_s * n_t * (np.pi / 4 * d_t ** 2)  # kg/s
+m_z = g * n_t * (np.pi / 4 * d_t ** 2)  # kg/s
 v_z = n_z * 8.3145 * 1e-5 * t_z / p_z
 # mol/s * 8,3145Pa m^3/mol/K * 1e-5bar/Pa * K/bar = m^3/s
 ums_z = 1 - n_i_z[:, namen.index('CO')] / \
@@ -534,7 +534,7 @@ fig.text(0.66, 0.930, text_3, va='top', fontsize=8)
 ax = plt.subplot2grid([2, 3], [0, 0])
 ax.plot(z_d_l_r, v_z, label='$Idealgas$')
 ax.plot(z_d_l_r, v_z_real, label='$Realgas$')
-ax.set_ylabel(r'$\frac{\dot V}{m^3/h}$')
+ax.set_ylabel(r'$\frac{\dot V}{m^3/s}$')
 ax.set_xlabel('Reduzierte Position, $z/L_R$')
 ax.legend(fontsize='xx-small')
 ax2 = plt.subplot2grid([2, 3], [1, 0])
@@ -580,8 +580,8 @@ print('\n'.join([
 ]))
 print('T= ' + str(t_z[-1] - 273.15) + '°C')
 print('P= ' + str(p_z[-1]) + 'bar')
-print('V0= ' + str(v_z[0]) + 'm^3/h')
-print('V= ' + str(v_z[-1]) + 'm^3/h')
+print('V0= ' + str(v_z[0]) + 'm^3/s')
+print('V= ' + str(v_z[-1]) + 'm^3/s')
 print('Cpg= ' + str(cp_g_1) + 'J/kg/K')
 print('Partikeldurchmesser für (DeltaP= ' +
       '{:g}'.format(p_z[0] - p_z[-1]) + ' bar): ' +

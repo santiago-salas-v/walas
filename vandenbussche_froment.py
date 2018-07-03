@@ -227,7 +227,7 @@ def df_dt(y, _):
     # FIXME: Normalize y_i on each iteration.
     # Inerts should not change at all, but there is a 0.00056% increase already
     # on the first time step. Test:
-    # u_s*60**2*n_t*(np.pi / 4 * d_t**2)/sum(y_i*mm/1000.)*y_i[6]*mm[6]/1000.
+    # g*60**2*n_t*(np.pi / 4 * d_t**2)/sum(y_i*mm/1000.)*y_i[6]*mm[6]/1000.
     y_i = y[:-2]
     p = y[-2]
     t = y[-1]
@@ -239,16 +239,16 @@ def df_dt(y, _):
     delta_h_r_t = delta_h_r(t)
     mu_t_y = mu(t, y_i)
     r_j = r_i(t, p_i)  # mol/kg Kat/s
-    dyi_dz = l_r * rho_b * mm_m / u_s * (
+    dyi_dz = l_r * rho_b * mm_m / g * (
         nuij.dot(r_j) - y_i * sum(nuij.dot(r_j))
     )   # m * kgKat/m^3 * kg/mol * m^2 s/kg * mol/kgKat/s = dimlos
-    dp_dz = -l_r * 1 / 10**5 * u_s / (
+    dp_dz = -l_r * 1 / 10**5 * g / (
         c_t * mm_m * d_p
     ) * (1 - phi) / phi**3 * (
-        150 * (1 - phi) * mu_t_y / d_p + 1.75 * u_s
+        150 * (1 - phi) * mu_t_y / d_p + 1.75 * g
     )  # Pa * 1bar/(1e5 Pa) = bar
     dt_dz = l_r / (
-        u_s * cp_g
+        g * cp_g
     ) * (
         2 * u / (d_t / 2) * (t_r - t) + rho_b * -delta_h_r_t.dot(r_j)
     )
@@ -260,7 +260,7 @@ def df_dt(y, _):
 
 
 # Berechnung der Parameter
-u_s = m_dot / (np.pi / 4 * d_t**2) / n_t  # kg/m^2/s
+g = m_dot / (np.pi / 4 * d_t**2) / n_t  # kg/m^2/s
 mm_m_0 = sum(y_i0 * mm) * 1 / 1000.  # kg/mol
 cp_m_0 = sum(y_i0 * cp_ig_durch_r(t0) * 8.3145)  # J/mol/K
 cp_g_0 = cp_m_0 / mm_m_0  # J/kg/K
@@ -485,12 +485,12 @@ h_298 = np.array([
 delta_h_r_298 = nuij.T.dot(h_298)  # J/mol
 
 # Berechnung der Parameter
-u_s = m_dot / (np.pi / 4 * d_t**2) / n_t  # kg/m^2/s
+g = m_dot / (np.pi / 4 * d_t**2) / n_t  # kg/m^2/s
 mm_m_0 = sum(y_i0 * mm) * 1 / 1000.  # kg/mol
 cp_m_0 = sum(y_i0 * cp_ig_durch_r(t0) * 8.3145)  # J/mol/K
 cp_g_0 = cp_m_0 / mm_m_0  # J/kg/K
 # Anzahl an Übertragungseinheiten (NTU)
-ntu = l_r * 1 / (u_s * cp_g_0) * 2 * u / (d_t / 2)
+ntu = l_r * 1 / (g * cp_g_0) * 2 * u / (d_t / 2)
 # m * m^2 s/kg * kg K /J * J/s/m^2/K *1/m = [dimensionslose Einheiten]
 # Stöchiometrische Zahl
 sn = (y_i0[namen.index('H2')] - y_i0[namen.index('CO2')]) / (
@@ -519,9 +519,9 @@ m_km_soln = np.zeros_like(z_d_l_r)
 ums_soln = np.zeros_like(z_d_l_r)
 for i in range(len(z_d_l_r)):
     mm_m_soln[i] = sum(y_i_soln[i] * mm * 1 / 1000.)  # kg/mol
-    n_soln[i] = u_s * n_t * 60**2 * (np.pi / 4 * d_t**2) / mm_m_soln[i]
+    n_soln[i] = g * n_t * 60**2 * (np.pi / 4 * d_t**2) / mm_m_soln[i]
     # kg/s/m^2 * 60^2s/h * m^2 / kg*mol = mol/h
-    m_soln[i] = u_s * n_t * 60**2 * (np.pi / 4 * d_t**2)  # kg/h
+    m_soln[i] = g * n_t * 60**2 * (np.pi / 4 * d_t**2)  # kg/h
     n_i_soln[i] = n_soln[i] * y_i_soln[i]  # mol/h
     m_i_soln[i] = n_soln[i] * y_i_soln[i] * (mm * 1 / 1000.)
     # mol/h * g/mol * 1kg/1000g
@@ -696,22 +696,23 @@ for verhaeltnis_co_co2 in [1e-6, 0.15, 0.45, basis_ratio, 1.5, 7.5, 15]:
         [verhaeltnis_co_co2 / (1 + verhaeltnis_co_co2), 1 / (1 + verhaeltnis_co_co2)]) * y_co_plus_co2
     p0_co2_co = sum(y_0[:-2][indexes_co_co2] * p0).item()
     # Keep mass of all other components m' = m (1-y1-y2)/(1-y1'-y2')
-    u_s_new = (1 - sum(y_i0[indexes_co_co2])) / (
+    g_new = (1 - sum(y_i0[indexes_co_co2])) / (
         1 - sum(y_0[:-2][indexes_co_co2])
-    ) * sum(y_0[:-2] * mm / 1000.) / sum(y_i0 * mm / 1000.) * u_s
+    ) * sum(y_0[:-2] * mm / 1000.) / sum(y_i0 * mm / 1000.) * g
     soln = odeint(df_dt, y_0, z_d_l_r)
     y_i_soln = soln[:, :len(y_i0)]
     p_soln = soln[:, -2]
     t_soln = soln[:, -1]
     mm_m_soln = np.sum(y_i_soln * mm * 1 / 1000., axis=1)  # kg/mol
-    n_soln = u_s_new * n_t * 60 ** 2 * (np.pi / 4 * d_t ** 2) / mm_m_soln
-    m_soln = u_s_new * n_t * 60 ** 2 * (np.pi / 4 * d_t ** 2)  # kg/h
+    n_soln = g_new * n_t * 60 ** 2 * (np.pi / 4 * d_t ** 2) / mm_m_soln
+    m_soln = g_new * n_t * 60 ** 2 * (np.pi / 4 * d_t ** 2)  # kg/h
     m_i_soln = np.array([
         n_soln * y_i_soln[:, i] * (mm[i] * 1 / 1000.)
         for i in range(y_i_soln.shape[1])]).T
     ums_soln = (y_co_plus_co2 * verhaeltnis_co_co2 / (1 + verhaeltnis_co_co2) * n_soln[0] - (
         y_i_soln[:, namen.index('CO')]) * n_soln) / (
-                       y_co_plus_co2 * verhaeltnis_co_co2 / (1 + verhaeltnis_co_co2) * n_soln[0]
+        y_co_plus_co2 * verhaeltnis_co_co2 /
+            (1 + verhaeltnis_co_co2) * n_soln[0]
     )
     ausb_soln = (y_i_soln[1:, namen.index('MeOH')] * n_soln[1:] -
                  y_i_soln[0, namen.index('MeOH')] * n_soln[0]) / (
@@ -720,9 +721,9 @@ for verhaeltnis_co_co2 in [1e-6, 0.15, 0.45, basis_ratio, 1.5, 7.5, 15]:
     mm_m_0 = sum(y_0[:-2] * mm) * 1 / 1000.  # kg/mol
     cp_m_0 = sum(y_0[:-2] * cp_ig_durch_r(t0) * 8.3145)  # J/mol/K
     cp_g_0 = cp_m_0 / mm_m_0  # J/kg/K
-    ntu = l_r * 1 / (u_s * cp_g_0) * 2 * u / (d_t / 2)
+    ntu = l_r * 1 / (g * cp_g_0) * 2 * u / (d_t / 2)
     sn = (y_0[:-2][namen.index('H2')] - y_0[:-2][namen.index('CO2')]) / (
-            y_0[:-2][namen.index('CO2')] + y_0[:-2][namen.index('CO')]
+        y_0[:-2][namen.index('CO2')] + y_0[:-2][namen.index('CO')]
     )
     # m * m^2 s/kg * kg K /J * J/s/m^2/K *1/m = [dimensionslose Einheiten]
     marker = np.random.choice(unfilled_markers)
@@ -811,15 +812,16 @@ basis_y_co_plus_co2 = sum(y_i0[[namen.index('CO'), namen.index('CO2')]])
 # SN = 2,05 = (y_{H_2}-y_{CO_2})/(y_{CO}+y_{CO_2})
 # y_CO
 optimaler_faktor = ratio_h2_co2 / (
-        (1 - basis_y_co_plus_co2) * (2.05 * (1 + verhaeltnis_co_co2) + 1) +
-        ratio_h2_co2 * basis_y_co_plus_co2
+    (1 - basis_y_co_plus_co2) * (2.05 * (1 + verhaeltnis_co_co2) + 1) +
+    ratio_h2_co2 * basis_y_co_plus_co2
 )
 
 lines1 = []
 for factor in [1e-16, 1, optimaler_faktor, 4, 5, 6,
                0.99 / basis_y_co_plus_co2]:
     y_0[:-2][indexes_co_co2] = np.array(
-        [verhaeltnis_co_co2 / (1 + verhaeltnis_co_co2), 1 / (1 + verhaeltnis_co_co2)]
+        [verhaeltnis_co_co2 / (1 + verhaeltnis_co_co2),
+         1 / (1 + verhaeltnis_co_co2)]
     ) * basis_y_co_plus_co2 * factor
     y_0[:-2][indexes_not_co_co2] = y_i0[indexes_not_co_co2] * (
         1 - factor * basis_y_co_plus_co2
@@ -832,22 +834,23 @@ for factor in [1e-16, 1, optimaler_faktor, 4, 5, 6,
     p0_co2_co = sum(y_0[:-2][indexes_co_co2] * p0).item()
     y_co_plus_co2 = sum(y_0[:-2][indexes_co_co2]).item()
     # Keep mass of all other components m' = m (1-y1-y2)/(1-y1'-y2')
-    u_s_new = (1 - sum(y_i0[indexes_co_co2])) / (
+    g_new = (1 - sum(y_i0[indexes_co_co2])) / (
         1 - sum(y_0[:-2][indexes_co_co2])
-    ) * sum(y_0[:-2] * mm / 1000.) / sum(y_i0 * mm / 1000.) * u_s
+    ) * sum(y_0[:-2] * mm / 1000.) / sum(y_i0 * mm / 1000.) * g
     soln = odeint(df_dt, y_0, z_d_l_r)
     y_i_soln = soln[:, :len(y_i0)]
     p_soln = soln[:, -2]
     t_soln = soln[:, -1]
     mm_m_soln = np.sum(y_i_soln * mm * 1 / 1000., axis=1)  # kg/mol
-    n_soln = u_s_new * n_t * 60 ** 2 * (np.pi / 4 * d_t ** 2) / mm_m_soln
-    m_soln = u_s_new * n_t * 60 ** 2 * (np.pi / 4 * d_t ** 2)  # kg/h
+    n_soln = g_new * n_t * 60 ** 2 * (np.pi / 4 * d_t ** 2) / mm_m_soln
+    m_soln = g_new * n_t * 60 ** 2 * (np.pi / 4 * d_t ** 2)  # kg/h
     m_i_soln = np.array([
         n_soln * y_i_soln[:, i] * (mm[i] * 1 / 1000.)
         for i in range(y_i_soln.shape[1])]).T
     ums_soln = (y_co_plus_co2 * verhaeltnis_co_co2 / (1 + verhaeltnis_co_co2) * n_soln[0] - (
         y_i_soln[:, namen.index('CO')]) * n_soln) / (
-                       y_co_plus_co2 * verhaeltnis_co_co2 / (1 + verhaeltnis_co_co2) * n_soln[0]
+        y_co_plus_co2 * verhaeltnis_co_co2 /
+            (1 + verhaeltnis_co_co2) * n_soln[0]
     )
     ausb_soln = (y_i_soln[1:, namen.index('MeOH')] * n_soln[1:] -
                  y_i_soln[0, namen.index('MeOH')] * n_soln[0]) / (
@@ -856,7 +859,7 @@ for factor in [1e-16, 1, optimaler_faktor, 4, 5, 6,
     mm_m_0 = sum(y_0[:-2] * mm) * 1 / 1000.  # kg/mol
     cp_m_0 = sum(y_0[:-2] * cp_ig_durch_r(t0) * 8.3145)  # J/mol/K
     cp_g_0 = cp_m_0 / mm_m_0  # J/kg/K
-    ntu = l_r * 1 / (u_s * cp_g_0) * 2 * u / (d_t / 2)
+    ntu = l_r * 1 / (g * cp_g_0) * 2 * u / (d_t / 2)
     # m * m^2 s/kg * kg K /J * J/s/m^2/K *1/m = [dimensionslose Einheiten]
     marker = np.random.choice(unfilled_markers)
     color = color_samples[np.random.choice(len(color_samples))]
@@ -961,12 +964,12 @@ m_dot = sum(m_dot_i)
 y_i0 = m_dot_i / mm / sum(m_dot_i / mm)
 
 # Berechnung der Parameter
-u_s = m_dot / (np.pi / 4 * d_t**2) / n_t  # kg/m^2/s
+g = m_dot / (np.pi / 4 * d_t**2) / n_t  # kg/m^2/s
 mm_m_0 = sum(y_i0 * mm) * 1 / 1000.  # kg/mol
 cp_m_0 = sum(y_i0 * cp_ig_durch_r(t0) * 8.3145)  # J/mol/K
 cp_g_0 = cp_m_0 / mm_m_0  # J/kg/K
 # Anzahl an Übertragungseinheiten (NTU)
-ntu = l_r * 1 / (u_s * cp_g_0) * 2 * u / (d_t / 2)
+ntu = l_r * 1 / (g * cp_g_0) * 2 * u / (d_t / 2)
 # m * m^2 s/kg * kg K /J * J/s/m^2/K *1/m = [dimensionslose Einheiten]
 # Stöchiometrische Zahl
 sn = (y_i0[namen.index('H2')] - y_i0[namen.index('CO2')]) / (
@@ -1010,9 +1013,9 @@ m_km_soln = np.zeros_like(z_d_l_r)
 ums_soln = np.zeros_like(z_d_l_r)
 for i in range(len(z_d_l_r)):
     mm_m_soln[i] = sum(y_i_soln[i] * mm * 1 / 1000.)  # kg/mol
-    n_soln[i] = u_s * n_t * 60**2 * (np.pi / 4 * d_t**2) / mm_m_soln[i]
+    n_soln[i] = g * n_t * 60**2 * (np.pi / 4 * d_t**2) / mm_m_soln[i]
     # kg/s/m^2 * 60^2s/h * m^2 / kg*mol = mol/h
-    m_soln[i] = u_s * n_t * 60**2 * (np.pi / 4 * d_t**2)  # kg/h
+    m_soln[i] = g * n_t * 60**2 * (np.pi / 4 * d_t**2)  # kg/h
     n_i_soln[i] = n_soln[i] * y_i_soln[i]  # mol/h
     m_i_soln[i] = n_soln[i] * y_i_soln[i] * (mm * 1 / 1000.)
     # mol/h * g/mol * 1kg/1000g
@@ -1162,7 +1165,7 @@ mm = np.array([
     60.053
 ], dtype=float)  # g/mol
 n_dot_i = np.array([
-    3394.174, 3767.258+1013.2, 65334.34,
+    3394.174, 3767.258 + 1013.2, 65334.34,
     230.9895, 845.4556, 0,
     0, 0, 0,
     0
@@ -1172,12 +1175,12 @@ m_dot = sum(m_dot_i)
 y_i0 = m_dot_i / mm / sum(m_dot_i / mm)
 
 # Berechnung der Parameter
-u_s = m_dot / (np.pi / 4 * d_t**2) / n_t  # kg/m^2/s
+g = m_dot / (np.pi / 4 * d_t**2) / n_t  # kg/m^2/s
 mm_m_0 = sum(y_i0 * mm) * 1 / 1000.  # kg/mol
 cp_m_0 = sum(y_i0 * cp_ig_durch_r(t0) * 8.3145)  # J/mol/K
 cp_g_0 = cp_m_0 / mm_m_0  # J/kg/K
 # Anzahl an Übertragungseinheiten (NTU)
-ntu = l_r * 1 / (u_s * cp_g_0) * 2 * u / (d_t / 2)
+ntu = l_r * 1 / (g * cp_g_0) * 2 * u / (d_t / 2)
 # m * m^2 s/kg * kg K /J * J/s/m^2/K *1/m = [dimensionslose Einheiten]
 # Stöchiometrische Zahl
 sn = (y_i0[namen.index('H2')] - y_i0[namen.index('CO2')]) / (
@@ -1224,9 +1227,9 @@ m_km_soln = np.zeros_like(z_d_l_r)
 ums_soln = np.zeros_like(z_d_l_r)
 for i in range(len(z_d_l_r)):
     mm_m_soln[i] = sum(y_i_soln[i] * mm * 1 / 1000.)  # kg/mol
-    n_soln[i] = u_s * n_t * 60**2 * (np.pi / 4 * d_t**2) / mm_m_soln[i]
+    n_soln[i] = g * n_t * 60**2 * (np.pi / 4 * d_t**2) / mm_m_soln[i]
     # kg/s/m^2 * 60^2s/h * m^2 / kg*mol = mol/h
-    m_soln[i] = u_s * n_t * 60**2 * (np.pi / 4 * d_t**2)  # kg/h
+    m_soln[i] = g * n_t * 60**2 * (np.pi / 4 * d_t**2)  # kg/h
     n_i_soln[i] = n_soln[i] * y_i_soln[i]  # mol/h
     m_i_soln[i] = n_soln[i] * y_i_soln[i] * (mm * 1 / 1000.)
     # mol/h * g/mol * 1kg/1000g
@@ -1399,12 +1402,12 @@ m_dot = sum(m_dot_i)
 y_i0 = m_dot_i / mm / sum(m_dot_i / mm)
 
 # Berechnung der Parameter
-u_s = m_dot / (np.pi / 4 * d_t**2) / n_t  # kg/m^2/s
+g = m_dot / (np.pi / 4 * d_t**2) / n_t  # kg/m^2/s
 mm_m_0 = sum(y_i0 * mm) * 1 / 1000.  # kg/mol
 cp_m_0 = sum(y_i0 * cp_ig_durch_r(t0) * 8.3145)  # J/mol/K
 cp_g_0 = cp_m_0 / mm_m_0  # J/kg/K
 # Anzahl an Übertragungseinheiten (NTU)
-ntu = l_r * 1 / (u_s * cp_g_0) * 2 * u / (d_t / 2)
+ntu = l_r * 1 / (g * cp_g_0) * 2 * u / (d_t / 2)
 # m * m^2 s/kg * kg K /J * J/s/m^2/K *1/m = [dimensionslose Einheiten]
 # Stöchiometrische Zahl
 sn = (y_i0[namen.index('H2')] - y_i0[namen.index('CO2')]) / (
@@ -1450,9 +1453,9 @@ m_km_soln = np.zeros_like(z_d_l_r)
 ums_soln = np.zeros_like(z_d_l_r)
 for i in range(len(z_d_l_r)):
     mm_m_soln[i] = sum(y_i_soln[i] * mm * 1 / 1000.)  # kg/mol
-    n_soln[i] = u_s * n_t * 60**2 * (np.pi / 4 * d_t**2) / mm_m_soln[i]
+    n_soln[i] = g * n_t * 60**2 * (np.pi / 4 * d_t**2) / mm_m_soln[i]
     # kg/s/m^2 * 60^2s/h * m^2 / kg*mol = mol/h
-    m_soln[i] = u_s * n_t * 60**2 * (np.pi / 4 * d_t**2)  # kg/h
+    m_soln[i] = g * n_t * 60**2 * (np.pi / 4 * d_t**2)  # kg/h
     n_i_soln[i] = n_soln[i] * y_i_soln[i]  # mol/h
     m_i_soln[i] = n_soln[i] * y_i_soln[i] * (mm * 1 / 1000.)
     # mol/h * g/mol * 1kg/1000g
