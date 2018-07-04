@@ -405,7 +405,7 @@ def profile(n_i_1_ein, d_p_ein, optimisieren_nach='n_t'):
 
     n_i_r_rueckf = v_f_flash * sum(n_i_2) * y_i_flash
 
-    n_i_0_vollst = n_i_0
+    n_i_0_vollst = n_i_0.copy()
     n_i_0_vollst[namen.index('H2')] += n_h2_zus_aus
     n_i_0_vollst[namen.index('CO')] += n_co_zus_aus
 
@@ -413,8 +413,9 @@ def profile(n_i_1_ein, d_p_ein, optimisieren_nach='n_t'):
     mm_0_vollst = sum(n_i_0_vollst / sum(n_i_0_vollst) * mm) / 1000.  # kg/mol
     mm_2 = sum(n_i_2 / sum(n_i_2) * mm) / 1000.  # kg/mol
     mm_v = sum(n_i_r_rueckf / sum(n_i_r_rueckf) * mm) / 1000.  # kg/mol
-    mm_1 = (v_f_flash * sum(n_i_2) / sum(n_i_0) * mm_v + mm_0) / (
-        v_f_flash * sum(n_i_2) / sum(n_i_0) + 1
+    mm_1 = (v_f_flash * sum(n_i_2) /
+            sum(n_i_0_vollst) * mm_v + mm_0_vollst) / (
+        v_f_flash * sum(n_i_2) / sum(n_i_0_vollst) + 1
     )
     massenbilanz = mm_1 * sum(n_i_1_aus) - mm_v * sum(n_i_r_rueckf) \
         - mm_0_vollst * sum(n_i_0_vollst)
@@ -422,7 +423,7 @@ def profile(n_i_1_ein, d_p_ein, optimisieren_nach='n_t'):
         - sum(n_i_0_vollst)
     aend = sum(n_i_1_aus - n_i_1_ein) / sum(n_i_1_ein) * 100
     umsatz = 1 - n_i_2[namen.index('CO')] / n_i_1_aus[namen.index('CO')]
-    print('It.  ' + '{:2d}'.format(i) + ' Änderung(n_1): ' +
+    print('It.  ' + '{:2d}'.format(i) + ' Änderung(n_1):\t' +
           '{:5.4f}'.format(np.sqrt(aend**2)) + '%\t' + ', Massenbilanz: ' +
           '{:3.3e}'.format(np.sqrt(massenbilanz**2)) + '\t' + ', Mengenbilanz: ' +
           '{:3.3e}'.format(np.sqrt(mengenbilanz**2)) + '\t' +
