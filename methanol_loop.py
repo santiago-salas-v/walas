@@ -496,23 +496,25 @@ vars_1 = [
     [r'\rho_b', rho_b, r'\frac{kg_{Kat}}{m^3_{Fest}}'],
     ['\phi', phi, r'\frac{m^3_{Gas}}{m^3_{Fest}}'],
     ['D_p', d_p, 'm_{Fest}'],
-    ['D_t', d_t, 'm'],
-    ['L_R', l_r, 'm'],
 ]
 vars_2 = [
+    ['D_t', d_t, 'm'],
+    ['L_R', l_r, 'm'],
     ['n_T', n_t, ''],
+    ['T_0', t0 - 273.15, '°C'],
+    ['P_0', p0, 'bar'],
+]
+vars_3 = [
     ['U', u, r'\frac{W}{m^2\cdot K}'],
     ['\dot m', m_dot, 'kg/s'],
     ['C_{p_g}', cp_g_1 / 1000., r'\frac{kJ}{kg\cdot K}'],
     ['NTU', ntu, ''],
+    ['SN', sn, ''],
 ]
-vars_3 = [
-    ['T_0', t0 - 273.15, '°C'],
-    ['P_0', p0, 'bar'],
+vars_4 = [
     ['T_r', t_r - 273.15, '°C_{Kühlmittel}'],
     ['P_{Sät}', p_sat, 'bar_{Kühlmittel}'],
-    ['\Delta H_{Sät}', delta_h_sat, r'\frac{kJ}{kg_{Kühlmittel}}'],
-    ['SN', sn, '']
+    ['\Delta h_{v}', delta_h_sat, r'\frac{kJ}{kg_{Kühlmittel}}'],
 ]
 text_1 = '\n'.join(['$' + ' = '.join([line[0], '{:g}'.format(line[1]) +
                                       ' ' + line[2]]) + '$'
@@ -523,7 +525,9 @@ text_2 = '\n'.join(['$' + ' = '.join([line[0], '{:g}'.format(line[1]) +
 text_3 = '\n'.join(['$' + ' = '.join([line[0], '{:g}'.format(line[1]) +
                                       ' ' + line[2]]) + '$'
                     for line in vars_3])
-
+text_4 = '\n'.join(['$' + ' = '.join([line[0], '{:g}'.format(line[1]) +
+                                      ' ' + line[2]]) + '$'
+                    for line in vars_4])
 
 fig = plt.figure(1)
 fig.suptitle('Lösung der Zusammensetzung ' +
@@ -531,9 +535,10 @@ fig.suptitle('Lösung der Zusammensetzung ' +
              ':1:' +
              '{:g}'.format(round(verhaeltnis_co_co2.item(), 2)) +
              '(H2:CO2:CO)')
-fig.text(0.05, 0.945, text_1, va='top', fontsize=8)
-fig.text(0.33, 0.935, text_2, va='top', fontsize=8)
-fig.text(0.66, 0.930, text_3, va='top', fontsize=8)
+fig.text(0.05, 0.935, text_1, va='top', fontsize=8)
+fig.text(0.25, 0.935, text_2, va='top', fontsize=8)
+fig.text(0.50, 0.935, text_3, va='top', fontsize=8)
+fig.text(0.75, 0.935, text_4, va='top', fontsize=8)
 ax = plt.subplot2grid([2, 3], [0, 0])
 ax.plot(z_d_l_r, v_z, label='$Idealgas$')
 ax.plot(z_d_l_r, v_z_real, label='$Realgas$')
