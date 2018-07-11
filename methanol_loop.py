@@ -4,6 +4,7 @@ from matplotlib import lines
 from scipy.integrate import odeint
 import z_l_v
 import locale
+import ctypes, os
 
 # Theorie und Aufstellung der Gleichungen:
 # https://git.io/fdKBI
@@ -637,4 +638,7 @@ print('\n'.join([
     for i, x in enumerate(n_i_1 * mm / 1000. * 60**2)
 ]))
 
+if os.name == 'nt':
+    thisappid = plt.matplotlib.__package__+plt.matplotlib.__version__
+    ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(thisappid)
 plt.show()
