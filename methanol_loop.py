@@ -434,7 +434,8 @@ def profile(n_i_1_ein, d_p_ein, optimisieren_nach='n_t'):
     return n_i_1_aus, y_i1_ein, n_t_aus, l_r_aus, d_p_aus, g_neu, \
         cp_g_1_ein, m_dot_ein, t_soln, p_soln, \
         n_soln, n_i_soln, y_i_soln, \
-        n_i_r_rueckf, n_h2_zus_aus, n_co_zus_aus
+        n_i_r_rueckf, n_h2_zus_aus, n_co_zus_aus, \
+        n_i_0_vollst
 
 
 # Init.
@@ -456,7 +457,8 @@ dlr = 1 / (len(z_d_l_r) - 1) * l_r  # m
 for i in range(25):
     n_i_1, y_i1, n_t, l_r, d_p, g, cp_g_1, \
         m_dot, t_z, p_z, n_z, n_i_z, \
-        y_i_z, n_i_r, n_h2_zus, n_co_zus = profile(
+        y_i_z, n_i_r, n_h2_zus, n_co_zus, \
+        n_i_0_vollst = profile(
             n_i_1, d_p,
             optimisieren_nach=optimisieren_nach_param
         )
@@ -610,6 +612,11 @@ print('\n'.join([
     for i, x in enumerate(n_i_0 * mm / 1000. * 60**2)
 ]))
 print('')
+print('\n'.join([
+    namen[i] + ': ' + locale.format('%.8g', x) + 'kmol/h'
+    for i, x in enumerate(n_i_0)
+]))
+print('')
 print('======' * 3)
 print('=== RÜCKLAUFSTROM ===')
 print('\n'.join([
@@ -620,16 +627,22 @@ print('')
 print('======' * 3)
 print('=== ERFORDERLICHE CO UND H2 STRÖME, UM SN UND CO/CO2 ANZUPASSEN ===')
 print('H2: ' +
-      locale.format('%.8g', n_h2_zus.item() * mm[namen.index('H2')] /
-                    1000. * 60 ** 2) + ' kg/h')
+      locale.format('%.8g', n_h2_zus.item() * mm[namen.index('H2')] *
+                    1000. / 60 ** 2) + ' kg/h')
 print('CO: ' +
-      locale.format('%.8g', n_co_zus.item() * mm[namen.index('CO')] /
-                    1000. * 60**2) + ' kg/h')
+      locale.format('%.8g', n_co_zus.item() * mm[namen.index('CO')] *
+                    1000. / 60**2) + ' kg/h')
 print('auf kmol/h')
 print('H2: ' +
-      locale.format('%.8g', n_h2_zus.item() / 1000. * 60 ** 2) + ' kmol/h')
+      locale.format('%.8g', n_h2_zus.item() * 1000. / 60 ** 2) + ' kmol/h')
 print('CO: ' +
-      locale.format('%.8g', n_co_zus.item() / 1000. * 60 ** 2) + ' kmol/h')
+      locale.format('%.8g', n_co_zus.item() * 1000. / 60 ** 2) + ' kmol/h')
+print('')
+print('MAKE-UP MIT ERFORDERLICHEN H2 UND CO-STRÖMEN')
+print('\n'.join([
+    namen[i] + ': ' + locale.format('%.8g', x) + 'kmol/h'
+    for i, x in enumerate(n_i_0_vollst)
+]))
 print('')
 print('======' * 3)
 print('=== REAKTOR ZULAUFSTROM ===')
@@ -637,6 +650,10 @@ print('\n'.join([
     namen[i] + ': ' + locale.format('%.8g', x) + ' kg/h'
     for i, x in enumerate(n_i_1 * mm / 1000. * 60**2)
 ]))
+print('SN0: ' + str((n_i_0_vollst[namen.index('H2')] -
+                     n_i_0_vollst[namen.index('CO2')]) / (
+            n_i_0_vollst[namen.index('CO2')]+
+            n_i_0_vollst[namen.index('CO')])))
 
 if os.name == 'nt':
     thisappid = plt.matplotlib.__package__+plt.matplotlib.__version__
