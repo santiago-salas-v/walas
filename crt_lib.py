@@ -148,7 +148,7 @@ def mcph(x, t0_ref, t):
     ) / sum(x) / (t - t0_ref)
 
 
-def delta_h_r(t):
+def delta_h_r(t, nuij, delta_h_r_298):
     cp_m = (
         int_cp_durch_r_dt_minus_const(t) -
         int_cp_durch_r_dt_minus_const(298.15)
@@ -249,7 +249,7 @@ def df_dt(y, _, g, d_t, l_r,
     c_t = p / (8.3145 * 1e-5 * t) * 1 / z_realgas_f
     # bar * mol/bar/m^3/K*K = mol/m^3
     p_i = y_i * p  # bar
-    delta_h_r_t = delta_h_r(t)
+    delta_h_r_t = delta_h_r(t, nuij, delta_h_r_298)
     mu_t_y = mu(t, y_i)
     r_j = r_i(t, p_i)  # mol/kg Kat/s
     dyi_dz = l_r * rho_b * mm_m / g * (

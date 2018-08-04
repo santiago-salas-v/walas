@@ -11,7 +11,6 @@ import ctypes, os
 
 sn_param = 4.6  # 2.05  # dimensionslos
 ntu_param = 3.09  # Parameter
-verhaeltnis_co_co2 = 0.71   # Parameter
 optimisieren_nach_param = ['n_t', 'l_r_n_t'][0]
 
 namen = ['CO', 'CO2', 'H2', 'H2O', 'MeOH',
@@ -27,7 +26,7 @@ d_p = 0.0054 / 0.0054 * 0.16232576224693065  # m Feststoff
 # Reaktor
 n_t = 1620  # Rohre
 d_t = 0.04  # m Rohrdurchmesser
-l_r = 7.  # m Rohrlänge
+l_r = 6.  # m Rohrlänge
 # Betriebsbedingungen
 t0 = 220 + 273.15  # K
 p0 = 50  # bar
@@ -44,8 +43,8 @@ h_sat_v = (2803.1 - 2803.0) / (33.467 - 27.968) * (
 delta_h_sat = (h_sat_v - h_sat_l)
 # Zulaufbedingungen
 n_i_0 = np.array([
-    1171.15, 1178.85, 3058.84,
-    100.65, 0, 0,
+    614.831, 561.517, 1073.381,
+    98.271, 0, 0,
     0, 0, 0,
     0
 ]) / 60**2 * 1000  # mol/s
@@ -381,22 +380,16 @@ def profile(n_i_1_ein, d_p_ein, optimisieren_nach='n_t'):
     y_co_1 = y_i_1[namen.index('CO')]
     y_co2_1 = y_i_1[namen.index('CO2')]
 
-    n_co_zus_aus = n_1 * (
-        verhaeltnis_co_co2 * y_co2_1 - y_co_1
-    )
-
     n_h2_zus_aus = v_f_flash * n_2 * (
         sn_param * (y_co2_r + y_co_r) +
         y_co2_r - y_h2_r
     ) + n_0 * (
         sn_param * (y_co2_0 + y_co_0) +
         y_co2_0 - y_h2_0
-    ) + sn_param * n_co_zus_aus
+    )
 
     n_i_1_aus[namen.index('H2')] = \
         n_i_1_aus[namen.index('H2')] + n_h2_zus_aus
-    n_i_1_aus[namen.index('CO')] = \
-        n_i_1_aus[namen.index('CO')] + n_co_zus_aus
 
     # Partikeldurchmesser nach Parameter Delta_P=3bar optimisieren.
     # Es wird direkt Fixpunkt-Iteration angewendet, nach der Form der Ergun Gl.
@@ -408,7 +401,6 @@ def profile(n_i_1_ein, d_p_ein, optimisieren_nach='n_t'):
 
     n_i_0_vollst = n_i_0.copy()
     n_i_0_vollst[namen.index('H2')] += n_h2_zus_aus
-    n_i_0_vollst[namen.index('CO')] += n_co_zus_aus
 
     mm_0 = sum(n_i_0 / sum(n_i_0) * mm) / 1000.  # kg/mol
     mm_0_vollst = sum(n_i_0_vollst / sum(n_i_0_vollst) * mm) / 1000.  # kg/mol
@@ -434,7 +426,7 @@ def profile(n_i_1_ein, d_p_ein, optimisieren_nach='n_t'):
     return n_i_1_aus, y_i1_ein, n_t_aus, l_r_aus, d_p_aus, g_neu, \
         cp_g_1_ein, m_dot_ein, t_soln, p_soln, \
         n_soln, n_i_soln, y_i_soln, \
-        n_i_r_rueckf, n_h2_zus_aus, n_co_zus_aus, \
+        n_i_r_rueckf, n_h2_zus_aus, \
         n_i_0_vollst
 
 
@@ -454,10 +446,10 @@ t1 = t0
 z_d_l_r = np.linspace(0, 1, 100)
 dlr = 1 / (len(z_d_l_r) - 1) * l_r  # m
 
-for i in range(25):
+for i in range(50):
     n_i_1, y_i1, n_t, l_r, d_p, g, cp_g_1, \
         m_dot, t_z, p_z, n_z, n_i_z, \
-        y_i_z, n_i_r, n_h2_zus, n_co_zus, \
+        y_i_z, n_i_r, n_h2_zus, \
         n_i_0_vollst = profile(
             n_i_1, d_p,
             optimisieren_nach=optimisieren_nach_param
@@ -627,21 +619,16 @@ print('')
 print('======' * 3)
 print('=== ERFORDERLICHE CO UND H2 STRÖME, UM SN UND CO/CO2 ANZUPASSEN ===')
 print('H2: ' +
-      locale.format('%.8g', n_h2_zus.item() * mm[namen.index('H2')] *
-                    1000. / 60 ** 2) + ' kg/h')
-print('CO: ' +
-      locale.format('%.8g', n_co_zus.item() * mm[namen.index('CO')] *
-                    1000. / 60**2) + ' kg/h')
+      locale.format('%.8g', n_h2_zus.item() * mm[namen.index('H2')] /
+                    1000. * 60 ** 2) + ' kg/h')
 print('auf kmol/h')
 print('H2: ' +
-      locale.format('%.8g', n_h2_zus.item() * 1000. / 60 ** 2) + ' kmol/h')
-print('CO: ' +
-      locale.format('%.8g', n_co_zus.item() * 1000. / 60 ** 2) + ' kmol/h')
+      locale.format('%.8g', n_h2_zus.item() / 1000. * 60 ** 2) + ' kmol/h')
 print('')
 print('MAKE-UP MIT ERFORDERLICHEN H2 UND CO-STRÖMEN')
 print('\n'.join([
     namen[i] + ': ' + locale.format('%.8g', x) + 'kmol/h'
-    for i, x in enumerate(n_i_0_vollst)
+    for i, x in enumerate(n_i_0_vollst / 1000. * 60**2)
 ]))
 print('')
 print('======' * 3)
