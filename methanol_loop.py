@@ -16,8 +16,8 @@ optimisieren_nach_param = ['n_t', 'l_r_n_t'][0]
 namen = ['CO', 'CO2', 'H2', 'H2O', 'MeOH',
          'CH4', 'N2', 'EthOH', 'PrOH', 'METHF']
 # Katalysator
-rho_b = 1190  # kg Kat/m^3 Feststoff
-phi = 0.3  # m^3 Gas/m^3 Feststoff
+rho_b = 1190  # kg Kat/m^3 Kat-Schüttung
+phi = 0.3  # m^3 Hohl/m^3 Kat-Schüttung
 m_kat = 1190 * (1 - 0.3) * np.pi / 4 * (
     0.03)**2 * 7  # kg Kat (pro Rohr)
 # Partikeldurchmesser wählen, damit
@@ -488,9 +488,9 @@ t_m_2 = 1 / 2 * (-94765 / 8.3145 - np.sqrt(-94765 /
                                            8.3145 * (-94765 / 8.3145 - 4 * t_r)))
 
 vars_1 = [
-    [r'\rho_b', rho_b, r'\frac{kg_{Kat}}{m^3_{Fest}}'],
-    ['\phi', phi, r'\frac{m^3_{Gas}}{m^3_{Fest}}'],
-    ['D_p', d_p, 'm_{Fest}'],
+    [r'\rho_b', rho_b, r'\frac{kg_{Kat}}{m^3_{Schüttung}}'],
+    ['\phi', phi, r'\frac{m^3_{Hohlraum}}{m^3_{Schüttung}}'],
+    ['D_p', d_p, 'm'],
 ]
 vars_2 = [
     ['D_t', d_t, 'm'],

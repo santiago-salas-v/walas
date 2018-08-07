@@ -229,12 +229,12 @@ def k_t(t):
     k_1 = np.exp(4577.8 / t - 4.33)
     # Angepasste Parameter des kinetischen Modells
     # k0 exp(-Ea/RT)
-    # Applied Catalysis A: General 137 (1996) 349-370
-    k0 = np.exp(26.1)  # mol/gKat/s * (mol/L)^(-1-0.53)
-    ea = 95e3  # J/mol
+    # R.L. Keiski et al./Appl. Catal. A 101 (1993) 317-338
+    # ICI-Fe3O4-Cr2O3
+    k0 = np.exp(12.64)  # mol/gKat/s * (mol/L)^(-0.1-0.54)
+    ea = 8008*r  # J/mol
     k = k0 * np.exp(-ea / (r * t))
-    # mol / kgKat / s / atm
-    # mol / gKat / s * (mol/L)^(-n-m-p-q)
+    # mol / kgKat / s * (mol/L)^(-n-m-p-q)
     return np.array([
         k_1, k
     ])
@@ -247,17 +247,17 @@ def r_i(t, p_i, z_realgas_f):
     p_h2o = p_i[namen.index('H2O')]
     p = sum(p_i)
     [k_1, k] = k_t(t)
-    r_co = k * p_co**1.1 * p_h2o**0.53 * (
+    r_co = k * p_co**0.54 * p_h2o**0.10 * (
         1 - 1 / k_1 * p_co2 * p_h2 / (
             p_co * p_h2o
         )
     ) * (1e5 / 1000. /
          (8.3145 * t * z_realgas_f)
-         )**(1.1 + 0.53)
-    # mol / gKat / s * (mol/L)^(-1.63) *
-    # (bar)^1.63 * (mol K/m^3/Pa/K)^(1.63) *
-    # (10^5Pa/bar * 1m^3/1000L)^1.63
-    # = mol / gKat / s
+         )**(0.54 + 0.1)
+    # mol / kgKat / s * (mol/L)^(-0.64) *
+    # (bar)^0.64 * (mol K/m^3/Pa/K)^(0.64) *
+    # (10^5Pa/bar * 1m^3/1000L)^0.64
+    # = mol / kgKat / s
     return r_co
 
 
@@ -277,9 +277,9 @@ def df_dt(y, _, m_punkt):
     p_i = y_i * p  # bar
     delta_h_r_t = delta_h_r(t, nuij, delta_h_r_298)
     mu_t_y = mu(t, y_i)
-    r_j = r_i(t, p_i, z_realgas_f) * 1000
+    r_j = r_i(t, p_i, z_realgas_f)
     # mol/g Kat/s * 1000gKat/kgKat = mol/kg Kat/s
-    r_strich_j = r_j * 8.3145 * t * z_realgas_f / p / 1e5 * rho_b
+    r_strich_j = r_j * rho_b
     # mol / kg Kat/s * Pa m^3/mol/K * K /bar * 1bar/1e5Pa * kgKat/m^3Katschüttung
     # = m^3 / m^3Katschüttung / s
 
@@ -310,7 +310,7 @@ rho_c = 1945 # kg Kat/m^3 Feststoff
 phi = 0.38 + 0.073 * (1 - (d_t / d_p - 2)**2 / (d_t / d_p)
                       ** 2)  # m^3 Gas/m^3 Feststoff
 phi = 0.4
-rho_b = 1190  # kg Kat/m^3 Schüttung
+rho_b = 1190*(1-phi)  # kg Kat/m^3 Schüttung
 # Betriebsbedingungen
 t0 = 599.85 + 273.15  # K
 p0 = 1.01325  # bar
@@ -327,11 +327,11 @@ h_sat_v = (2803.1 - 2803.0) / (33.467 - 27.968) * (
 delta_h_sat = (h_sat_v - h_sat_l)
 # Zulaufbedingungen
 n_i_0 = np.array([
-    6.6, 9.1, 36.0,
-    26.4, 0, 4.7,
+    1 / (1 + 2.4), 0, 0,
+    2.4 / (1 + 2.4), 0, 0,
     0, 0, 0,
     0
-]) / 60**2  # mol/s
+]) * 16/60**2 *1/8.3145/873  # mol/s
 y_i0 = n_i_0 / sum(n_i_0)
 m_dot = sum(n_i_0 * mm / 1000.)  # kg/s
 
@@ -374,9 +374,7 @@ z_d_l_r = np.linspace(0, 1, 100)
 d_z_dimlos = 1 / (len(z_d_l_r) - 1)  # dimlos
 dlr = d_z_dimlos * l_r  # m
 soln = odeint(lambda y, z0:
-              df_dt(y, z0, g, d_t, l_r,
-                    phi, d_p, rho_b,
-                    u, t_r),
+              df_dt(y, z0, g),
               y_0, z_d_l_r)
 y_i_soln = soln[:, :len(y_i0)]
 p_soln = soln[:, -2]
@@ -448,9 +446,9 @@ text_3 = '\n'.join(['$' + ' = '.join([line[0], '{:g}'.format(line[1]) +
 text_4 = '\n'.join(['$' + ' = '.join([line[0], '{:g}'.format(line[1]) +
                                       ' ' + line[2]]) + '$'
                     for line in vars_4])
-fig = plt.figure(1)
+fig = plt.figure(2)
 fig.suptitle('Adiabates System' +
-             '(Journal of Power Sources 173 (2007) 467–477)')
+             'IOP Conf. Series: Materials Science and Engineering 121(2016) 012022')
 fig.text(0.05, 0.935, text_1, va='top', fontsize=8)
 fig.text(0.25, 0.935, text_2, va='top', fontsize=8)
 fig.text(0.50, 0.935, text_3, va='top', fontsize=8)
