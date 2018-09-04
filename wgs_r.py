@@ -265,7 +265,6 @@ def df_dt(y, _, g, r_fun):
     p = y[-2]
     t = y[-1]
     y_i = y_i0 + nuij.dot(np.array([xi]))
-    u_co = xi / y_i0[namen.index('CO')]
     mm_m = sum(y_i * mm) * 1 / 1000.  # kg/mol
     cp_m = sum(y_i * cp_ig_durch_r(t) * 8.3145)  # J/mol/K
     cp_g = cp_m / mm_m  # J/kg/K
@@ -281,13 +280,14 @@ def df_dt(y, _, g, r_fun):
     r_j = r_fun(t, p_i, z_realgas_f)
     # mol/kg Kat/s
     r_strich_j = r_j * rho_b
-    # mol / kg Kat/s * Pa m^3/mol/K * K /bar * 1bar/1e5Pa * kgKat/m^3Katschüttung
+    # mol / kg Kat/s * kgKat/m^3Katschüttung
     # = mol / m^3Katschüttung / s
     dp_dvkat = -1 / 10 ** 5 * g / (
             c_t * mm_m * d_p * np.pi / 4 * d_t**2
     ) * (1 - phi) / phi ** 3 * (
                     150 * (1 - phi) * mu_t_y / d_p + 1.75 * g
-            )  # Pa * 1bar/(1e5 Pa) = bar
+            )  # kg/m^2/s * m^3/mol * mol/kg /m^3Schüttung *
+    # m^3Katfest/m^3Schüttung*m^6Schüttung/m^6Gas * kg/s/m^2
     dxi_dvkat = 1 / n_punkt * r_strich_j
     # mol/mol * s/m^3 * m^3/m^3Katschüttung / s = mol/mol/m^3Katschüttung
     dt_dvkat = 1 / n_punkt * (
@@ -440,18 +440,18 @@ fig.text(0.75, 0.935, text_4, va='top', fontsize=8)
 ax = plt.subplot2grid([2, 3], [0, 0])
 ax.plot(frac_v_kat, v_soln, label='$\dot V$')
 ax.set_ylabel(r'$\frac{\dot V}{m^3/h}$')
-ax.set_xlabel(r'Red. , $\frac{V_{Kat}}{V_{Kat, ges}}$')
+ax.set_xlabel(r'$V_{Kat}/V_{Kat, ges}$')
 ax2 = plt.subplot2grid([2, 3], [1, 0])
 ax2.plot(frac_v_kat, m_km_soln)
 ax2.fill_between(v_kat, 0, m_km_soln, color='orange')
 ax2.text(0.3, 1 / 2. * (m_km_soln[0] + m_km_soln[-1]),
          '{:g}'.format(sum(m_km_soln * d_v_kat)) + 'kg/h \n')
 ax2.set_ylabel(r'$\frac{\dot m_{Kuehlmittel}}{\frac{kg}{h\cdot m}}$')
-ax2.set_xlabel(r'Red. , $\frac{V_{Kat}}{V_{Kat, ges}}$')
+ax2.set_xlabel(r'$V_{Kat}/V_{Kat, ges}$')
 
 ax3 = plt.subplot2grid([2, 3], [1, 1], colspan=2)
 ax3.set_ylabel('Massenstrom / (kg/h)')
-ax3.set_xlabel(r'Red. , $\frac{V_{Kat}}{V_{Kat, ges}}$')
+ax3.set_xlabel(r'$V_{Kat}/V_{Kat, ges}$')
 for item in ['CO', 'H2O', 'H2', 'CO2']:
     marker = np.random.choice(list(lines.lineMarkers.keys()))
     index = namen.index(item)
@@ -462,13 +462,13 @@ ax4 = plt.subplot2grid([2, 3], [0, 1])
 ax4_1 = ax4.twinx()
 ax4_1.set_ylabel('CO - Molanteil')
 ax4.set_ylabel('Temperatur / °C')
-ax4.set_xlabel(r'Red. , $\frac{V_{Kat}}{V_{Kat, ges}}$')
+ax4.set_xlabel(r'$V_{Kat}/V_{Kat, ges}$')
 ax4.plot(frac_v_kat, t_soln - 273.15, label='T / °C')
 ax4_1.plot(frac_v_kat, y_i_soln[:, namen.index('CO')],
            ls='--', color='gray')
 ax5 = plt.subplot2grid([2, 3], [0, 2], colspan=2)
 ax5.set_ylabel('Druck / bar')
-ax5.set_xlabel(r'Red. , $\frac{V_{Kat}}{V_{Kat, ges}}$')
+ax5.set_xlabel(r'$V_{Kat}/V_{Kat, ges}$')
 ax5.plot(frac_v_kat, p_soln, label='p / bar')
 plt.tight_layout(rect=[0, 0, 0.95, 0.75])
 
@@ -659,18 +659,18 @@ fig.text(0.75, 0.89, text_4, va='top', fontsize=8)
 ax = plt.subplot2grid([2, 3], [0, 0])
 ax.plot(frac_v_kat, v_soln, label='$\dot V$')
 ax.set_ylabel(r'$\frac{\dot V}{m^3/h}$')
-ax.set_xlabel(r'Red. , $\frac{V_{Kat}}{V_{Kat, ges}}$')
+ax.set_xlabel(r'$V_{Kat}/V_{Kat, ges}$')
 ax2 = plt.subplot2grid([2, 3], [1, 0])
 ax2.plot(frac_v_kat, m_km_soln)
 ax2.fill_between(v_kat, 0, m_km_soln, color='orange')
 ax2.text(0.3, 1 / 2. * (m_km_soln[0] + m_km_soln[-1]),
          '{:g}'.format(sum(m_km_soln * d_v_kat)) + 'kg/h \n')
 ax2.set_ylabel(r'$\frac{\dot m_{Kuehlmittel}}{\frac{kg}{h\cdot m}}$')
-ax2.set_xlabel(r'Red. , $\frac{V_{Kat}}{V_{Kat, ges}}$')
+ax2.set_xlabel(r'$V_{Kat}/V_{Kat, ges}$')
 
 ax3 = plt.subplot2grid([2, 3], [1, 1], colspan=2)
 ax3.set_ylabel('Massenstrom / (kg/h)')
-ax3.set_xlabel(r'Red. , $\frac{V_{Kat}}{V_{Kat, ges}}$')
+ax3.set_xlabel(r'$V_{Kat}/V_{Kat, ges}$')
 for item in ['CO', 'H2O', 'H2', 'CO2']:
     marker = np.random.choice(list(lines.lineMarkers.keys()))
     index = namen.index(item)
@@ -681,13 +681,13 @@ ax4 = plt.subplot2grid([2, 3], [0, 1])
 ax4_1 = ax4.twinx()
 ax4_1.set_ylabel('CO - Molanteil')
 ax4.set_ylabel('Temperatur / °C')
-ax4.set_xlabel(r'Red. , $\frac{V_{Kat}}{V_{Kat, ges}}$')
+ax4.set_xlabel(r'$V_{Kat}/V_{Kat, ges}$')
 ax4.plot(frac_v_kat, t_soln - 273.15, label='T / °C')
 ax4_1.plot(frac_v_kat, y_i_soln[:, namen.index('CO')],
            ls='--', color='gray')
 ax5 = plt.subplot2grid([2, 3], [0, 2], colspan=2)
 ax5.set_ylabel('Druck / bar')
-ax5.set_xlabel(r'Red. , $\frac{V_{Kat}}{V_{Kat, ges}}$')
+ax5.set_xlabel(r'$V_{Kat}/V_{Kat, ges}$')
 ax5.plot(frac_v_kat, p_soln, label='p / bar')
 plt.tight_layout(rect=[0, 0, 0.95, 0.75])
 

@@ -18,15 +18,15 @@ namen = ['CO', 'CO2', 'H2', 'H2O', 'MeOH',
 # Katalysator
 rho_b = 1190  # kg Kat/m^3 Kat-Schüttung
 phi = 0.3  # m^3 Hohl/m^3 Kat-Schüttung
-m_kat = 1190 * (1 - 0.3) * np.pi / 4 * (
-    0.03)**2 * 7  # kg Kat (pro Rohr)
+m_kat = 1190 / (1 - phi) * np.pi / 4 * (
+    0.04)**2  # kg Kat (pro Rohr)
 # Partikeldurchmesser wählen, damit
 # Delta P gesamt=-3bar, denn dies ist der Parameter
-d_p = 0.0054 / 0.0054 * 0.16232576224693065  # m Feststoff
+d_p = 0.0037  # m Feststoff
 # Reaktor
 n_t = 1620  # Rohre
 d_t = 0.04  # m Rohrdurchmesser
-l_r = 6.  # m Rohrlänge
+l_r = 7.  # m Rohrlänge
 # Betriebsbedingungen
 t0 = 220 + 273.15  # K
 p0 = 50  # bar
@@ -43,8 +43,8 @@ h_sat_v = (2803.1 - 2803.0) / (33.467 - 27.968) * (
 delta_h_sat = (h_sat_v - h_sat_l)
 # Zulaufbedingungen
 n_i_0 = np.array([
-    614.831, 561.517, 1073.381,
-    98.271, 0, 0,
+    815.971289604776, 742.532729379517, 1428.31227328805,
+    130.227409173567+76.54944195313007, 0, 0,
     0, 0, 0,
     0
 ]) / 60**2 * 1000  # mol/s
@@ -396,6 +396,7 @@ def profile(n_i_1_ein, d_p_ein, optimisieren_nach='n_t'):
     # D_p{n+1} = D_p{n} * int(1/D_p{n}*f(D_p{n}) dz) / -3bar
     deltap_deltaz = (soln[-1][-2] - soln[0][-2]).item()
     d_p_aus = deltap_deltaz * d_p_ein / -3.0
+    d_p_aus = d_p_ein
 
     n_i_r_rueckf = v_f_flash * sum(n_i_2) * y_i_flash
 
