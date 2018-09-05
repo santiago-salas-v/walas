@@ -9,9 +9,11 @@ import ctypes, os
 # Theorie und Aufstellung der Gleichungen:
 # https://git.io/fdKBI
 
-sn_param = 4.6  # 2.05  # dimensionslos
+sn_param = (22222.0112180475-5488.76285475286)/(
+        5488.76285475286+2206.10385252181) # FIXME: 2,19 SN crash
+sn_param = 2.55 # 2.05  # dimensionslos
 ntu_param = 3.09  # Parameter
-optimisieren_nach_param = ['n_t', 'l_r_n_t'][0]
+optimisieren_nach_param = ['n_t', 'l_r_n_t', 'keine_opt'][2]
 
 namen = ['CO', 'CO2', 'H2', 'H2O', 'MeOH',
          'CH4', 'N2', 'EthOH', 'PrOH', 'METHF']
@@ -24,9 +26,9 @@ m_kat = 1190 / (1 - phi) * np.pi / 4 * (
 # Delta P gesamt=-3bar, denn dies ist der Parameter
 d_p = 0.0037  # m Feststoff
 # Reaktor
-n_t = 1620  # Rohre
+n_t = 10921  # Rohre
 d_t = 0.04  # m Rohrdurchmesser
-l_r = 7.  # m Rohrlänge
+l_r = 6.  # m Rohrlänge
 # Betriebsbedingungen
 t0 = 220 + 273.15  # K
 p0 = 50  # bar
@@ -43,8 +45,8 @@ h_sat_v = (2803.1 - 2803.0) / (33.467 - 27.968) * (
 delta_h_sat = (h_sat_v - h_sat_l)
 # Zulaufbedingungen
 n_i_0 = np.array([
-    815.971289604776, 742.532729379517, 1428.31227328805,
-    130.227409173567+76.54944195313007, 0, 0,
+    816.040561587593, 742.463438412464, 1428.19943841246,
+    130.296561587538+76.54944195313007, 0, 0,
     0, 0, 0,
     0
 ]) / 60**2 * 1000  # mol/s
@@ -334,7 +336,10 @@ def profile(n_i_1_ein, d_p_ein, optimisieren_nach='n_t'):
         )
         l_r_aus = np.sqrt(verhaeltnis) * l_r
         n_t_aus = np.sqrt(verhaeltnis) * n_t
-
+    elif optimisieren_nach == 'keine_opt':
+        # Keine Optimsierung von weder Rohrenzahl noch Länge
+        l_r_aus = l_r
+        n_t_aus = n_t
     g_neu = m_dot_ein / (np.pi / 4 * d_t ** 2) / n_t_aus  # kg/m^2/s
     y_0 = np.empty([len(namen) + 1 + 1])
     y_0[:-2] = y_i1_ein
@@ -607,7 +612,7 @@ print('\n'.join([
 print('')
 print('\n'.join([
     namen[i] + ': ' + locale.format('%.8g', x) + 'kmol/h'
-    for i, x in enumerate(n_i_0)
+    for i, x in enumerate(n_i_0 * 60**2 / 1000.)
 ]))
 print('')
 print('======' * 3)
@@ -637,6 +642,11 @@ print('=== REAKTOR ZULAUFSTROM ===')
 print('\n'.join([
     namen[i] + ': ' + locale.format('%.8g', x) + ' kg/h'
     for i, x in enumerate(n_i_1 * mm / 1000. * 60**2)
+]))
+print('\nauf kmol/h\n')
+print('\n'.join([
+    namen[i] + ': ' + locale.format('%.8g', x) + ' kmol/h'
+    for i, x in enumerate(n_i_1 / 1000. * 60**2)
 ]))
 print('SN0: ' + str((n_i_0_vollst[namen.index('H2')] -
                      n_i_0_vollst[namen.index('CO2')]) / (
