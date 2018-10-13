@@ -3,7 +3,7 @@ from scipy import optimize
 from matplotlib import pyplot as plt
 import sys
 
-r = 8.314 * 10.**6 / 10.**5  # bar cm^3/(mol K)
+r = 8.314 * 10. ** 6 / 10. ** 5  # bar cm^3/(mol K)
 rlv = 0.8  # Rücklaufverhältnis
 t_flash = 273.16 + 60  # K
 
@@ -97,6 +97,7 @@ def z_l_func(z, beta, q):
             (1 + beta - z) / (q * beta)
         )
 
+
 # Dampfdruck nach VDI-Wärmeatlas
 
 
@@ -141,6 +142,7 @@ def p_sat_func(psat, t, af_omega, tc, pc, full_output=False):
 
 def p_sat(t, af_omega, tc, pc):
     def fs(psat): return p_sat_func(psat, t, af_omega, tc, pc)
+
     # Das Levenberg-Marquardt Algorithmus weist wenigere Sprunge auf.
     return optimize.root(fs, 1., method='lm')
 
@@ -148,7 +150,7 @@ def p_sat(t, af_omega, tc, pc):
 def z_non_sat(t, p, x_i, tc_i, pc_i, af_omega_i):
     tr_i = t / tc_i
     # vorsicht: Alpha oder Tr^(-1/2)
-    a_i = psi * alpha(tr_i, af_omega_i) * r**2 * tc_i**2 / pc_i
+    a_i = psi * alpha(tr_i, af_omega_i) * r ** 2 * tc_i ** 2 / pc_i
     b_i = omega * r * tc_i / pc_i
     beta_i = b_i * p / (r * t)
     q_i = a_i / (b_i * r * t)
@@ -211,6 +213,12 @@ def phi_l(t, p, x_i, tc_i, pc_i, af_omega_i):
     z_soln = optimize.root(
         lambda z_var: z_l_func(z_var, beta_l, q_l),
         beta_l)
+    a1_l = beta_l * (epsilon + sigma) - beta_l - 1
+    a2_l = q_l * beta_l + epsilon * sigma * beta_l ** 2 \
+        - beta_l * (epsilon + sigma) * (1 + beta_l)
+    a3_l = -(epsilon * sigma * beta_l ** 2 * (1 + beta_l) +
+             q_l * beta_l ** 2)
+    #z_soln = solve_cubic(1, a1_l, a2_l, a3_l, return_det=True)
     z_l = z_soln.x
     success = z_soln.success
     opt_func = z_soln.fun
@@ -230,7 +238,8 @@ def phi_l(t, p, x_i, tc_i, pc_i, af_omega_i):
         soln[item] = locals().get(item)
     return soln
 
-def solve_cubic(a, b, c, d):
+
+def solve_cubic(a, b, c, d, return_det=False):
     """
     solves a x^3 + b x^2 + c x + d = 0
     :param a: cubic coef.
@@ -239,21 +248,21 @@ def solve_cubic(a, b, c, d):
     :param d: constant
     """
     y_minus_x = b / a / 3
-    p = -(b / a)**2/3 + c/a
-    q = 2/27*(b / a)**3 - 1/3 * b * c / a**2 + d / a
-    det = (q / 2)**2 + (p / 3)**3
+    p = -(b / a) ** 2 / 3 + c / a
+    q = 2 / 27 * (b / a) ** 3 - 1 / 3 * b * c / a ** 2 + d / a
+    det = (q / 2) ** 2 + (p / 3) ** 3
 
-    if det<0:
+    if det < 0:
         # casus irreducibiles
         # 3 real roots
         im_x1 = 0
         im_x2 = 0
         im_x3 = 0
-        re_x1 = 2 * (-p / 3)**(1 / 2) * (
+        re_x1 = 2 * (-p / 3) ** (1 / 2) * (
             np.cos(
                 1 / 3 * np.arccos(
-                    -q / 2 / (-p / 3)**(3/2)
-                ) + 0*2*np.pi/3
+                    -q / 2 / (-p / 3) ** (3 / 2)
+                ) + 0 * 2 * np.pi / 3
             )
         ) - y_minus_x
         re_x2 = 2 * (-p / 3) ** (1 / 2) * (
@@ -276,9 +285,9 @@ def solve_cubic(a, b, c, d):
         v = real_cube_root(-q / 2 - det ** (1 / 2))
         im_x1 = 0
         re_x1 = u + v - y_minus_x
-        im_x2 = 3**(1 / 2)/2 * (u - v)
+        im_x2 = 3 ** (1 / 2) / 2 * (u - v)
         re_x2 = -1 / 2 * (u + v) - y_minus_x
-        im_x3 = -3**(1 / 2)/2 * (u - v)
+        im_x3 = -3 ** (1 / 2) / 2 * (u - v)
         re_x3 = re_x2
     soln = np.array([
         [re_x1, im_x1],
@@ -286,7 +295,11 @@ def solve_cubic(a, b, c, d):
         [re_x3, im_x3],
     ], dtype=float
     )
-    return soln
+    if return_det:
+        return dict([['soln', soln], ['det', det]])
+    elif not return_det:
+        return soln
+
 
 def real_cube_root(x):
     if x >= 0:
@@ -388,7 +401,7 @@ def siedepunkt(t, p, x_i, y_i, tc_i, pc_i, af_omega_i, max_it, tol=1e-14):
         k_i = soln_l['phi_l'] / soln_v['phi_v']
         sum_k_i_n = sum(k_i * x_i)
         y_i = k_i * x_i / sum_k_i_n
-        stop = np.abs((sum_k_i_n_min_1 - sum_k_i_n)/sum_k_i_n) <= tol
+        stop = np.abs((sum_k_i_n_min_1 - sum_k_i_n) / sum_k_i_n) <= tol
         # print('i='+str(i))
 
     opt_func = 1 - sum(k_i * x_i)
@@ -397,8 +410,6 @@ def siedepunkt(t, p, x_i, y_i, tc_i, pc_i, af_omega_i, max_it, tol=1e-14):
     for item in ['soln_l', 'soln_v', 'k_i', 'y_i', 'opt_func']:
         soln[item] = locals().get(item)
     return soln
-
-
 
 
 def isot_flash(t, p, x_i, y_i, z_i, tc_i, pc_i, af_omega_i):
@@ -455,9 +466,11 @@ def beispiel_wdi_atlas():
     while i < len(t) and success:
         temp = t[i]
 
-        def fs(psat): return p_sat_func(
-            psat, temp, omega_af[0], tc[0], pc[0]
-        )
+        def fs(psat):
+            return p_sat_func(
+                psat, temp, omega_af[0], tc[0], pc[0]
+            )
+
         root = optimize.root(fs, 1.0, method='lm')
         if root.success:
             res[i] = root.x
@@ -1075,55 +1088,9 @@ def beispiel_pat_ue_03_vollstaendig(rlv, print_output=False):
     return nl[-2]  # Methanol in der Flüssigkeit
 
 
-
 # beispiel_wdi_atlas()
 # beispiel_svn_14_1()
-poly_set = [
-    [1,0,1,-6],
-    [1,-3,-3,-1],
-    [1,0,-15,-4],
-    [1,0,-8,-3],
-    [1,6,9,-2],
-    [1, 0, 6, -20],
-    [1, 0, -6, -20],
-    [1, 0, -15, -4],
-    [1, 0, -13, -12],
-    [1, 6, 9, -2],
-    [1, 0, 6, -20],
-    [2, -24, 108, -216],
-    [1, 0, 6, -20],
-    [1, -6, 11, -6],
-    [1, -5, 8, -4],
-    [1, -3, 3, -1],
-    [1, 1, 1, -3],
-    [2, 3, -11, -6],
-    [1, 5, -14, 0],
-    [1, 2, -9, -18],
-    [1, 0, -5, 2],
-    [1, -1, -14, 24],
-    [1, -3, 3, -5],
-    [1, 1/(105.020431666281**2*(1/1)*1/3)-3, 3, -1],
-    [1, 7, 49, 343],
-    [5.7357, -15.6368, 30.315, -14.8104],
-    [1, -1.0595, 0.2215, -0.01317],
-    [1, -1, 0.089, -0.0013]
-]
-for index, poly in enumerate(poly_set):
-    print('0='+'+'.join(
-        [str(item)+'*x^'+str(3-i)
-         for i, item in enumerate(poly)]
-    ))
-    soln = solve_cubic(*poly)
-    print('x='+str(soln))
-    f_0 = 0
-    soln_comp = np.array([
-        [item[0]+1j*item[1]] for item in soln
-    ])
-    for i in range(len(poly)):
-        f_0 += soln_comp**(3-i)*poly[i]
-    print('f(x)='+str(abs(f_0)))
-    print('')
-# beispiel_svn_14_2()
+beispiel_svn_14_2()
 # beispiel_pat_ue_03_flash()
 # beispiel_isot_flash_seader_4_1()
 # beispiel_pat_ue_03_vollstaendig(0.2)
