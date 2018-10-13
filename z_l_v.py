@@ -230,6 +230,70 @@ def phi_l(t, p, x_i, tc_i, pc_i, af_omega_i):
         soln[item] = locals().get(item)
     return soln
 
+def solve_cubic(a, b, c, d):
+    """
+    solves a x^3 + b x^2 + c x + d = 0
+    :param a: cubic coef.
+    :param b: quadratic coef.
+    :param c: linear coef.
+    :param d: constant
+    """
+    y_minus_x = b / a / 3
+    p = -(b / a)**2/3 + c/a
+    q = 2/27*(b / a)**3 - 1/3 * b * c / a**2 + d / a
+    det = (q / 2)**2 + (p / 3)**3
+
+    if det<0:
+        # casus irreducibiles
+        # 3 real roots
+        im_x1 = 0
+        im_x2 = 0
+        im_x3 = 0
+        re_x1 = 2 * (-p / 3)**(1 / 2) * (
+            np.cos(
+                1 / 3 * np.arccos(
+                    -q / 2 / (-p / 3)**(3/2)
+                ) + 0*2*np.pi/3
+            )
+        ) - y_minus_x
+        re_x2 = 2 * (-p / 3) ** (1 / 2) * (
+            np.cos(
+                1 / 3 * np.arccos(
+                    -q / 2 / (-p / 3) ** (3 / 2)
+                ) + 1 * 2 * np.pi / 3
+            )
+        ) - y_minus_x
+        re_x3 = 2 * (-p / 3) ** (1 / 2) * (
+            np.cos(
+                1 / 3 * np.arccos(
+                    -q / 2 / (-p / 3) ** (3 / 2)
+                ) + 2 * 2 * np.pi / 3
+            )
+        ) - y_minus_x
+    elif det >= 0 and (p > 0 or p <= 0):
+        # 1 real, 2 complex
+        u = real_cube_root(-q / 2 + det ** (1 / 2))
+        v = real_cube_root(-q / 2 - det ** (1 / 2))
+        im_x1 = 0
+        re_x1 = u + v - y_minus_x
+        im_x2 = 3**(1 / 2)/2 * (u - v)
+        re_x2 = -1 / 2 * (u + v) - y_minus_x
+        im_x3 = -3**(1 / 2)/2 * (u - v)
+        re_x3 = re_x2
+    soln = np.array([
+        [re_x1, im_x1],
+        [re_x2, im_x2],
+        [re_x3, im_x3],
+    ], dtype=float
+    )
+    return soln
+
+def real_cube_root(x):
+    if x >= 0:
+        return x ** (1 / 3)
+    elif x < 0:
+        return -(-x) ** (1 / 3)
+
 
 def phi_v(t, p, y_i, tc_i, pc_i, af_omega_i):
     tr_i = t / tc_i
@@ -418,7 +482,7 @@ def beispiel_svn_14_1():
 def beispiel_svn_14_2():
     use_srk_eos()
     x_i = np.array([0.2, 0.8])
-    y_i = np.array([0.5, 0.5])  # Est
+    y_i = np.array([0.2, 0.8])  # Est
     tc_i = np.array([190.6, 425.1])
     pc_i = np.array([45.99, 37.96])
     af_omega_i = np.array([0.012, 0.200])
@@ -1014,6 +1078,51 @@ def beispiel_pat_ue_03_vollstaendig(rlv, print_output=False):
 
 # beispiel_wdi_atlas()
 # beispiel_svn_14_1()
+poly_set = [
+    [1,0,1,-6],
+    [1,-3,-3,-1],
+    [1,0,-15,-4],
+    [1,0,-8,-3],
+    [1,6,9,-2],
+    [1, 0, 6, -20],
+    [1, 0, -6, -20],
+    [1, 0, -15, -4],
+    [1, 0, -13, -12],
+    [1, 6, 9, -2],
+    [1, 0, 6, -20],
+    [2, -24, 108, -216],
+    [1, 0, 6, -20],
+    [1, -6, 11, -6],
+    [1, -5, 8, -4],
+    [1, -3, 3, -1],
+    [1, 1, 1, -3],
+    [2, 3, -11, -6],
+    [1, 5, -14, 0],
+    [1, 2, -9, -18],
+    [1, 0, -5, 2],
+    [1, -1, -14, 24],
+    [1, -3, 3, -5],
+    [1, 1/(105.020431666281**2*(1/1)*1/3)-3, 3, -1],
+    [1, 7, 49, 343],
+    [5.7357, -15.6368, 30.315, -14.8104],
+    [1, -1.0595, 0.2215, -0.01317],
+    [1, -1, 0.089, -0.0013]
+]
+for index, poly in enumerate(poly_set):
+    print('0='+'+'.join(
+        [str(item)+'*x^'+str(3-i)
+         for i, item in enumerate(poly)]
+    ))
+    soln = solve_cubic(*poly)
+    print('x='+str(soln))
+    f_0 = 0
+    soln_comp = np.array([
+        [item[0]+1j*item[1]] for item in soln
+    ])
+    for i in range(len(poly)):
+        f_0 += soln_comp**(3-i)*poly[i]
+    print('f(x)='+str(abs(f_0)))
+    print('')
 # beispiel_svn_14_2()
 # beispiel_pat_ue_03_flash()
 # beispiel_isot_flash_seader_4_1()
