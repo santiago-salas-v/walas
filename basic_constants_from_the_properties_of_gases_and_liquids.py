@@ -9,6 +9,7 @@ sep_char_for_csv = '|'
 out_file = open(out_file_name, mode='w')
 out_file_full_path = os.path.abspath(out_file_name)
 
+
 def str_list_to_np_array_str(param):
     return 'np.array([' + param + '])'
 
@@ -17,7 +18,7 @@ def str_list_to_np_array_str(param):
 sel_component_numbers = [461, 455, 460, 463, 465]
 #sel_component_numbers = [130, 460, 31, 440, 455]
 #sel_component_numbers = [66, 438, ]
-out_file.write('sep='+ sep_char_for_csv + '\n')
+out_file.write('sep=' + sep_char_for_csv + '\n')
 out_file.write("""
 # Source of data:
 # Poling, Bruce E., John M. Prausnitz,
@@ -124,13 +125,13 @@ for prop in props:
     if is_numeric_prop:
         for comp_no in table_indexes_of_comp_nos:
             out_file.write(' | ' +
-                locale.str((globals()[prop])[comp_no])
-            )
+                           locale.str((globals()[prop])[comp_no])
+                           )
     else:
         for comp_no in table_indexes_of_comp_nos:
-            out_file.write(' | ' + 
-                (globals()[prop])[comp_no]
-            )
+            out_file.write(' | ' +
+                           (globals()[prop])[comp_no]
+                           )
     out_file.write('\n')
 
 
@@ -207,13 +208,13 @@ for prop in props:
     if is_numeric_prop:
         for comp_no in table_indexes_of_comp_nos:
             out_file.write(' | ' +
-                locale.str((globals()[prop])[comp_no])
-            )
+                           locale.str((globals()[prop])[comp_no])
+                           )
     else:
         for comp_no in table_indexes_of_comp_nos:
-            out_file.write(' | ' + 
-                (globals()[prop])[comp_no]
-            )
+            out_file.write(' | ' +
+                           (globals()[prop])[comp_no]
+                           )
     out_file.write('\n')
 
 
@@ -234,7 +235,7 @@ for line in file:
 
 file.close()
 out_file.write('# Ideal Gas and Liquid Heat Capacities: ' + str(len(matches)) +
-      ' Components in table')
+               ' Components in table')
 out_file.write('\n')
 
 
@@ -297,13 +298,13 @@ for prop in props:
     if is_numeric_prop:
         for comp_no in table_indexes_of_comp_nos:
             out_file.write(' | ' +
-                locale.str((globals()[prop])[comp_no])
-            )
+                           locale.str((globals()[prop])[comp_no])
+                           )
     else:
         for comp_no in table_indexes_of_comp_nos:
-            out_file.write(' | ' + 
-                (globals()[prop])[comp_no]
-            )
+            out_file.write(' | ' +
+                           (globals()[prop])[comp_no]
+                           )
     out_file.write('\n')
 
 out_file.close()
@@ -315,17 +316,24 @@ for line in out_file:
     if i > 1:
         line_to_print = line.replace('\n', '')
         if len(line_to_print) >= 1  \
-        and line_to_print[0] != "#"  \
-        and line_to_print.count('|') > 1:
-            parts = [x.strip().replace(',', '.') for x in line_to_print.split('|')]
+                and line_to_print[0] != "#"  \
+                and line_to_print.count('|') > 1:
+            parts = [x.strip().replace(',', '.')
+                     for x in line_to_print.split('|')]
             prop = parts[0]
             line_to_print = prop + ' = '
-            if prop not in ['No.', 'no', 'formula', 'name', 'cas_no', 'trange']:
-              for i in range(1, len(parts)):
-                parts[i] = float(parts[i])
+            if prop not in [
+                'No.',
+                'no',
+                'formula',
+                'name',
+                'cas_no',
+                    'trange']:
+                for i in range(1, len(parts)):
+                    parts[i] = float(parts[i])
             line_to_print += str_list_to_np_array_str(str(
-              parts[1:]).replace('[', '').replace(']', '')
-              )
+                parts[1:]).replace('[', '').replace(']', '')
+            )
         print(line_to_print)
     i += 1
 out_file.close()
