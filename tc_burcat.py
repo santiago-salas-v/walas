@@ -12,7 +12,7 @@ from PyQt5.QtCore import pyqtSignal as SIGNAL
 
 
 locale.setlocale(locale.LC_ALL, '')
-source_xml_file = 'BURCAT_THR.xml'
+source_xml_file = './data/BURCAT_THR.xml'
 
 class App(QWidget):
     def __init__(self):
@@ -49,6 +49,7 @@ class App(QWidget):
         self.tableWidget1.setHorizontalHeaderLabels(self.tableView1.model().column_names)
         self.phase_filter.addItems(['', 'G', 'L', 'S', 'C'])
         self.tableWidget1.setVisible(False)
+        self.tableWidget1.setSelectionBehavior(QTableWidget.SelectRows)
         self.tableWidget1.installEventFilter(self)
 
         # Add box layout, add table to box layout and add box layout to widget
@@ -77,6 +78,9 @@ class App(QWidget):
         self.tableView1.selectionModel().selectionChanged.connect(partial(
             self.add_selection_to_widget
         ))
+        self.tableWidget1.cellDoubleClicked.connect(partial(
+            self.delete_selected_row
+        ))
 
         # Show widget
         self.show()
@@ -101,6 +105,7 @@ class App(QWidget):
                     item_to_add = QTableWidgetItem(locale.str(data))
                 else:
                     item_to_add = QTableWidgetItem(data)
+                item_to_add.setFlags(Qt.ItemIsSelectable | Qt.ItemIsEnabled)
                 self.tableWidget1.setItem(
                     self.tableWidget1.rowCount()-1, column_no,
                     item_to_add)
@@ -130,9 +135,13 @@ class App(QWidget):
         if (event.type() == QEvent.KeyPress and
                 event.matches(QKeySequence.Copy)):
             self.copy_selection()
-            print('copied')
             return True
         return super(App, self).eventFilter(source, event)
+
+    def delete_selected_row(self):
+        index = self.tableWidget1.selectedIndexes()[0]
+        self.tableWidget1.removeRow(index.row())
+
 
 
 class thTableModel(QAbstractTableModel):
