@@ -5,7 +5,7 @@ from functools import partial
 import lxml.etree as ET
 import csv, io
 from PyQt5.QtWidgets import QTableView, QApplication, QWidget
-from PyQt5.QtWidgets import QDesktopWidget, QGridLayout, QLineEdit
+from PyQt5.QtWidgets import QDesktopWidget, QGridLayout, QLineEdit, QPushButton
 from PyQt5.QtWidgets import QComboBox, QLabel, QTableWidget, QTableWidgetItem
 from PyQt5.QtCore import QAbstractTableModel, QModelIndex, Qt, QVariant, QEvent
 from PyQt5.QtGui import QKeySequence, QGuiApplication, QFont
@@ -14,7 +14,10 @@ from PyQt5.QtCore import pyqtSignal as SIGNAL
 
 locale.setlocale(locale.LC_ALL, '')
 burcat_xml_file = './data/BURCAT_THR.xml'
-yaws_csv_file = './data/The-Yaws-Handbook-of-Vapor-Pressure-Second-Edition-Antoine-coefficients_2.csv'
+antoine_csv = './data/The-Yaws-Handbook-of-Vapor-Pressure-Second-Edition-Antoine-coefficients.csv'
+poling_basic_i_csv = './data/basic_constants_i_properties_of_gases_and_liquids.csv'
+poling_basic_ii_csv = './data/basic_constants_ii_properties_of_gases_and_liquids.csv'
+poling_cp_l_ig_poly_csv = './data/ig_l_heat_capacities_properties_of_gases_and_liquids.csv'
 
 class App(QWidget):
     def __init__(self):
@@ -45,15 +48,21 @@ class App(QWidget):
         self.name_filter = QLineEdit()
         self.formula_filter = QLineEdit()
         self.phase_filter = QComboBox()
+        self.delete_selected_button = QPushButton()
+        self.copy_selected_button = QPushButton()
 
         self.tableView1.setModel(self.model)
         self.tableWidget1.added_column_names = ['']
         self.tableWidget1.setColumnCount(self.tableView1.model().columnCount())
-        self.tableWidget1.setHorizontalHeaderLabels(self.tableView1.model().column_names_burcat)
+        self.tableWidget1.setHorizontalHeaderLabels(
+            self.tableView1.model().column_names
+        )
         self.phase_filter.addItems(['', 'G', 'L', 'S', 'C'])
         self.tableWidget1.setEnabled(False)
         self.tableWidget1.setSelectionBehavior(QTableWidget.SelectRows)
         self.tableWidget1.installEventFilter(self)
+        self.delete_selected_button.setText('delete selected')
+        self.copy_selected_button.setText('copy selected')
 
         # Add box layout, add table to box layout and add box layout to widget
         self.layout = QGridLayout()
@@ -68,6 +77,9 @@ class App(QWidget):
         self.layout.addWidget(QLabel('phase'), 2, 4, 1, 1)
         self.layout.addWidget(QLabel('selection'), 4, 1, 1, 4)
         self.layout.addWidget(self.tableWidget1, 5, 1, 1, 4)
+        self.layout.addWidget(self.delete_selected_button, 6, 4, 1, 1)
+        self.layout.addWidget(self.copy_selected_button, 6, 1, 1, 1)
+
 
 
 
@@ -82,6 +94,12 @@ class App(QWidget):
                 self.cas_filter, self.name_filter, self.formula_filter, self.phase_filter))
         self.tableView1.selectionModel().selectionChanged.connect(partial(
             self.add_selection_to_widget
+        ))
+        self.delete_selected_button.clicked.connect(partial(
+            self.delete_selected
+        ))
+        self.copy_selected_button.clicked.connect(partial(
+            self.copy_selection
         ))
 
         # Show widget
@@ -99,14 +117,16 @@ class App(QWidget):
             if phase == self.tableWidget1.item(item.row(), column_of_phase).text():
                 already_in_table = True
         if not already_in_table:
+            column_names = self.tableView1.model().column_names_burcat + \
+                           self.tableView1.model().column_names_ant
             self.tableWidget1.setRowCount(self.tableWidget1.rowCount() + 1)
-            for column_name in self.tableView1.model().column_names_burcat:
-                column_no = self.tableView1.model().column_names_burcat.index(column_name)
+            for column_name in column_names:
+                column_no = column_names.index(column_name)
                 data = self.tableView1.model().index(index.row(), column_no).data()
-                if type(data) != str:
-                    item_to_add = QTableWidgetItem(locale.str(data))
-                else:
+                if type(data) == str or data is None:
                     item_to_add = QTableWidgetItem(data)
+                else:
+                    item_to_add = QTableWidgetItem(locale.str(data))
                 item_to_add.setFlags(Qt.ItemIsSelectable | Qt.ItemIsEnabled| Qt.ItemIsEditable)
                 self.tableWidget1.setItem(
                     self.tableWidget1.rowCount()-1, column_no,
@@ -147,20 +167,31 @@ class App(QWidget):
         return super(App, self).eventFilter(source, event)
 
     def delete_selected(self):
-        while len(self.tableWidget1.selectedIndexes()) > 0:
-            self.tableWidget1.removeRow(self.tableWidget1.selectedIndexes()[0].row())
-        if self.tableWidget1.rowCount() == 0:
-            self.tableWidget1.setEnabled(False)
+        if len(self.tableWidget1.selectedIndexes()) > 0:
+            current_row = self.tableWidget1.selectedIndexes()[0].row()
+            while len(self.tableWidget1.selectedIndexes()) > 0:
+                current_row = self.tableWidget1.selectedIndexes()[0].row()
+                self.tableWidget1.removeRow(current_row)
+            self.tableWidget1.selectRow(current_row)
+            if self.tableWidget1.rowCount() == 0:
+                self.tableWidget1.setEnabled(False)
 
 
 def helper_func1(x):
     # helper function for csv reading
+    # replace dot in original file for minus in some cases ocr'd like .17.896
     str_with_dot_actually_minus = x
     matches = re.search(b'(\.(\d+\.\d+))', x)
     if matches:
         str_with_dot_actually_minus = b'-' + matches.groups()[1]
     return str_with_dot_actually_minus.replace(b' ', b'')
 
+def helper_func2(x):
+    # helper function 2 for csv reading.
+    # Return None when empty string
+    if len(x) == 0:
+        return 'nan'
+    return x.replace(b' ', b'')
 
 class thTableModel(QAbstractTableModel):
 
@@ -174,9 +205,9 @@ class thTableModel(QAbstractTableModel):
         self.phase_filter = ''
 
         self.ant = loadtxt(
-            open(yaws_csv_file, 'rb'),
+            open(antoine_csv, 'rb'),
             delimiter='|',
-            skiprows=2,
+            skiprows=9,
             dtype={
                 'names': [
                     'ant_no', 'ant_formula', 'ant_name',
@@ -192,10 +223,72 @@ class thTableModel(QAbstractTableModel):
                 5: helper_func1, 6: helper_func1,
                 7: helper_func1
             })
-        #self.xpath = \
-        #    ".//formula_name_structure[contains(formula_name_structure_1, '" + \
-        #    self.name_filter + "')]/" + "../../specie[contains(@CAS, '')]/" +\
-        #    "phase[contains(phase, '')]"
+
+        self.poling_basic_i = loadtxt(
+            open(poling_basic_i_csv, 'rb'),
+            delimiter='|',
+            skiprows=3,
+            dtype={
+                'names': [
+                    'poling_no', 'poling_formula', 'poling_name',
+                    'poling_cas', 'poling_molwt', 'poling_tfp',
+                    'poling_tb', 'poling_tc', 'poling_pc',
+                    'poling_Vc', 'poling_Zc', 'poling_omega'],
+                'formats': [
+                    int, object, object,
+                    object, float, float,
+                    float, float, float, float, float,
+                    float]},
+            converters={
+                5: helper_func2, 6: helper_func2,
+                8: helper_func2, 9: helper_func2,
+                10: helper_func2, 11: helper_func2
+            }
+        )
+
+        self.poling_basic_ii = loadtxt(
+            open(poling_basic_ii_csv, 'rb'),
+            delimiter='|',
+            skiprows=3,
+            usecols=(3, 4, 5, 6, 7, 8, 9, 10),
+            dtype={
+                'names': [
+                    'poling_cas',
+                    'poling_delhf0', 'poling_delgf0', 'poling_delhb',
+                    'poling_delhm', 'poling_v_liq', 'poling_t_liq',
+                    'poling_dipole'],
+                'formats': [
+                    object, float, float,
+                    float, float, float, float, float]},
+            converters={
+                4: helper_func2, 5: helper_func2,
+                6: helper_func2, 7: helper_func2,
+                8: helper_func2, 9: helper_func2,
+                10: helper_func2
+            }
+        )
+
+        self.poling_cp_ig_l = loadtxt(
+            open(poling_cp_l_ig_poly_csv, 'rb'),
+            delimiter='|',
+            skiprows=4,
+            usecols=(3,4,5,6,7,8,9,10),
+            dtype={
+                'names': [
+                    'poling_cas',
+                    'poling_trange', 'poling_a0', 'poling_a1',
+                    'poling_a2', 'poling_a4',
+                    'poling_cpig', 'poling_cpliq'],
+                'formats': [
+                    object, object, float,
+                    float, float, float, float, float]},
+            converters={
+                5: helper_func2, 6: helper_func2,
+                7: helper_func2, 8: helper_func2,
+                9: helper_func2, 10: helper_func2
+            }
+        )
+
         self.xpath = \
             "./specie[contains(@CAS, '" + \
             self.cas_filter + "')]/" + \
@@ -214,12 +307,14 @@ class thTableModel(QAbstractTableModel):
             'range_1000_to_tmax',
             'a1_high', 'a2_high', 'a3_high', 'a4_high',
             'a5_high', 'a6_high', 'a7_high']
-        self.column_names_ant = [
-            'ant_no', 'ant_formula', 'ant_name',
-            'ant_cas', 'ant_a', 'ant_b',
-            'ant_c', 'ant_tmin', 'ant_tmax',
-            'ant_code'
-        ]
+        self.column_names_ant = list(self.ant.dtype.names)
+        self.column_names_poling_basic_i = list(self.poling_basic_i.dtype.names)
+        self.column_names_poling_basic_ii = list(self.poling_basic_ii.dtype.names)
+        self.column_names_poling_cp_ig_l = list(self.poling_cp_ig_l.dtype.names)
+        self.column_names =  \
+            self.column_names_burcat + self.column_names_ant + \
+            self.column_names_poling_basic_i + self.column_names_poling_basic_ii + \
+            self.column_names_poling_cp_ig_l
 
     def apply_filter(self, cas_filter, name_filter, formula_filter, phase_filter):
         self.name_filter = name_filter.text().upper()
@@ -241,81 +336,86 @@ class thTableModel(QAbstractTableModel):
 
 
     def data(self, index, role=Qt.DisplayRole):
-        comp_phase = self.results[index.row()]
-        phase_parent = comp_phase.getparent()
-        cas = phase_parent.get('CAS')
-        formula_name_structure_1 = phase_parent.find(
-            'formula_name_structure').find(
-            'formula_name_structure_1').text
-        phase = comp_phase.find('phase').text
-        formula = comp_phase.find('formula').text
-        range_tmin_to_1000 = float(
-            comp_phase.find('temp_limit').get('low').replace(' ', ''))
-        range_1000_to_tmax = float(
-            comp_phase.find('temp_limit').get('high').replace(' ', ''))
-        molecular_weight = float(
-            comp_phase.find('molecular_weight').text.replace(' ', ''))
-        hf298_div_r = float(comp_phase.find(
-            'coefficients').find('hf298_div_r').text.replace(' ', ''))
-        #for coef in ['a1', 'a2', 'a3', 'a4', 'a5', 'a6', 'a7']:
-        for coef in comp_phase.find('coefficients').find(
-                'range_Tmin_to_1000').getiterator('coef'):
-            if coef.get('name') == 'a1':
-                a1 = float(coef.text.replace(' ', ''))
-            if coef.get('name') == 'a2':
-                a2 = float(coef.text.replace(' ', ''))
-            if coef.get('name') == 'a3':
-                a3 = float(coef.text.replace(' ', ''))
-            if coef.get('name') == 'a4':
-                a4 = float(coef.text.replace(' ', ''))
-            if coef.get('name') == 'a5':
-                a5 = float(coef.text.replace(' ', ''))
-            if coef.get('name') == 'a6':
-                a6 = float(coef.text.replace(' ', ''))
-            if coef.get('name') == 'a7':
-                a7 = float(coef.text.replace(' ', ''))
-        for coef in comp_phase.find('coefficients').find(
-                'range_1000_to_Tmax').getiterator('coef'):
-            if coef.get('name') == 'a1':
-                a1_high = float(coef.text.replace(' ', ''))
-            if coef.get('name') == 'a2':
-                a2_high = float(coef.text.replace(' ', ''))
-            if coef.get('name') == 'a3':
-                a3_high = float(coef.text.replace(' ', ''))
-            if coef.get('name') == 'a4':
-                a4_high = float(coef.text.replace(' ', ''))
-            if coef.get('name') == 'a5':
-                a5_high = float(coef.text.replace(' ', ''))
-            if coef.get('name') == 'a6':
-                a6_high = float(coef.text.replace(' ', ''))
-            if coef.get('name') == 'a7':
-                a7_high = float(coef.text.replace(' ', ''))
-
-        ant_record = self.ant[self.ant['ant_cas'] == cas]
-        ant_no, ant_formula, ant_name, \
-        ant_cas, ant_a, ant_b, ant_c, \
-        ant_tmin, ant_tmax, ant_code = [None for i in range(len(self.column_names_ant))]
-        if len(ant_record) == 1:
-            ant_no, ant_formula, ant_name, \
-            ant_cas,  ant_a, ant_b, ant_c, \
-            ant_tmin, ant_tmax, ant_code = ant_record[0]
-            ant_no = int(ant_no)
-            ant_a = float(ant_a)
-            ant_b = float(ant_b)
-            ant_c = float(ant_c)
-            ant_tmin = float(ant_tmin)
-            ant_tmax = float(ant_tmax)
-
         if not index.isValid() or \
                 index.row() < 0 or index.row() > len(self.results) or \
                 index.column() < 0 or index.column() > self.columnCount():
             return QVariant()
         column = index.column()
         if role == Qt.DisplayRole:
+            comp_phase = self.results[index.row()]
+            phase_parent = comp_phase.getparent()
+            cas = phase_parent.get('CAS')
             if column < len(self.column_names_burcat):
+                formula_name_structure_1 = phase_parent.find(
+                    'formula_name_structure').find(
+                    'formula_name_structure_1').text
+                phase = comp_phase.find('phase').text
+                formula = comp_phase.find('formula').text
+                range_tmin_to_1000 = float(
+                    comp_phase.find('temp_limit').get('low').replace(' ', ''))
+                range_1000_to_tmax = float(
+                    comp_phase.find('temp_limit').get('high').replace(' ', ''))
+                molecular_weight = float(
+                    comp_phase.find('molecular_weight').text.replace(' ', ''))
+                hf298_div_r = float(comp_phase.find(
+                    'coefficients').find('hf298_div_r').text.replace(' ', ''))
+                # for coef in ['a1', 'a2', 'a3', 'a4', 'a5', 'a6', 'a7']:
+                for coef in comp_phase.find('coefficients').find(
+                        'range_Tmin_to_1000').getiterator('coef'):
+                    if coef.get('name') == 'a1':
+                        a1 = float(coef.text.replace(' ', ''))
+                    if coef.get('name') == 'a2':
+                        a2 = float(coef.text.replace(' ', ''))
+                    if coef.get('name') == 'a3':
+                        a3 = float(coef.text.replace(' ', ''))
+                    if coef.get('name') == 'a4':
+                        a4 = float(coef.text.replace(' ', ''))
+                    if coef.get('name') == 'a5':
+                        a5 = float(coef.text.replace(' ', ''))
+                    if coef.get('name') == 'a6':
+                        a6 = float(coef.text.replace(' ', ''))
+                    if coef.get('name') == 'a7':
+                        a7 = float(coef.text.replace(' ', ''))
+                for coef in comp_phase.find('coefficients').find(
+                        'range_1000_to_Tmax').getiterator('coef'):
+                    if coef.get('name') == 'a1':
+                        a1_high = float(coef.text.replace(' ', ''))
+                    if coef.get('name') == 'a2':
+                        a2_high = float(coef.text.replace(' ', ''))
+                    if coef.get('name') == 'a3':
+                        a3_high = float(coef.text.replace(' ', ''))
+                    if coef.get('name') == 'a4':
+                        a4_high = float(coef.text.replace(' ', ''))
+                    if coef.get('name') == 'a5':
+                        a5_high = float(coef.text.replace(' ', ''))
+                    if coef.get('name') == 'a6':
+                        a6_high = float(coef.text.replace(' ', ''))
+                    if coef.get('name') == 'a7':
+                        a7_high = float(coef.text.replace(' ', ''))
                 return QVariant(locals()[self.column_names_burcat[column]])
-            else:
-                return QVariant(locals()[self.column_names_ant[column-len(self.column_names_burcat)]])
+            elif column < len(self.column_names_burcat) + len(self.column_names_ant):
+                ant_record = self.ant[self.ant['ant_cas'] == cas]
+                self.ant_vars = dict((x, None) for x in self.column_names_ant)
+                if len(ant_record) == 1:
+                    ant_no, ant_formula, ant_name, \
+                    ant_cas, ant_a, ant_b, ant_c, \
+                    ant_tmin, ant_tmax, ant_code = ant_record[0]
+                    ant_no = int(ant_no)
+                    ant_a = float(ant_a)
+                    ant_b = float(ant_b)
+                    ant_c = float(ant_c)
+                    ant_tmin = float(ant_tmin)
+                    ant_tmax = float(ant_tmax)
+                    for var in self.column_names_ant:
+                        self.ant_vars[var] = locals()[var]
+                return QVariant(self.ant_vars[self.column_names_ant[column-len(self.column_names_burcat)]])
+            elif column < len(self.column_names_burcat) + len(self.column_names_ant) + \
+                    len(self.column_names_poling_basic_i):
+                poling_basic_i_record = self.poling_basic_i[self.poling_basic_i['poling_cas'] == cas]
+                self.poling_basic_i_vars = dict((x, None) for x in self.column_names_poling_basic_i)
+                #if len(poling_basic_i_record) > 1:
+
+
 
     def headerData(self, section: int, orientation: Qt.Orientation, role: int= Qt.DisplayRole):
         if role == Qt.TextAlignmentRole:
@@ -326,9 +426,34 @@ class thTableModel(QAbstractTableModel):
             return QVariant()
         if orientation == Qt.Horizontal:
             if section < len(self.column_names_burcat):
-                return QVariant(self.column_names_burcat[section])
-            else:
-                return QVariant(self.column_names_ant[section-len(self.column_names_burcat)])
+                return QVariant(self.column_names_burcat[
+                                    section])
+            elif section < len(self.column_names_burcat) + len(self.column_names_ant):
+                return QVariant(
+                    self.column_names_ant[
+                        section - len(self.column_names_burcat)
+                    ])
+            elif section < len(self.column_names_burcat) + len(self.column_names_ant) + \
+                    len(self.column_names_poling_basic_i):
+                return QVariant(
+                    self.column_names_poling_basic_i[
+                        section - len(self.column_names_burcat) - len(self.column_names_ant)
+                    ])
+            elif section < len(self.column_names_burcat) + len(self.column_names_ant) + \
+                    len(self.column_names_poling_basic_i) + len(self.column_names_poling_basic_ii):
+                return QVariant(
+                    self.column_names_poling_basic_ii[
+                        section - len(self.column_names_burcat) - len(self.column_names_ant) -
+                        len(self.column_names_poling_basic_i)
+                    ])
+            elif section < len(self.column_names_burcat) + len(self.column_names_ant) + \
+                    len(self.column_names_poling_basic_i) + len(self.column_names_poling_basic_ii) + \
+                    len(self.column_names_poling_cp_ig_l):
+                return QVariant(
+                    self.column_names_poling_cp_ig_l[
+                        section - len(self.column_names_burcat) - len(self.column_names_ant) -
+                        len(self.column_names_poling_basic_i) - len(self.column_names_poling_basic_ii)
+                    ])
         if orientation == Qt.Vertical:
             return QVariant(section + 1)
 
@@ -348,7 +473,7 @@ class thTableModel(QAbstractTableModel):
         # (phase)coefficients range_Tmin_to_1000 a6,
         # (phase)coefficients range_Tmin_to_1000 a7,
         # (phase)coefficients hf298_div_r
-        return len(self.column_names_burcat) + len(self.column_names_ant)
+        return len(self.column_names)
 
 
 if __name__ == '__main__':
