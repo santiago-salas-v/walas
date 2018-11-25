@@ -1,4 +1,4 @@
-import os, sys, re
+import os, sys, re, string
 import locale
 from numpy import loadtxt
 from functools import partial
@@ -117,27 +117,24 @@ class App(QWidget):
             if phase == self.tableWidget1.item(item.row(), column_of_phase).text():
                 already_in_table = True
         if not already_in_table:
-            column_names = self.tableView1.model().column_names_burcat + \
-                           self.tableView1.model().column_names_ant
+            column_names = self.tableView1.model().column_names
             self.tableWidget1.setRowCount(self.tableWidget1.rowCount() + 1)
-            for column_name in column_names:
-                column_no = column_names.index(column_name)
-                data = self.tableView1.model().index(index.row(), column_no).data()
+            for i in range(len(column_names)):
+                data = self.tableView1.model().index(index.row(), i).data()
                 if type(data) == str or data is None:
                     item_to_add = QTableWidgetItem(data)
                 else:
                     item_to_add = QTableWidgetItem(locale.str(data))
                 item_to_add.setFlags(Qt.ItemIsSelectable | Qt.ItemIsEnabled| Qt.ItemIsEditable)
                 self.tableWidget1.setItem(
-                    self.tableWidget1.rowCount()-1, column_no,
+                    self.tableWidget1.rowCount()-1, i,
                     item_to_add)
-            column_no += 1
         if len(indexes) > 0 or self.tableWidget1.rowCount() > 0:
             self.tableWidget1.setEnabled(True)
 
 
     def copy_selection(self):
-        col_names = self.tableView1.model().column_names_burcat
+        col_names = self.tableView1.model().column_names
         selection = self.tableWidget1.selectedIndexes()
         if selection:
             rows = sorted(index.row() for index in selection)
@@ -272,22 +269,27 @@ class thTableModel(QAbstractTableModel):
             open(poling_cp_l_ig_poly_csv, 'rb'),
             delimiter='|',
             skiprows=4,
-            usecols=(3,4,5,6,7,8,9,10),
+            usecols=(3,4,5,6,7,8,9,10, 11),
             dtype={
                 'names': [
                     'poling_cas',
                     'poling_trange', 'poling_a0', 'poling_a1',
-                    'poling_a2', 'poling_a4',
+                    'poling_a2', 'poling_a3', 'poling_a4',
                     'poling_cpig', 'poling_cpliq'],
                 'formats': [
                     object, object, float,
-                    float, float, float, float, float]},
+                    float, float, float, float, float, float]},
             converters={
                 5: helper_func2, 6: helper_func2,
                 7: helper_func2, 8: helper_func2,
-                9: helper_func2, 10: helper_func2
+                9: helper_func2, 10: helper_func2,
+                11: helper_func2
             }
         )
+        self.poling_cp_ig_l['poling_a1'] = self.poling_cp_ig_l['poling_a1'] * 1e-3
+        self.poling_cp_ig_l['poling_a2'] = self.poling_cp_ig_l['poling_a2'] * 1e-5
+        self.poling_cp_ig_l['poling_a3'] = self.poling_cp_ig_l['poling_a3'] * 1e-8
+        self.poling_cp_ig_l['poling_a4'] = self.poling_cp_ig_l['poling_a4'] * 1e-11
 
         self.xpath = \
             "./specie[contains(@CAS, '" + \
@@ -317,17 +319,21 @@ class thTableModel(QAbstractTableModel):
             self.column_names_poling_cp_ig_l
 
     def apply_filter(self, cas_filter, name_filter, formula_filter, phase_filter):
-        self.name_filter = name_filter.text().upper()
-        self.cas_filter = cas_filter.text().upper()
-        self.formula_filter = formula_filter.text().upper()
+        self.name_filter = name_filter.text().upper().strip()
+        self.cas_filter = cas_filter.text().upper().strip().replace(' ', '')
+        self.formula_filter = formula_filter.text().upper().strip()
         self.phase_filter = phase_filter.currentText()
         self.beginResetModel()
         self.xpath = \
             "./specie[contains(@CAS, '" + \
             self.cas_filter + "')]/" + \
-            "formula_name_structure[contains(formula_name_structure_1, '" + \
+            "formula_name_structure[contains(translate(" +\
+            "formula_name_structure_1" + \
+            ", '" + string.ascii_lowercase + "', '" + string.ascii_uppercase + "'), '" + \
             self.name_filter + "')]/../" + \
-            "phase[contains(formula, '" + \
+            "phase[contains(translate(" + \
+            "formula" + \
+            ", '" + string.ascii_lowercase + "', '" + string.ascii_uppercase + "'), '" + \
             self.formula_filter + "')]/../" + \
             "phase[contains(phase, '" + \
             self.phase_filter + "')]"
@@ -397,23 +403,38 @@ class thTableModel(QAbstractTableModel):
                 ant_record = self.ant[self.ant['ant_cas'] == cas]
                 self.ant_vars = dict((x, None) for x in self.column_names_ant)
                 if len(ant_record) == 1:
-                    ant_no, ant_formula, ant_name, \
-                    ant_cas, ant_a, ant_b, ant_c, \
-                    ant_tmin, ant_tmax, ant_code = ant_record[0]
-                    ant_no = int(ant_no)
-                    ant_a = float(ant_a)
-                    ant_b = float(ant_b)
-                    ant_c = float(ant_c)
-                    ant_tmin = float(ant_tmin)
-                    ant_tmax = float(ant_tmax)
-                    for var in self.column_names_ant:
-                        self.ant_vars[var] = locals()[var]
-                return QVariant(self.ant_vars[self.column_names_ant[column-len(self.column_names_burcat)]])
+                    return QVariant(ant_record[self.column_names[column]].item())
+                else:
+                    return QVariant(None)
             elif column < len(self.column_names_burcat) + len(self.column_names_ant) + \
                     len(self.column_names_poling_basic_i):
-                poling_basic_i_record = self.poling_basic_i[self.poling_basic_i['poling_cas'] == cas]
-                self.poling_basic_i_vars = dict((x, None) for x in self.column_names_poling_basic_i)
-                #if len(poling_basic_i_record) > 1:
+                poling_basic_i_record = self.poling_basic_i[
+                    self.poling_basic_i['poling_cas'] == cas
+                ]
+                if len(poling_basic_i_record) == 1:
+                    return QVariant(poling_basic_i_record[self.column_names[column]].item())
+                else:
+                    return QVariant(None)
+            elif column < len(self.column_names_burcat) + len(self.column_names_ant) + \
+                    len(self.column_names_poling_basic_i) + len(self.column_names_poling_basic_ii):
+                poling_basic_ii_record = self.poling_basic_ii[
+                    self.poling_basic_ii['poling_cas'] == cas
+                ]
+                if len(poling_basic_ii_record) == 1:
+                    return QVariant(poling_basic_ii_record[self.column_names[column]].item())
+                else:
+                    return QVariant(None)
+            elif column < len(self.column_names_burcat) + len(self.column_names_ant) + \
+                    len(self.column_names_poling_basic_i) + len(self.column_names_poling_basic_ii) + \
+                    len(self.column_names_poling_cp_ig_l):
+                poling_cp_l_ig_poly_record = self.poling_cp_ig_l[
+                    self.poling_cp_ig_l['poling_cas'] == cas
+                ]
+                if len(poling_cp_l_ig_poly_record) == 1:
+                    return QVariant(poling_cp_l_ig_poly_record[self.column_names[column]].item())
+                else:
+                    return QVariant(None)
+
 
 
 
