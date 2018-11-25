@@ -190,6 +190,12 @@ def helper_func2(x):
         return 'nan'
     return x.replace(b' ', b'')
 
+
+def helper_func3(x):
+    # helper function 2 for csv reading.
+    # replace - for . in cas numbers (Antoine coeff)
+    return x.replace(b'.', b'-').decode('utf-8')
+
 class thTableModel(QAbstractTableModel):
 
     def __init__(self):
@@ -216,9 +222,9 @@ class thTableModel(QAbstractTableModel):
                     object, float, float,
                     float, float, float, object]},
             converters={
-                0: helper_func1, 4: helper_func1,
-                5: helper_func1, 6: helper_func1,
-                7: helper_func1
+                0: helper_func1, 3: helper_func3,
+                4: helper_func1, 5: helper_func1,
+                6: helper_func1, 7: helper_func1
             })
 
         self.poling_basic_i = loadtxt(
@@ -295,12 +301,12 @@ class thTableModel(QAbstractTableModel):
             "./specie[contains(@CAS, '" + \
             self.cas_filter + "')]/" + \
             "formula_name_structure[contains(formula_name_structure_1, '" + \
-            self.name_filter + "')]/../" + \
+            self.name_filter + "')]/../@CAS/../" + \
             "phase[contains(formula, '" + \
             self.formula_filter + "')]/../" + \
             "phase[contains(phase, '" + \
             self.phase_filter + "')]"
-        self.results = self.root.xpath(self.xpath)
+        self.burcat_results = self.root.xpath(self.xpath)
         self.column_names_burcat = [
             'cas', 'formula_name_structure_1',
             'phase', 'formula', 'molecular_weight',
@@ -318,37 +324,71 @@ class thTableModel(QAbstractTableModel):
             self.column_names_poling_basic_i + self.column_names_poling_basic_ii + \
             self.column_names_poling_cp_ig_l
 
+        all_burcat_phases_cas_nos = self.root.xpath(
+            "./specie/formula_name_structure/../phase/phase/../../@CAS")
+        all_burcat_phases = self.root.xpath(
+            "./specie/formula_name_structure/../phase/phase/../..")
+        #for item in :
+        #    if item in self.poling_basic_i['poling_cas']:
+        #        self.poling_basic_burcat_intersects += [item]
+        #for item in self.poling_basic_i
+        self.burcat_cas_nos = [x.getparent().get('CAS') for x in self.burcat_results]
+        self.poling_cas_nos = self.poling_basic_i['poling_cas']
+        self.poling_basic_burcat_intersects = []
+        self.poling_basic_burcat_complements = list(range(len(self.burcat_cas_nos)))
+        self.poling_basic_i_ii_intersects = []
+        self.poling_basic_i_ii_complements = []
+        self.poling_basic_ig_intersects = []
+        self.poling_basic_ant_intersects = []
+        self.poling_basic_ant_complements = []
+        self.burcat_ant_intersects = []
+        self.burcat_ant_complements = list(range(len(self.ant)))
+
+        for casno in self.poling_cas_nos:
+            indexes = []
+            for i, j in enumerate(self.burcat_cas_nos):
+                if j == casno:
+                    indexes += [i]
+                    self.poling_basic_burcat_complements.pop(
+                        self.poling_basic_burcat_complements.index(i))
+            for i in indexes:
+                self.poling_basic_burcat_intersects += [i]
+
     def apply_filter(self, cas_filter, name_filter, formula_filter, phase_filter):
         self.name_filter = name_filter.text().upper().strip()
         self.cas_filter = cas_filter.text().upper().strip().replace(' ', '')
         self.formula_filter = formula_filter.text().upper().strip()
         self.phase_filter = phase_filter.currentText()
         self.beginResetModel()
+        # without filters, all phases:
+        # self.root.xpath('./specie/formula_name_structure/../phase/../phase')
+        # with filters:
         self.xpath = \
             "./specie[contains(@CAS, '" + \
             self.cas_filter + "')]/" + \
             "formula_name_structure[contains(translate(" +\
             "formula_name_structure_1" + \
             ", '" + string.ascii_lowercase + "', '" + string.ascii_uppercase + "'), '" + \
-            self.name_filter + "')]/../" + \
+            self.name_filter + "')]/../@CAS/../" + \
             "phase[contains(translate(" + \
             "formula" + \
             ", '" + string.ascii_lowercase + "', '" + string.ascii_uppercase + "'), '" + \
             self.formula_filter + "')]/../" + \
             "phase[contains(phase, '" + \
             self.phase_filter + "')]"
-        self.results = self.root.xpath(self.xpath)
+        self.burcat_results = self.root.xpath(self.xpath)
         self.endResetModel()
 
 
     def data(self, index, role=Qt.DisplayRole):
         if not index.isValid() or \
-                index.row() < 0 or index.row() > len(self.results) or \
+                index.row() < 0 or index.row() > len(self.burcat_results) or \
                 index.column() < 0 or index.column() > self.columnCount():
             return QVariant()
-        column = index.column()
         if role == Qt.DisplayRole:
-            comp_phase = self.results[index.row()]
+            column = index.column()
+            row = index.row()
+            comp_phase = self.burcat_results[row]
             phase_parent = comp_phase.getparent()
             cas = phase_parent.get('CAS')
             if column < len(self.column_names_burcat):
@@ -360,7 +400,7 @@ class thTableModel(QAbstractTableModel):
                 range_tmin_to_1000 = float(
                     comp_phase.find('temp_limit').get('low').replace(' ', ''))
                 range_1000_to_tmax = float(
-                    comp_phase.find('temp_limit').get('high').replace(' ', ''))
+                    comp_phase.find('ttemp_limit').get('high').replace(' ', ''))
                 molecular_weight = float(
                     comp_phase.find('molecular_weight').text.replace(' ', ''))
                 hf298_div_r = float(comp_phase.find(
@@ -480,7 +520,10 @@ class thTableModel(QAbstractTableModel):
 
 
     def rowCount(self, index=QModelIndex()):
-        return len(self.results)
+        #return len(self.burcat_results) #+ len(self.column_names_poling_basic_i)
+        return len(self.poling_basic_burcat_intersects) + \
+                len(self.poling_basic_burcat_complements) + \
+                len(self.burcat_ant_complements)
 
     def columnCount(self, index=QModelIndex()):
         # CAS, formula_name_structure_1, (phase)phase ,
