@@ -1,6 +1,6 @@
 import os, sys, re, string
 import locale
-from numpy import loadtxt
+from numpy import loadtxt, argwhere
 from functools import partial
 import lxml.etree as ET
 import csv, io
@@ -86,12 +86,8 @@ class App(QWidget):
         self.setLayout(self.layout)
 
         for item in [self.cas_filter, self.name_filter, self.formula_filter]:
-            item.textChanged.connect(partial(
-                self.model.apply_filter,
-                self.cas_filter, self.name_filter, self.formula_filter, self.phase_filter))
-        self.phase_filter.currentTextChanged.connect(partial(
-                self.model.apply_filter,
-                self.cas_filter, self.name_filter, self.formula_filter, self.phase_filter))
+            item.textChanged.connect(self.apply_filters)
+        self.phase_filter.currentTextChanged.connect(self.apply_filters)
         self.tableView1.selectionModel().selectionChanged.connect(partial(
             self.add_selection_to_widget
         ))
@@ -104,6 +100,13 @@ class App(QWidget):
 
         # Show widget
         self.show()
+
+    def apply_filters(self):
+        cas_filter = self.cas_filter.text().upper().strip().replace(' ', '')
+        name_filter = self.name_filter.text().upper().strip()
+        formula_filter = self.formula_filter.text().upper().strip()
+        phase_filter = self.phase_filter.currentText()
+        self.model.apply_filter(cas_filter, name_filter, formula_filter, phase_filter)
 
     def add_selection_to_widget(self):
         indexes = self.tableView1.selectedIndexes()
@@ -297,16 +300,6 @@ class thTableModel(QAbstractTableModel):
         self.poling_cp_ig_l['poling_a3'] = self.poling_cp_ig_l['poling_a3'] * 1e-8
         self.poling_cp_ig_l['poling_a4'] = self.poling_cp_ig_l['poling_a4'] * 1e-11
 
-        self.xpath = \
-            "./specie[contains(@CAS, '" + \
-            self.cas_filter + "')]/" + \
-            "formula_name_structure[contains(formula_name_structure_1, '" + \
-            self.name_filter + "')]/../@CAS/../" + \
-            "phase[contains(formula, '" + \
-            self.formula_filter + "')]/../" + \
-            "phase[contains(phase, '" + \
-            self.phase_filter + "')]"
-        self.burcat_results = self.root.xpath(self.xpath)
         self.column_names_burcat = [
             'cas', 'formula_name_structure_1',
             'phase', 'formula', 'molecular_weight',
@@ -332,33 +325,13 @@ class thTableModel(QAbstractTableModel):
         #    if item in self.poling_basic_i['poling_cas']:
         #        self.poling_basic_burcat_intersects += [item]
         #for item in self.poling_basic_i
-        self.burcat_cas_nos = [x.getparent().get('CAS') for x in self.burcat_results]
-        self.poling_cas_nos = self.poling_basic_i['poling_cas']
-        self.poling_basic_burcat_intersects = []
-        self.poling_basic_burcat_complements = list(range(len(self.burcat_cas_nos)))
-        self.poling_basic_i_ii_intersects = []
-        self.poling_basic_i_ii_complements = []
-        self.poling_basic_ig_intersects = []
-        self.poling_basic_ant_intersects = []
-        self.poling_basic_ant_complements = []
-        self.burcat_ant_intersects = []
-        self.burcat_ant_complements = list(range(len(self.ant)))
-
-        for casno in self.poling_cas_nos:
-            indexes = []
-            for i, j in enumerate(self.burcat_cas_nos):
-                if j == casno:
-                    indexes += [i]
-                    self.poling_basic_burcat_complements.pop(
-                        self.poling_basic_burcat_complements.index(i))
-            for i in indexes:
-                self.poling_basic_burcat_intersects += [i]
+        self.apply_filter('', '', '', '')
 
     def apply_filter(self, cas_filter, name_filter, formula_filter, phase_filter):
-        self.name_filter = name_filter.text().upper().strip()
-        self.cas_filter = cas_filter.text().upper().strip().replace(' ', '')
-        self.formula_filter = formula_filter.text().upper().strip()
-        self.phase_filter = phase_filter.currentText()
+        self.cas_filter = cas_filter
+        self.name_filter = name_filter
+        self.formula_filter = formula_filter
+        self.phase_filter = phase_filter
         self.beginResetModel()
         # without filters, all phases:
         # self.root.xpath('./specie/formula_name_structure/../phase/../phase')
@@ -377,8 +350,50 @@ class thTableModel(QAbstractTableModel):
             "phase[contains(phase, '" + \
             self.phase_filter + "')]"
         self.burcat_results = self.root.xpath(self.xpath)
-        self.endResetModel()
+        self.burcat_results = self.root.xpath(self.xpath)
+        self.poling_basic_i_results = self.poling_basic_i.copy()
+        self.poling_basic_ii_results = self.poling_basic_ii.copy()
+        self.poling_cp_ig_l_results = self.poling_cp_ig_l.copy()
+        self.poling_ant_results = self.ant.copy()
 
+        self.burcat_cas_nos = [x.getparent().get('CAS') for x in self.burcat_results]
+        self.poling_cas_nos = self.poling_basic_i_results['poling_cas']
+        self.poling_basic_burcat_intersects_p = []
+        self.poling_basic_burcat_intersects_b = []
+        self.poling_basic_burcat_complements = list(range(len(self.burcat_cas_nos)))
+        self.poling_basic_i_rows_to_table = []
+        self.poling_basic_i_ii_intersects = []
+        self.poling_basic_i_ii_complements = list(range(len(self.poling_basic_i_results)))
+        self.poling_basic_ig_intersects = []
+        self.poling_basic_ant_intersects = []
+        self.poling_basic_ant_complements = []
+        self.burcat_ant_intersects = []
+        self.burcat_ant_complements = list(range(len(self.ant)))
+
+        for k, casno in enumerate(self.poling_cas_nos):
+            indexes = []
+            for i, j in enumerate(self.burcat_cas_nos):
+                if j == casno:
+                    indexes += [i]
+                    self.poling_basic_burcat_complements.pop(
+                        self.poling_basic_burcat_complements.index(i))
+            if len(indexes) == 0:
+                self.poling_basic_i_rows_to_table += [k]
+                self.poling_basic_burcat_intersects_p += [[]]
+                self.poling_basic_burcat_intersects_b += [[]]
+            for i in indexes:
+                self.poling_basic_burcat_intersects_p += [k]
+                self.poling_basic_burcat_intersects_b += [i]
+                self.poling_basic_i_rows_to_table += [k]
+
+            if casno in self.poling_basic_ii['poling_cas']:
+                self.poling_basic_i_ii_intersects += [k]
+                self.poling_basic_i_ii_complements.pop(
+                    self.poling_basic_i_ii_complements.index(k)
+                )
+            else:
+                self.poling_basic_i_ii_intersects += [[]]
+        self.endResetModel()
 
     def data(self, index, role=Qt.DisplayRole):
         if not index.isValid() or \
@@ -388,94 +403,100 @@ class thTableModel(QAbstractTableModel):
         if role == Qt.DisplayRole:
             column = index.column()
             row = index.row()
-            comp_phase = self.burcat_results[row]
-            phase_parent = comp_phase.getparent()
-            cas = phase_parent.get('CAS')
-            if column < len(self.column_names_burcat):
-                formula_name_structure_1 = phase_parent.find(
-                    'formula_name_structure').find(
-                    'formula_name_structure_1').text
-                phase = comp_phase.find('phase').text
-                formula = comp_phase.find('formula').text
-                range_tmin_to_1000 = float(
-                    comp_phase.find('temp_limit').get('low').replace(' ', ''))
-                range_1000_to_tmax = float(
-                    comp_phase.find('ttemp_limit').get('high').replace(' ', ''))
-                molecular_weight = float(
-                    comp_phase.find('molecular_weight').text.replace(' ', ''))
-                hf298_div_r = float(comp_phase.find(
-                    'coefficients').find('hf298_div_r').text.replace(' ', ''))
-                # for coef in ['a1', 'a2', 'a3', 'a4', 'a5', 'a6', 'a7']:
-                for coef in comp_phase.find('coefficients').find(
-                        'range_Tmin_to_1000').getiterator('coef'):
-                    if coef.get('name') == 'a1':
-                        a1 = float(coef.text.replace(' ', ''))
-                    if coef.get('name') == 'a2':
-                        a2 = float(coef.text.replace(' ', ''))
-                    if coef.get('name') == 'a3':
-                        a3 = float(coef.text.replace(' ', ''))
-                    if coef.get('name') == 'a4':
-                        a4 = float(coef.text.replace(' ', ''))
-                    if coef.get('name') == 'a5':
-                        a5 = float(coef.text.replace(' ', ''))
-                    if coef.get('name') == 'a6':
-                        a6 = float(coef.text.replace(' ', ''))
-                    if coef.get('name') == 'a7':
-                        a7 = float(coef.text.replace(' ', ''))
-                for coef in comp_phase.find('coefficients').find(
-                        'range_1000_to_Tmax').getiterator('coef'):
-                    if coef.get('name') == 'a1':
-                        a1_high = float(coef.text.replace(' ', ''))
-                    if coef.get('name') == 'a2':
-                        a2_high = float(coef.text.replace(' ', ''))
-                    if coef.get('name') == 'a3':
-                        a3_high = float(coef.text.replace(' ', ''))
-                    if coef.get('name') == 'a4':
-                        a4_high = float(coef.text.replace(' ', ''))
-                    if coef.get('name') == 'a5':
-                        a5_high = float(coef.text.replace(' ', ''))
-                    if coef.get('name') == 'a6':
-                        a6_high = float(coef.text.replace(' ', ''))
-                    if coef.get('name') == 'a7':
-                        a7_high = float(coef.text.replace(' ', ''))
-                return QVariant(locals()[self.column_names_burcat[column]])
-            elif column < len(self.column_names_burcat) + len(self.column_names_ant):
-                ant_record = self.ant[self.ant['ant_cas'] == cas]
-                self.ant_vars = dict((x, None) for x in self.column_names_ant)
-                if len(ant_record) == 1:
-                    return QVariant(ant_record[self.column_names[column]].item())
+            sec_1 = len(self.column_names_poling_basic_i)
+            sec_2 = len(self.column_names_poling_basic_i) + len(self.column_names_burcat)
+            sec_3 = len(self.column_names_poling_basic_i) + len(self.column_names_burcat) + \
+                len(self.column_names_poling_basic_ii)
+            sec_4 = len(self.column_names_poling_basic_i) + len(self.column_names_burcat) + \
+                len(self.column_names_poling_basic_ii) + len(self.column_names_poling_cp_ig_l)
+            sec_5 = len(self.column_names_poling_basic_i) + len(self.column_names_burcat) + \
+                len(self.column_names_poling_basic_ii) + len(self.column_names_poling_cp_ig_l) +\
+                len(self.column_names_ant)
+
+            if column < sec_1:
+                if row < len(self.poling_basic_i_rows_to_table):
+                    record_poling_basic_i = self.poling_basic_i_results[
+                        self.poling_basic_i_results['poling_no'] ==
+                        self.poling_basic_i_rows_to_table[row] + 1]
+                    column_name = self.column_names_poling_basic_i[column]
+                    return QVariant(
+                        record_poling_basic_i[column_name].item())
                 else:
                     return QVariant(None)
-            elif column < len(self.column_names_burcat) + len(self.column_names_ant) + \
-                    len(self.column_names_poling_basic_i):
-                poling_basic_i_record = self.poling_basic_i[
-                    self.poling_basic_i['poling_cas'] == cas
-                ]
-                if len(poling_basic_i_record) == 1:
-                    return QVariant(poling_basic_i_record[self.column_names[column]].item())
+            elif column < sec_2:
+                row_burcat = None
+                if row < len(self.poling_basic_i_rows_to_table):
+                    table_row = self.poling_basic_i_rows_to_table[row]
+                    if table_row in self.poling_basic_burcat_intersects_p:
+                        row_burcat = self.poling_basic_burcat_intersects_b[self.poling_basic_burcat_intersects_p.index(table_row)]
+                    elif table_row in self.poling_basic_burcat_complements:
+                        pass
+                elif row < len(self.poling_basic_i_rows_to_table) + len(self.poling_basic_burcat_complements):
+                    row_burcat = self.poling_basic_burcat_complements[row - len(self.poling_basic_i_rows_to_table)]
+                if row_burcat is not None:
+                    record_burcat = self.burcat_results[row_burcat]
+                    column_name = self.column_names_burcat[column - len(self.column_names_poling_basic_i)]
+                    data = self.extract_info_from_burcat_phase(record_burcat, column_name)
+                    return QVariant(data)
                 else:
                     return QVariant(None)
-            elif column < len(self.column_names_burcat) + len(self.column_names_ant) + \
-                    len(self.column_names_poling_basic_i) + len(self.column_names_poling_basic_ii):
-                poling_basic_ii_record = self.poling_basic_ii[
-                    self.poling_basic_ii['poling_cas'] == cas
-                ]
-                if len(poling_basic_ii_record) == 1:
-                    return QVariant(poling_basic_ii_record[self.column_names[column]].item())
-                else:
-                    return QVariant(None)
-            elif column < len(self.column_names_burcat) + len(self.column_names_ant) + \
-                    len(self.column_names_poling_basic_i) + len(self.column_names_poling_basic_ii) + \
-                    len(self.column_names_poling_cp_ig_l):
-                poling_cp_l_ig_poly_record = self.poling_cp_ig_l[
-                    self.poling_cp_ig_l['poling_cas'] == cas
-                ]
-                if len(poling_cp_l_ig_poly_record) == 1:
-                    return QVariant(poling_cp_l_ig_poly_record[self.column_names[column]].item())
+            elif column < sec_3:
+                row_poling_basic_ii = None
+                if row < len(self.poling_basic_i_rows_to_table):
+                    table_row = self.poling_basic_i_rows_to_table[row]
+                    if table_row in self.poling_basic_i_ii_intersects:
+                        row_poling_basic_ii = self.poling_basic_i_ii_intersects[table_row]
+                    elif table_row in self.poling_basic_i_ii_complements:
+                        pass
+                if row_poling_basic_ii is not None:
+                    record_poling_basic_i = self.poling_basic_i_results[
+                        self.poling_basic_i_results['poling_no'] ==
+                        self.poling_basic_i_rows_to_table[row] + 1]
+                    cas_no = record_poling_basic_i['poling_cas']
+                    record_poling_basic_ii = self.poling_basic_ii_results[
+                        self.poling_basic_ii_results['poling_cas'] ==
+                        cas_no]
+                    column_name = self.column_names_poling_basic_ii[column - sec_2]
+                    return QVariant(
+                        record_poling_basic_ii[column_name].item())
                 else:
                     return QVariant(None)
 
 
+
+
+
+
+
+    def extract_info_from_burcat_phase(self, phase_element, column_name):
+        phase_parent = phase_element.getparent()
+        if column_name == 'cas':
+            return phase_parent.get('CAS')
+        elif column_name == 'formula_name_structure_1':
+            return phase_parent.find(
+                'formula_name_structure').find(
+                'formula_name_structure_1').text
+        elif column_name in ['phase', 'formula']:
+            return phase_element.find(column_name).text
+        elif column_name == 'range_tmin_to_1000':
+            return float(phase_element.find('temp_limit').get('low').replace(' ', ''))
+        elif column_name == 'range_1000_to_tmax':
+            return float(phase_element.find('temp_limit').get('high').replace(' ', ''))
+        elif column_name in ['molecular_weight']:
+            return float(phase_element.find('molecular_weight').text.replace(' ', ''))
+        elif column_name == 'hf298_div_r':
+            return float(phase_element.find('coefficients').find('hf298_div_r').text.replace(' ', ''))
+        elif column_name in ['a1', 'a2', 'a3', 'a4', 'a5', 'a6', 'a7']:
+            for coef in phase_element.find('coefficients').find(
+                    'range_Tmin_to_1000').getiterator('coef'):
+                if coef.get('name') == column_name:
+                    return float(coef.text.replace(' ', ''))
+        elif column_name in ['a1_high', 'a2_high', 'a3_high', 'a4_high', 'a5_high', 'a6_high', 'a7_high']:
+            column_name = column_name.replace('_high', '')
+            for coef in phase_element.find('coefficients').find(
+                    'range_1000_to_Tmax').getiterator('coef'):
+                if coef.get('name') == column_name:
+                    return float(coef.text.replace(' ', ''))
 
 
     def headerData(self, section: int, orientation: Qt.Orientation, role: int= Qt.DisplayRole):
@@ -486,34 +507,34 @@ class thTableModel(QAbstractTableModel):
         if role != Qt.DisplayRole:
             return QVariant()
         if orientation == Qt.Horizontal:
-            if section < len(self.column_names_burcat):
-                return QVariant(self.column_names_burcat[
+            if section < len(self.column_names_poling_basic_i):
+                return QVariant(self.column_names_poling_basic_i[
                                     section])
-            elif section < len(self.column_names_burcat) + len(self.column_names_ant):
+            elif section < len(self.column_names_poling_basic_i) + len(self.column_names_burcat):
                 return QVariant(
-                    self.column_names_ant[
-                        section - len(self.column_names_burcat)
+                    self.column_names_burcat[
+                        section - len(self.column_names_poling_basic_i)
                     ])
-            elif section < len(self.column_names_burcat) + len(self.column_names_ant) + \
-                    len(self.column_names_poling_basic_i):
-                return QVariant(
-                    self.column_names_poling_basic_i[
-                        section - len(self.column_names_burcat) - len(self.column_names_ant)
-                    ])
-            elif section < len(self.column_names_burcat) + len(self.column_names_ant) + \
-                    len(self.column_names_poling_basic_i) + len(self.column_names_poling_basic_ii):
+            elif section < len(self.column_names_poling_basic_ii) + len(self.column_names_poling_basic_i) + \
+                    len(self.column_names_burcat):
                 return QVariant(
                     self.column_names_poling_basic_ii[
-                        section - len(self.column_names_burcat) - len(self.column_names_ant) -
-                        len(self.column_names_poling_basic_i)
+                        section - len(self.column_names_poling_basic_i) - len(self.column_names_burcat)
                     ])
-            elif section < len(self.column_names_burcat) + len(self.column_names_ant) + \
-                    len(self.column_names_poling_basic_i) + len(self.column_names_poling_basic_ii) + \
-                    len(self.column_names_poling_cp_ig_l):
+            elif section < len(self.column_names_poling_cp_ig_l) + len(self.column_names_poling_basic_ii) + \
+                    len(self.column_names_burcat) + len(self.column_names_poling_basic_i):
                 return QVariant(
                     self.column_names_poling_cp_ig_l[
-                        section - len(self.column_names_burcat) - len(self.column_names_ant) -
-                        len(self.column_names_poling_basic_i) - len(self.column_names_poling_basic_ii)
+                        section - len(self.column_names_burcat) - len(self.column_names_poling_basic_ii) -
+                        len(self.column_names_poling_basic_i)
+                    ])
+            elif section < len(self.column_names_ant) + len(self.column_names_poling_cp_ig_l) + \
+                    len(self.column_names_poling_basic_i) + len(self.column_names_poling_basic_ii) + \
+                    len(self.column_names_burcat):
+                return QVariant(
+                    self.column_names_ant[
+                        section - len(self.column_names_poling_cp_ig_l) - len(self.column_names_poling_basic_ii) -
+                        len(self.column_names_burcat) - len(self.column_names_poling_basic_i)
                     ])
         if orientation == Qt.Vertical:
             return QVariant(section + 1)
@@ -521,7 +542,7 @@ class thTableModel(QAbstractTableModel):
 
     def rowCount(self, index=QModelIndex()):
         #return len(self.burcat_results) #+ len(self.column_names_poling_basic_i)
-        return len(self.poling_basic_burcat_intersects) + \
+        return len(self.poling_basic_burcat_intersects_p) + \
                 len(self.poling_basic_burcat_complements) + \
                 len(self.burcat_ant_complements)
 
