@@ -3,7 +3,7 @@ import sys
 import re
 import string
 import locale
-from numpy import loadtxt, asscalar, argwhere, in1d
+from numpy import loadtxt, asscalar, argwhere, in1d, vectorize
 from functools import partial
 import lxml.etree as ET
 import csv
@@ -211,6 +211,10 @@ def helper_func3(x):
     return x.replace(b'.', b'-').decode('utf-8')
 
 
+def indexes_containing_string(array_a, string_x):
+    return vectorize(lambda y: string_x in y)(array_a)
+
+
 class thTableModel(QAbstractTableModel):
 
     def __init__(self):
@@ -370,11 +374,51 @@ class thTableModel(QAbstractTableModel):
             "phase[contains(phase, '" + \
             self.phase_filter + "')]"
         self.burcat_results = self.root.xpath(self.xpath)
-        self.burcat_results = self.root.xpath(self.xpath)
         self.poling_basic_i_results = self.poling_basic_i.copy()
         self.poling_basic_ii_results = self.poling_basic_ii.copy()
         self.poling_cp_ig_l_results = self.poling_cp_ig_l.copy()
         self.ant_results = self.ant.copy()
+
+        self.poling_basic_i_results = self.poling_basic_i_results[
+            indexes_containing_string(self.poling_basic_i_results['poling_cas'], self.cas_filter)
+        ]
+        self.poling_basic_i_results = self.poling_basic_i_results[
+            indexes_containing_string(self.poling_basic_i_results['poling_name'], self.name_filter)
+        ]
+        self.poling_basic_i_results = self.poling_basic_i_results[
+            indexes_containing_string(self.poling_basic_i_results['poling_formula'], self.formula_filter)
+        ]
+
+        # self.poling_basic_ii_results = self.poling_basic_ii_results[
+        #     indexes_containing_string(self.poling_basic_ii_results['poling_cas'], self.cas_filter)
+        # ]
+        # self.poling_basic_ii_results = self.poling_basic_ii_results[
+        #     indexes_containing_string(self.poling_basic_ii_results['poling_name'], self.name_filter)
+        # ]
+        # self.poling_basic_ii_results = self.poling_basic_ii_results[
+        #     indexes_containing_string(self.poling_basic_ii_results['poling_formula'], self.formula_filter)
+        # ]
+        #
+        # self.poling_cp_ig_l_results = self.poling_cp_ig_l_results[
+        #     indexes_containing_string(self.poling_cp_ig_l_results['poling_cas'], self.cas_filter)
+        # ]
+        # self.poling_cp_ig_l_results = self.poling_cp_ig_l_results[
+        #     indexes_containing_string(self.poling_cp_ig_l_results['poling_name'], self.name_filter)
+        # ]
+        # self.poling_cp_ig_l_results = self.poling_cp_ig_l_results[
+        #     indexes_containing_string(self.poling_cp_ig_l_results['poling_formula'], self.formula_filter)
+        # ]
+
+        self.ant_results = self.ant_results[
+            indexes_containing_string(self.ant_results['ant_cas'], self.cas_filter)
+        ]
+        self.ant_results = self.ant_results[
+            indexes_containing_string(self.ant_results['ant_name'], self.name_filter)
+        ]
+        self.ant_results = self.ant_results[
+            indexes_containing_string(self.ant_results['ant_formula'], self.formula_filter)
+        ]
+
 
         self.burcat_cas_nos = [x.getparent().get('CAS')
                                for x in self.burcat_results]
@@ -392,7 +436,8 @@ class thTableModel(QAbstractTableModel):
             range(len(self.poling_basic_i_results)))
         self.poling_basic_ant_intersects_p = []
         self.poling_basic_ant_intersects_a = []
-        self.poling_basic_ant_complements = list(range(len(self.ant_results)))
+        self.poling_basic_ant_complements = list(
+            range(len(self.ant_results)))
         self.burcat_ant_intersects_a = []
         self.burcat_ant_intersects_b = []
         self.poling_basic_burcat_ant_complements_ant_part = list(
@@ -506,9 +551,11 @@ class thTableModel(QAbstractTableModel):
 
             if column < sec_1:
                 if row < len(self.poling_basic_i_rows_to_table):
+                    cas_no = self.poling_basic_i_results['poling_cas'][
+                        self.poling_basic_i_rows_to_table[row]
+                    ]
                     record_poling_basic_i = self.poling_basic_i_results[
-                        self.poling_basic_i_results['poling_no'] ==
-                        self.poling_basic_i_rows_to_table[row] + 1]
+                        self.poling_basic_i_results['poling_cas'] == cas_no]
                     column_name = self.column_names_poling_basic_i[column]
                     return QVariant(
                         record_poling_basic_i[column_name].item())
@@ -548,13 +595,13 @@ class thTableModel(QAbstractTableModel):
                     elif table_row in self.poling_basic_i_ii_complements:
                         pass
                 if row_poling_basic_ii is not None:
+                    cas_no = self.poling_basic_i_results['poling_cas'][
+                        self.poling_basic_i_rows_to_table[row]
+                    ]
                     record_poling_basic_i = self.poling_basic_i_results[
-                        self.poling_basic_i_results['poling_no'] ==
-                        self.poling_basic_i_rows_to_table[row] + 1]
-                    cas_no = record_poling_basic_i['poling_cas']
+                        self.poling_basic_i_results['poling_cas'] == cas_no]
                     record_poling_basic_ii = self.poling_basic_ii_results[
-                        self.poling_basic_ii_results['poling_cas'] ==
-                        cas_no]
+                        self.poling_basic_ii_results['poling_cas'] == cas_no]
                     column_name = self.column_names_poling_basic_ii[column - sec_2]
                     return QVariant(
                         record_poling_basic_ii[column_name].item())
@@ -569,10 +616,11 @@ class thTableModel(QAbstractTableModel):
                     elif table_row in self.poling_basic_cp_ig_l_complements:
                         pass
                 if row_poling_cp_ig_l is not None:
+                    cas_no = self.poling_basic_i_results['poling_cas'][
+                        self.poling_basic_i_rows_to_table[row]
+                    ]
                     record_poling_basic_i = self.poling_basic_i_results[
-                        self.poling_basic_i_results['poling_no'] ==
-                        self.poling_basic_i_rows_to_table[row] + 1]
-                    cas_no = record_poling_basic_i['poling_cas']
+                        self.poling_basic_i_results['poling_cas'] == cas_no]
                     record_poling_cp_ig_l = self.poling_cp_ig_l_results[
                         self.poling_cp_ig_l_results['poling_cas'] ==
                         cas_no]
@@ -587,10 +635,11 @@ class thTableModel(QAbstractTableModel):
                     table_row = self.poling_basic_i_rows_to_table[row]
                     if table_row in self.poling_basic_ant_intersects_p:
                         row_ant = self.poling_basic_ant_intersects_p[table_row]
+                        cas_no = self.poling_basic_i_results['poling_cas'][
+                            self.poling_basic_i_rows_to_table[row]
+                        ]
                         record_poling_basic_i = self.poling_basic_i_results[
-                            self.poling_basic_i_results['poling_no'] ==
-                            self.poling_basic_i_rows_to_table[row] + 1]
-                        cas_no = record_poling_basic_i['poling_cas']
+                            self.poling_basic_i_results['poling_cas'] == cas_no]
                         record_ant = self.ant_results[
                             self.ant_results['ant_cas'] ==
                             cas_no]
