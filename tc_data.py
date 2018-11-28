@@ -117,8 +117,8 @@ class App(QWidget):
     def add_selection_to_widget(self):
         indexes = self.tableView1.selectedIndexes()
         index = indexes[0]
-        column_of_cas = self.tableView1.model().column_names_burcat.index('cas')
-        column_of_phase = self.tableView1.model().column_names_burcat.index('phase')
+        column_of_cas = self.tableView1.model().column_names.index('cas')
+        column_of_phase = self.tableView1.model().column_names.index('phase')
         phase = self.tableView1.model().index(index.row(), column_of_phase).data()
         cas = self.tableView1.model().index(index.row(), column_of_cas).data()
         already_in_table = False
@@ -212,7 +212,9 @@ def helper_func3(x):
 
 
 def indexes_containing_string(array_a, string_x):
-    return vectorize(lambda y: string_x in y)(array_a)
+    if len(array_a) < 1:
+        return []
+    return vectorize(lambda y: string_x.upper() in y.upper())(array_a)
 
 
 class thTableModel(QAbstractTableModel):
@@ -331,10 +333,11 @@ class thTableModel(QAbstractTableModel):
             self.poling_basic_ii.dtype.names)
         self.column_names_poling_cp_ig_l = list(
             self.poling_cp_ig_l.dtype.names)
-        self.column_names =  \
-            self.column_names_burcat + self.column_names_ant + \
-            self.column_names_poling_basic_i + self.column_names_poling_basic_ii + \
-            self.column_names_poling_cp_ig_l
+        self.column_names = \
+            self.column_names_poling_basic_i + self.column_names_burcat + \
+            self.column_names_poling_basic_ii + self.column_names_poling_cp_ig_l + \
+            self.column_names_ant
+
 
         all_burcat_phases_cas_nos = self.root.xpath(
             "./specie/formula_name_structure/../phase/phase/../../@CAS")
@@ -388,26 +391,6 @@ class thTableModel(QAbstractTableModel):
         self.poling_basic_i_results = self.poling_basic_i_results[
             indexes_containing_string(self.poling_basic_i_results['poling_formula'], self.formula_filter)
         ]
-
-        # self.poling_basic_ii_results = self.poling_basic_ii_results[
-        #     indexes_containing_string(self.poling_basic_ii_results['poling_cas'], self.cas_filter)
-        # ]
-        # self.poling_basic_ii_results = self.poling_basic_ii_results[
-        #     indexes_containing_string(self.poling_basic_ii_results['poling_name'], self.name_filter)
-        # ]
-        # self.poling_basic_ii_results = self.poling_basic_ii_results[
-        #     indexes_containing_string(self.poling_basic_ii_results['poling_formula'], self.formula_filter)
-        # ]
-        #
-        # self.poling_cp_ig_l_results = self.poling_cp_ig_l_results[
-        #     indexes_containing_string(self.poling_cp_ig_l_results['poling_cas'], self.cas_filter)
-        # ]
-        # self.poling_cp_ig_l_results = self.poling_cp_ig_l_results[
-        #     indexes_containing_string(self.poling_cp_ig_l_results['poling_name'], self.name_filter)
-        # ]
-        # self.poling_cp_ig_l_results = self.poling_cp_ig_l_results[
-        #     indexes_containing_string(self.poling_cp_ig_l_results['poling_formula'], self.formula_filter)
-        # ]
 
         self.ant_results = self.ant_results[
             indexes_containing_string(self.ant_results['ant_cas'], self.cas_filter)
@@ -564,7 +547,8 @@ class thTableModel(QAbstractTableModel):
             elif column < sec_2:
                 row_burcat = None
                 if row < len(self.poling_basic_i_rows_to_table):
-                    if row in self.poling_basic_burcat_intersects_p:
+                    row_intercept = self.poling_basic_burcat_intersects_p[row]
+                    if row_intercept != []:
                         row_burcat = self.poling_basic_burcat_intersects_b[row]
                     elif row in self.poling_basic_burcat_complements:
                         pass
@@ -670,9 +654,9 @@ class thTableModel(QAbstractTableModel):
                 elif row < len(self.poling_basic_i_rows_to_table) \
                         + len(self.poling_basic_burcat_complements):
                     return QVariant(None)
-                elif row < len(self.poling_basic_i_rows_to_table) \
-                        + len(self.burcat_ant_intersects_a) \
-                        + len(self.poling_basic_burcat_ant_complements_ant_part):
+                elif row < len(self.poling_basic_burcat_ant_complements_ant_part) + \
+                           len(self.poling_basic_i_rows_to_table) + \
+                           len(self.poling_basic_burcat_complements):
                     row_ant = self.poling_basic_burcat_ant_complements_ant_part[
                         row - len(self.poling_basic_i_rows_to_table) -
                         len(self.poling_basic_burcat_complements)]
@@ -760,9 +744,9 @@ class thTableModel(QAbstractTableModel):
     def rowCount(self, index=QModelIndex()):
         # return len(self.burcat_results) #+
         # len(self.column_names_poling_basic_i)
-        return len(self.poling_basic_i_rows_to_table) \
-            + len(self.burcat_ant_intersects_a) \
-            + len(self.poling_basic_burcat_ant_complements_ant_part)
+        return len(self.poling_basic_burcat_ant_complements_ant_part) + \
+               len(self.poling_basic_i_rows_to_table) + \
+               len(self.poling_basic_burcat_complements)
 
     def columnCount(self, index=QModelIndex()):
         # CAS, formula_name_structure_1, (phase)phase ,
