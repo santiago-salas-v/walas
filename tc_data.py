@@ -8,11 +8,13 @@ from functools import partial
 import lxml.etree as ET
 import csv
 import io
+import pandas as pd
+import ctypes  # Needed to set the app icon correctly
 from PyQt5.QtWidgets import QTableView, QApplication, QWidget
 from PyQt5.QtWidgets import QDesktopWidget, QGridLayout, QLineEdit, QPushButton
 from PyQt5.QtWidgets import QComboBox, QLabel, QTableWidget, QTableWidgetItem
 from PyQt5.QtCore import QAbstractTableModel, QModelIndex, Qt, QVariant, QEvent
-from PyQt5.QtGui import QKeySequence, QGuiApplication, QFont
+from PyQt5.QtGui import QKeySequence, QGuiApplication, QFont, QIcon
 from PyQt5.QtCore import pyqtSignal as SIGNAL
 
 
@@ -23,6 +25,47 @@ poling_basic_i_csv = './data/basic_constants_i_properties_of_gases_and_liquids.c
 poling_basic_ii_csv = './data/basic_constants_ii_properties_of_gases_and_liquids.csv'
 poling_cp_l_ig_poly_csv = './data/ig_l_heat_capacities_properties_of_gases_and_liquids.csv'
 
+
+template = "./data/xsl_stylesheet_burcat.xsl"
+xsl = ET.parse(template)
+tree = ET.parse(burcat_xml_file)
+root = tree.getroot()
+transformer = ET.XSLT(xsl)
+result = transformer(tree)
+cas_filter, name_filter, formula_filter, phase_filter = \
+    '', '', '', 'S'
+xpath = \
+            "./specie[contains(@CAS, '" + \
+            cas_filter + "')]/" + \
+            "formula_name_structure[contains(translate(" +\
+            "formula_name_structure_1" + \
+            ", '" + string.ascii_lowercase + "', '" + string.ascii_uppercase + "'), '" + \
+            name_filter + "')]/../@CAS/../" + \
+            "phase[contains(translate(" + \
+            "formula" + \
+            ", '" + string.ascii_lowercase + "', '" + string.ascii_uppercase + "'), '" + \
+            formula_filter + "')]/../" + \
+            "phase[contains(phase, '" + \
+            phase_filter + "')]"
+for element in root.xpath(xpath):
+    #print(element.getparent().get('CAS'))
+    pass
+data = []
+for i in result.xpath('/*'):
+    inner = {}
+    for j in i.xpath('*'):
+        inner[j.tag] = j.text
+    data.append(inner)
+trial_df = pd.DataFrame(data)
+print(trial_df[
+    ['cas', 'phase', 'formula', 
+     'formula_name_structure','reference', 
+     'source', 'date', 'range_tmin_to_1000',
+     'range_1000_to_tmax', 'molecular_weight',
+     'hf298_div_r']+
+    ['a'+str(i)+'_low' for i in range(1,7+1)]+
+    ['a'+str(i)+'_high' for i in range(1,7+1)]
+])
 
 class App(QWidget):
     def __init__(self):
@@ -766,5 +809,10 @@ class thTableModel(QAbstractTableModel):
 if __name__ == '__main__':
     app = QApplication(sys.argv)
     QApplication.setFont(QFont('Consolas', 10))
+    # following 2 lines for setting app icon correctly
+    myappid = u'mycompany.myproduct.subproduct.version'  # arbitrary string
+    ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(myappid)
+    # ended lines for setting app icon correctly
+    QApplication.setWindowIcon(QIcon('utils/icon_batch_32X32.png'))
     ex = App()
     sys.exit(app.exec_())
