@@ -8,7 +8,7 @@ from functools import partial
 import lxml.etree as ET
 import csv
 import io
-import pandas as pd
+from pandas import DataFrame, merge
 import ctypes  # Needed to set the app icon correctly
 from PyQt5.QtWidgets import QTableView, QApplication, QWidget
 from PyQt5.QtWidgets import QDesktopWidget, QGridLayout, QLineEdit, QPushButton
@@ -24,48 +24,8 @@ antoine_csv = './data/The-Yaws-Handbook-of-Vapor-Pressure-Second-Edition-Antoine
 poling_basic_i_csv = './data/basic_constants_i_properties_of_gases_and_liquids.csv'
 poling_basic_ii_csv = './data/basic_constants_ii_properties_of_gases_and_liquids.csv'
 poling_cp_l_ig_poly_csv = './data/ig_l_heat_capacities_properties_of_gases_and_liquids.csv'
-
-
 template = "./data/xsl_stylesheet_burcat.xsl"
-xsl = ET.parse(template)
-tree = ET.parse(burcat_xml_file)
-root = tree.getroot()
-transformer = ET.XSLT(xsl)
-result = transformer(tree)
-cas_filter, name_filter, formula_filter, phase_filter = \
-    '', '', '', 'S'
-xpath = \
-            "./specie[contains(@CAS, '" + \
-            cas_filter + "')]/" + \
-            "formula_name_structure[contains(translate(" +\
-            "formula_name_structure_1" + \
-            ", '" + string.ascii_lowercase + "', '" + string.ascii_uppercase + "'), '" + \
-            name_filter + "')]/../@CAS/../" + \
-            "phase[contains(translate(" + \
-            "formula" + \
-            ", '" + string.ascii_lowercase + "', '" + string.ascii_uppercase + "'), '" + \
-            formula_filter + "')]/../" + \
-            "phase[contains(phase, '" + \
-            phase_filter + "')]"
-for element in root.xpath(xpath):
-    #print(element.getparent().get('CAS'))
-    pass
-data = []
-for i in result.xpath('/*'):
-    inner = {}
-    for j in i.xpath('*'):
-        inner[j.tag] = j.text
-    data.append(inner)
-trial_df = pd.DataFrame(data)
-print(trial_df[
-    ['cas', 'phase', 'formula', 
-     'formula_name_structure','reference', 
-     'source', 'date', 'range_tmin_to_1000',
-     'range_1000_to_tmax', 'molecular_weight',
-     'hf298_div_r']+
-    ['a'+str(i)+'_low' for i in range(1,7+1)]+
-    ['a'+str(i)+'_high' for i in range(1,7+1)]
-])
+
 
 class App(QWidget):
     def __init__(self):
@@ -805,6 +765,160 @@ class thTableModel(QAbstractTableModel):
         # (phase)coefficients hf298_div_r
         return len(self.column_names)
 
+
+xsl = ET.parse(template)
+tree = ET.parse(burcat_xml_file)
+root = tree.getroot()
+transformer = ET.XSLT(xsl)
+result = transformer(tree)
+cas_filter, name_filter, formula_filter, phase_filter = \
+    '', '', '', 'S'
+xpath = \
+            "./specie[contains(@CAS, '" + \
+            cas_filter + "')]/" + \
+            "formula_name_structure[contains(translate(" +\
+            "formula_name_structure_1" + \
+            ", '" + string.ascii_lowercase + "', '" + string.ascii_uppercase + "'), '" + \
+            name_filter + "')]/../@CAS/../" + \
+            "phase[contains(translate(" + \
+            "formula" + \
+            ", '" + string.ascii_lowercase + "', '" + string.ascii_uppercase + "'), '" + \
+            formula_filter + "')]/../" + \
+            "phase[contains(phase, '" + \
+            phase_filter + "')]"
+for element in root.xpath(xpath):
+    #print(element.getparent().get('CAS'))
+    pass
+data = []
+for i in result.xpath('/*'):
+    inner = {}
+    for j in i.xpath('*'):
+        inner[j.tag] = j.text
+    data.append(inner)
+
+burcat_df = DataFrame(data)
+print(burcat_df[
+    ['cas_no', 'phase', 'formula', 
+     'formula_name_structure','reference', 
+     'source', 'date', 'range_tmin_to_1000',
+     'range_1000_to_tmax', 'molecular_weight',
+     'hf298_div_r']+
+    ['a'+str(i)+'_low' for i in range(1,7+1)]+
+    ['a'+str(i)+'_high' for i in range(1,7+1)]
+])
+
+ant_df = DataFrame(loadtxt(
+    open(antoine_csv, 'rb'),
+    delimiter='|',
+    skiprows=9,
+    dtype={
+        'names': [
+            'ant_no', 'ant_formula', 'ant_name',
+            'cas_no', 'ant_a', 'ant_b',
+            'ant_c', 'ant_tmin', 'ant_tmax',
+            'ant_code'],
+        'formats': [
+            int, object, object,
+            object, float, float,
+            float, float, float, object]},
+    converters={
+        0: helper_func1, 3: helper_func3,
+        4: helper_func1, 5: helper_func1,
+        6: helper_func1, 7: helper_func1
+    }))
+print(ant_df)
+
+poling_basic_i_df = DataFrame(loadtxt(
+    open(poling_basic_i_csv, 'rb'),
+    delimiter='|',
+    skiprows=3,
+    dtype={
+        'names': [
+            'poling_no', 'poling_formula', 'poling_name',
+            'cas_no', 'poling_molwt', 'poling_tfp',
+            'poling_tb', 'poling_tc', 'poling_pc',
+            'poling_Vc', 'poling_Zc', 'poling_omega'],
+        'formats': [
+            int, object, object,
+            object, float, float,
+            float, float, float, float, float,
+            float]},
+    converters={
+        5: helper_func2, 6: helper_func2,
+        8: helper_func2, 9: helper_func2,
+        10: helper_func2, 11: helper_func2
+    }
+))
+
+poling_basic_ii_df = DataFrame(loadtxt(
+    open(poling_basic_ii_csv, 'rb'),
+    delimiter='|',
+    skiprows=3,
+    usecols=(3, 4, 5, 6, 7, 8, 9, 10, 0),
+    dtype={
+        'names': [
+            'cas_no',
+            'poling_delhf0', 'poling_delgf0', 'poling_delhb',
+            'poling_delhm', 'poling_v_liq', 'poling_t_liq',
+            'poling_dipole', 'poling_no'],
+        'formats': [
+            object, float, float,
+            float, float, float, float, float, int]},
+    converters={
+        4: helper_func2, 5: helper_func2,
+        6: helper_func2, 7: helper_func2,
+        8: helper_func2, 9: helper_func2,
+        10: helper_func2
+    }
+))
+
+
+poling_cp_ig_l_df = DataFrame(loadtxt(
+    open(poling_cp_l_ig_poly_csv, 'rb'),
+    delimiter='|',
+    skiprows=4,
+    usecols=(3, 4, 5, 6, 7, 8, 9, 10, 11, 0),
+    dtype={
+        'names': [
+            'cas_no',
+            'poling_trange', 'poling_a0', 'poling_a1',
+            'poling_a2', 'poling_a3', 'poling_a4',
+            'poling_cpig', 'poling_cpliq', 'poling_no'],
+        'formats': [
+            object, object, float,
+            float, float, float, float, float, float, int]},
+    converters={
+        5: helper_func2, 6: helper_func2,
+        7: helper_func2, 8: helper_func2,
+        9: helper_func2, 10: helper_func2,
+        11: helper_func2
+    }
+))
+
+print(poling_cp_ig_l_df)
+
+poling_df = merge(merge(    
+    poling_basic_i_df, poling_basic_ii_df,
+    how='outer', on='cas_no'), 
+    poling_cp_ig_l_df, how='outer', on='cas_no')
+
+print(poling_df)
+
+#poling_ant_df = merge(poling_df, ant_df, on='cas_no', how='outer')
+
+#print(poling_ant_df)
+
+#poling_ant_burcat_df = merge(burcat_df, poling_ant_df, on='cas_no', how='outer')
+
+#print(poling_ant_burcat_df)
+
+poling_burcat_df = merge(burcat_df, poling_df, on='cas_no', how='outer')
+poling_burcat_ant_df = merge(burcat_df, ant_df, on='cas_no', how='outer')
+print(poling_burcat_ant_df)
+
+print(poling_df[(poling_df['poling_no_x']==205) | (poling_df['poling_no_x']==206) | (poling_df['poling_no_x']==204)])
+
+print(poling_cp_ig_l_df['poling_no'].dtype)
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)
