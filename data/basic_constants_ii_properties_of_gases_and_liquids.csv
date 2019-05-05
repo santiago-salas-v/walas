@@ -1,11 +1,6 @@
-﻿Section B Basic Constants II.
-No.|Formula|Name|CAS #|"DelHf0,
-kJ/mol"|"DelGf0,
-kJ /mol"|"DelHb, :
-kJ /mol"|"DelHm,
-kJ /mol"|"V liq,
-cm3/mol"|"Dipole,
-T liq, K Debye"|
+sep=|
+Section B Basic Constants II. 
+No.|Formula|Name|CAS #|"DelHf0, kJ/mol"|"DelGf0, kJ /mol"|"DelHb, : kJ /mol"|"DelHm, kJ /mol"|"V liq, cm3/mol"|"T liq, K"|"Dipole, Debye"|
 1|Ar|argon|7440-37-1|0.00|0.00|6.43||29.10|90.00|0.0
 2|Br2|bromine|7726-95-6|30.91|3.13|58.80||51.51|298.15|0.0
 3|BrD|deuterium bromide|13536-59-9|-37.12|-53.79|||||
@@ -35,7 +30,6 @@ T liq, K Debye"|
 27|ch4o|methanol|67-56-1|-200.94|-162.24|35.21|3.18|40.73|298.15|1.7
 28|ch4s|methanethiol (methyl mercaptan)|74-93-1|-22.59|-9.52||5.91|55.52|293.15|1.3
 29|ch5n|methanamine (methyl amine)|74-89-5|-22.53|32.73|25.60|6.13|47.34|298.15|1.3
-A.21
 30|CO|carbon monoxide|630-08-0|-110.53|-137.16|6.04|0.84|34.88|81.00|0.1
 31|CO2|carbon dioxide|124-38-9|-393.51|-394.38||9.02|||0.0
 32|C2Br2ClF3|1,2-dibromo-2-chloro-1,1,2-trifluroethane|354-51-8|||31.17||123.67|298.15|
@@ -49,10 +43,8 @@ A.21
 40|C2HBrClF3|1-bromo-2-chloro-1,1,2-trifluoroethane|354-06-3|||28.31||106.29|298.15|
 41|C2HClF4|1-chloro-1,1,2,2-tetrafluoroethane|354-25-6|-903.30|-830.90|22.30||105.06|273.15|
 42|C2HClF4|1-chloro-1,2,2,2-tetrafluoroethane|2837-89-0|-924.70|-851.80|22.53||99.88|295.00|
-||(R-124)||||||||
 43|C2HCl2F3|1,1-dichloro-2,2,2-trifluoroethane (R-123)|306-83-2|-743.90|-668.90|25.72||103.90|295.00|
 44|C2HCl2F3|1,2-dichloro-1,2,2-trifluoroethane|354-23-4|||||103.72|295|
-||(R-123a)||||||||
 45|C2HF5|pentafluoroethane|354-33-6|-1105.00|- 1030.00|||98.61|293.48|1.5
 46|C2HF5O|pentafluorodimethyl ether (E-125)|3822-68-2|||||105.66|295.00|
 47|C2H2|ethyne (acetylene)|74-86-2|190.92|201.30||21.28|43.47|203.15|0.0
@@ -72,10 +64,6 @@ A.21
 61|C2H4O2|methyl methanoate (methyl formate)|107-31-3|-352.40|-294.90|27.92||62.14|298.15|1.8
 62|C2H5Br|bromoethane|74-96-4|-63.60|-25.70|27.04||75.12|298.15|2.0
 63|C2H5Cl|chloroethane|75-00-3|-112.26|-60.43|24.53|4.45|72.58|298.15|2.0
-A.22
-Section B Basic Constants II (Continued)
-DelHfO, DelGfO, DelHb, DelHm, V liq,	Dipole,
-No.|Formula|Name|CAS #|kJ/mol|kJ /mol|kJ /mol|kJ /mol|cm3/mol|T liq, K|Debye
 64|C2H5F|fluoroethane|353-36-6|-264.40|-212.40|||56.67|213.15|2.0
 65|C2H6|ethane|74-84-0|-83.82|-31.86|14.70|2.86|46.15|90.36|0.0
 66|C2H6O|ethanol|64-17-5|-234.95|-167.73|38.56|5.01|58.68|298.15|1.7
@@ -86,13 +74,10 @@ No.|Formula|Name|CAS #|kJ/mol|kJ /mol|kJ /mol|kJ /mol|cm3/mol|T liq, K|Debye
 71|C2H7N|W-methylmethanamine (dimethyl amine)|124-40-3|-18.80|68.80|26.40|5.94|68.73|293.15|1.0
 72|C3F8|octafluoropropane (R-218)|76-19-7|-1737.62|-1610.31|||140.00|295.00|0.0
 73|C3HF7|1,1,1,2,3,3,3-heptafluoropropane|431-89-0|||||121.40|295.00|
-||(R-227ea)||||||||
 74|C3H2ClF5O|2-chloro-1,1,2-trifluoroethyl|13838-16-9|||30.09||||
-||difluoromethyl ether (enflurane)||||||||
 78|C3H3F5|1,1,1,2,2-pentafluoropropane (R-245cb)|1814-88-6|||||112.82|295.00|
 79|C3H3F5|1,1,1,3,3-pentafluoropropane (R-245fa)|460-73-1|||||99.50|295.00|
 81|c3h3f5o|2-(difluoromethoxy)-1,1,1-trifluoroethane|1885-48-9|||||107.71|295.00|
-||(E-245)||||||||
 82|c3h3no|1,2-oxazole(isoxazole)|288-14-2|82.02||37.17||51.408|298.15|
 83|C3H4|1-propyne (methyl acetylene)|74-99-7|110.00|150.60|22.15||62.31|273.15|0.7
 84|C3H4|1,2-propadiene|463-49-0|190.92|201.30|20.60|4.40|60.95|243.15|0.2
@@ -101,7 +86,6 @@ No.|Formula|Name|CAS #|kJ/mol|kJ /mol|kJ /mol|kJ /mol|cm3/mol|T liq, K|Debye
 87|C3H6Cl2|1,2-dichloropropane|78-87-5|||36.17||100.815|323.14|
 88|C3H6O|2-propen-1-ol (allyl alcohol)|107-18-6|-123.60||47.30||||
 89|C3H6O|propanone (acetone)|67-64-1|-217.10|-152.60|29.10|5.69|73.94|298.15|2.9
-A.23
 90|C3H6O2|propanoic acid|79-09-4|-452.80|-369.60|31.14|10.66|74.97|298.15|1.5
 91|C3H6O2|methyl ethanoate (methyl acetate)|79-20-9|-408.80|-321.40|30.32|7.49|79.89|298.15|1.7
 92|C3H6O2|ethyl methanoate (ethyl formate)|109-94-4|-388.30|-303.00|29.91||80.93|298.15|2.0
@@ -115,9 +99,7 @@ A.23
 100|C3H9N|1-propanamine (propyl amine)|107-10-8|-70.10|41.90|29.55||83.11|298.15|1.3
 101|c3h9n|2-propanamine (methyl ethyl amine)|75-31-0|-83.70|32.23|27.83||86.33|298.15|
 102|C3H9N|N, N-dimethylmethanamine (trimethyl|75-50-3|-23.60|99.30|22.94|6.55|94.28|298.15|0.6
-||amine)||||||||
 103|C3H9NO|2-ethoxymethanamine|109-83-1|||57||82.21|323.14|
-||(2-methylaminoethanol)||||||||
 104|C4F8|octafluorocyclobutane|115-25-3|||||120.94|253.15|0.0
 105|C4F10|decafluoro-2-methylpropane|354-92-7|||||156.91|293.15|
 106|C4H4O|furan|110-00-9|-34.73|0.94|27.10|3.80|73.09|298.15|0.7
@@ -137,15 +119,6 @@ A.23
 120|C4H8O2|2-methylpropanoic acid|79-31-2|-484.20||||93.42|298.15|1.3
 121|C4H8O2|1,3-dioxane|505-22-6|-337.30|-203.90|34.37||||
 122|C4H8O2|1,4-dioxane|123-91-1|-314.70|- 180.20|34.16|12.85|85.29|293.15|0.0
-A.24
-Section B Basic Constants II (Continued)
-No.|Formula|Name|CAS #|"DelHf0,
-kJ/mol"|"DelGf0,
-kJ /mol"|"DelHb,
-kJ /mol"|"DelHm,
-kJ /mol"|"V liq,
-cm3/mol"|T liq, K|"Dipole,
-Debye"
 123|C4H8O2|methyl propanoate|554-12-1|-427.50|-310.90|32.24||96.93|298.15|1.7
 124|C4H8O2|ethyl ethanoate (ethyl acetate)|141-78-6|-444.50|-328.00|31.94|10.48|98.55|298.15|1.9
 125|C4H8O2|propyl methanoate (propyl formate)|110-74-7|-407.60|-293.50|33.61||97.94|298.15|1.9
@@ -165,7 +138,6 @@ Debye"
 139|C4HuN|1-butanamine (butyl amine)|109-73-9|-91.76|49.03|31.81||98.97|298.15|1.3
 140|C4HuN|N-ethylethanamine (diethyl amine)|109-89-7|-71.70|73.00|29.06||104.24|298.15|1.1
 141|C4HuN|2-methyl-1-propanamine (isobutyl|78-81-9|-98.55||30.61||100.45|298.15|1.2
-||amine)||||||||
 142|C5F12|dodecafluoropentane|678-26-2|-2561.86|-2351.67|||177.80|293.15|0.0
 143|c5h5n|pyridine|110-86-1|140.37|190.55|35.09|8.28|80.88|298.15|2.3
 144|C5H6O|2-methylfuran|534-22-5|-66.32|-2.36|28.35|8.55|89.73|293.15|0.7
@@ -176,12 +148,10 @@ Debye"
 149|C5H10|1-pentene|109-67-1|-21.30|78.60|25.20|5.81|110.40|298.15|0.4
 150|C5H10|cis-2-pentene|627-20-3|-26.30|73.50|26.06|7.11|107.85|298.15|
 151|C5H10|2-methyl-2-butene|513-35-9|-40.80|61.60|26.31|7.60|107.57|298.15|
-A.25
 152|CsHjo|3-methy1-1-butene|563-45-1|-27.60|76.00|23.94|5.36|112.77|298.15|
 154|C5H1oO|2-pentanone (methyl propyl ketone)|107-87-9|-259.20|- 138.20|33.44|10.63|107.33|298.15|2.5
 155|C5H1oO|3-pentanone (diethyl ketone)|96-22-0|-257.90|-134.30|33.45|11.59|106.41|298.15|2.7
 156|CsH^O|3-methy1-2-butanone (methyl isopropyl|563-80-4|-262.60|-139.30|32.35|9.34|107.91|298.15|2.8
-||ketone)||||||||
 157|C5H10O|2-methyltetrahydrofuran|96-47-9|||30.13||100.39|298.15|
 158|C5H10O2|pentanoic acid|109-52-4|-497.00|- 351.00|62.40|14.16|109.30|298.15|
 159|C5H10O2|3-methylbutanoic acid|503-74-2|||||110.79|298.15|1.0
@@ -190,7 +160,6 @@ A.25
 162|C5H10O2|methyl 2-methylpropanoate|547-63-7|-464.00|- 317.00|32.61||114.63|293.15|2.0
 163|C5H10O2|propyl ethanoate (propyl acetate)|109-60-4|-464.80|-320.20|33.92||115.72|298.15|1.8
 164|C5H10O2|2-methylpropyl methanoate (isobutyl|542-55-2|-436.30|- 293.00|33.60||116.96|298.15|1.9
-||formate)||||||||
 165|c5h,,ci|1-chloropentane|543-59-9|-175.02|-36.68|33.15||121.53|298.15|2.2
 166|C5H12|pentane|109-66-0|-146.76|-8.65|25.79|8.40|115.22|298.15|0.0
 167|C5H12|2-methylbutane|78-78-4|-153.70|-13.86|24.69|5.16|116.46|298.15|0.1
@@ -203,21 +172,11 @@ A.25
 174|C5H120|3-methyl-2-butanol|598-75-4|-316.40||53.00||||
 175|C5H120|ethyl propyl ether|628-32-0|-272.20|- 115.00|28.94|8.40|121.35|298.15|1.2
 176|C5H12S|3-methyl-1-butanethiol (isopentyl|541-31-1|-114.60|17.70||7.45|125.32|298.15|
-||mercaptan)||||||||
 177|C6C1F5|chloropentafluorobenzene|344-07-0|||34.76||||
 178|C6F6|hexafluorobenzene|392-56-3|||31.66||||0.0
 179|C6F,2|dodecafluorocyclohexane|355-68-0|||||||0.0
 180|C6F,4|tetradecafluorohexane|355-42-0|-2973.99|-2722.34|||198.91|293.15|0.0
 181|C6F,4|tetradecafluoro-2-methylpentane|355-04-4|||||195.06|293.15|
-A.26
-Section B Basic Constants II (Continued)
-No.|Formula|Name|CAS #|"DelHf0,
-kJ/mol"|"DelGf0,
-kJ /mol"|"DelHb,
-kJ /mol"|"DelHm,
-kJ /mol"|"V liq,
-cm3/mol"|"Dipole,
-T liq, K Debye"|
 184|C6HF5|pentafluorobenzene|363-72-4|||32.15|10.85|||
 186|C6H5CI|chlorobenzene|108-90-7|51.09|98.36|35.19|9.61|102.22|298.15|1.6
 187|C6H6|benzene|71-43-2|82.88|129.75|30.72|9.95|89.41|298.15|0.0
@@ -246,11 +205,8 @@ T liq, K Debye"|
 210|C*^|ethyl 2-methylpropanoate|97-62-1|-499.60|-324.00|33.67||133.67|293.15|2.1
 211|C6H12O2|butyl ethanoate (butyl acetate)|123-86-4|-485.30|-312.10|36.28|14.59|132.51|298.15|1.8
 212|C*^|2-methylpropyl ethanoate (isobutyl|110-19-0|-494.70|-322.00|35.90||133.87|298.15|1.9
-||acetate)||||||||
 213|C6H12O2|pentyl methanoate (pentyl formate)|638-49-3|-448.20|-276.40|||131.72|298.15|19
-A.27
 214|C6H12O2|3-methylbutyl methanoate (isopentyl|110-45-2|-453.80|-279.80|||132.85|298.15|
-||formate)||||||||
 215|C6H12O3|2-ethoxyethylacetate|111-15-9|||52.61||140.62|323.14|
 216|C6H14|hexane|110-54-3|-166.92|0.15|28.85|13.07|131.59|298.15|0.0
 217|C6H14|2-methylpentane|107-83-5|-174.55|-5.14|27.79|6.27|132.89|298.15|0.1
@@ -267,7 +223,6 @@ A.27
 228|C6H14O|4-methyl-2-pentanol|108-11-2|-339.20||44.20||127.20|298.15|
 229|C6H^n|N, N-diethylethanamine (triethyl amine)|121-44-8|-92.70|118.00|31.01||139.96|298.15|0.9
 230|C6H^n|N-propyl-1-propanamine (dipropyl|142-84-7|-113.20||33.47||138.07|298.15|1.0
-||amine)||||||||
 231|C7F14|tetradecafluoromethylcyclohexane|355-02-2|-2898.00||||195.67|298.15|
 232|C7F16|hexadecafluoroheptane|335-57-9|-3386.11|- 3093.02|36.29||223.92|293.15|0.0
 233|C7H3F5|pentafluorotoluene|771-56-2|||34.75|12.99|||
@@ -283,15 +238,6 @@ A.27
 243|C7H9N|3,4-dimethylpyridine (3,4-lutidine)|583-58-4|70.04|179.34|39.99|14.70|112.32|298.15|1.9
 244|C7H9N|3,5-dimethylpyridine (3,5-lutidine)|591-22-0|72.80|182.44|39.46|13.11|114.26|298.15|2.6
 245|C7H12O2|butyl-2-propenoate(butylacrylate)|141-32-2|-375.30||47.31||||
-A.28
-Section B Basic Constants II (Continued)
-No.|Formula|Name|CAS #|"DelHf0,
-kJ/mol"|"DelGf0,
-kJ /mol"|"DelHb,
-kJ /mol"|"DelHm,
-kJ /mol"|"V liq,
-cm3/mol"|"Dipole,
-T liq, K Debye"|
 246|C7H14|cycloheptane|291-64-5|-118.10|64.30|33.18|1.88|121.73|298.15|0.0
 247|C7H14|methylcyclohexane|108-87-2|-154.70|27.64|31.27|6.75|128.35|298.15|0.0
 248|C7H14|ethylcyclopentane|1640-89-7|-126.90|45.07|31.96|6.87|128.83|298.15|0.0
@@ -305,7 +251,6 @@ T liq, K Debye"|
 256|C7H14O2|2-methylpropyl propanoate|540-42-1|-512.70|-311.20|||150.21|298.15|
 257|C7H14O2|propyl 2-methylpropanoate|644-49-5|-518.10|-314.00|||147.27|273.15|
 258|C7H14O2|3-methylbutyl ethanoate (isopentyl|123-92-2|-511.20|-306.80|37.50||150.26|298.15|1.8
-||acetate)||||||||
 259|C7H16|heptane|142-82-5|-187.80|8.20|31.77|14.03|147.47|298.15|0.0
 260|C7H16|2-methylhexane|591-76-4|-194.60|3.70|30.62|9.19|148.60|298.15|0.0
 261|C7H16|3-methylhexane|589-34-4|-191.30|5.30|30.89||146.74|298.15|0.0
@@ -322,7 +267,6 @@ T liq, K Debye"|
 272|C8H8O|methylphenylketone(acetophenone)|98-86-2|||55.40||119.94|323.14|
 273|C8H10|ethylbenzene|100-41-4|29.92|130.73|35.57|9.18|123.08|298.15|0.4
 274|C8H10|1,2-dimethylbenzene (o-xylene)|95-47-6|19.08|122.05|36.24|13.60|121.25|298.15|05
-A.29
 275|C8Hio|1,3-dimethylbenzene (m-xylene)|108-38-3|17.32|118.89|35.66|11.57|123.47|298.15|0.3
 276|C8Hio|1,4-dimethylbenzene (p-xylene)|106-42-3|18.03|121.48|35.67|16.81|123.93|298.15|0.1
 277|C8H10O|2-ethylphenol|90-00-6|-145.23|-23.15|46.20|13.94|120.41|298.15|
@@ -358,15 +302,6 @@ A.29
 307|C8H18|3-ethyl-2-methylpentane|609-26-7|-212.80|19.23|32.93|11.34|159.72|298.15|
 308|C8H18|3-ethyl-3-methylpentane|1067-08-9|-214.85|22.88|32.78|10.84|157.88|298.15|
 309|C8H18|2,2,3-trimethylpentane|564-02-3|-219.95|17.97|31.94|8.62|160.43|298.15|
-08 V
-Section B Basic Constants II (Continued)
-No.|Formula|Name|CAS #|"DelHf0,
-kJ/mol"|"DelGf0,
-kJ /mol"|"DelHb,
-kJ /mol"|"DelHm,
-kJ /mol"|"V liq,
-cm3/mol"|T liq, K|"Dipole,
-Debye"
 310|QH«,|2,2,4-trimethylpentane (isooctane)|540-84-1|-224.01|14.21|30.79|9.04|166.07|298.15|
 311|Q.H«,|2,3,3-trimethylpentane|560-21-4|-218.45|18.56|32.12|0.86|158.15|298.15|
 312|C8H18|2,3,4-trimethylpentane|565-75-3|-217.32|19.28|32.36|9.26|159.74|298.15|
@@ -397,7 +332,6 @@ Debye"
 339|C9H20|2,2,3,4-tetramethylpentane|1186-53-4|-234.97|35.40|33.70|0.50|174.45|298.15|
 340|C9H20|2,2,4,4-tetramethylpentane|1070-87-7|-242.25|34.20|38.30|9.75|179.23|298.15|
 341|C9H20|2,3,3,4-tetramethylpentane|16747-38-9|-236.31|38.30|34.50|9.00|170.76|298.15|
-A.31
 342|C9H20O|1-nonanol|143-08-8|-381.20|-111.92|54.40||174.92|298.15|1.7
 343|C9H20O|2-nonanol|628-99-9|||||||
 344|C10F22|docosafluorodecane|307-45-9|-4622.48|-4205.05|||||0.0
@@ -432,16 +366,6 @@ A.31
 373|C12H12|2,7-dimethylnaphthalene|582-16-1|79.00|210.70|59.50|23.35|||
 374|C12H18|1,3,5-triethylbenzene|102-25-0|||59.22||193.39|323.14|
 375|C12H20|1,3-dimethyltricyclo[3.3.1.137]decane|702-79-4|||49.37||186.61|323.14|
-(1,3-dimethyladamantane)
-A.32
-Section B Basic Constants II (Continued)
-No.|Formula|Name|CAS #|"DelHf0,
-kJ/mol"|"DelGf0,
-kJ /mol"|"DelHb,
-kJ /mol"|"DelHm,
-kJ /mol"|"V liq,
-cm3 /mol"|"Dipole,
-T liq, K Debye"|
 376|C12H24|1-dodecene|112-41-4|-165.50|138.00|||222.06|293.15|
 377|C12H26|dodecane|112-40-3|-290.79|49.53|43.40|36.58|228.59|298.15|0.0
 378|C12H26O|1-dodecanol|112-53-8|-443.10|-87.13|||||
@@ -451,7 +375,6 @@ T liq, K Debye"|
 382|C14H10|phenanthrene|85-01-8|207.50|308.20||16.47|||0.0
 383|C14H10|anthracene|120-12-7|230.90|333.70||28.83|||0.0
 384|C14H22|1,4-di(trimethylmethyl)benzene|1012-72-2||||22.48|236.17|373.15|
-||(p-ditertbutylbenzene)||||||||
 385|C14H30|tetradecane|629-59-4|-332.05|66.09|47.61|45.61|261.32|298.15|0.0
 386|C14H30O|1-tetradecanol|112-72-1|||||||
 387|C15H32|pentadecane|629-62-9|-352.68|74.37|49.45|34.80|277.71|298.15|0.0
@@ -472,7 +395,6 @@ T liq, K Debye"|
 402|C20H42O|1-eicosanol|629-96-9|-608.10|-19.43|||||
 403|C21H44|heneicosane|629-94-7||||47.70|381.11|313.15|0.0
 404|C22H46|docosane|629-97-0||||49.96|399.14|318.15|0.0
-A.33
 405||tricosane|638-67-5||||41.76|||0.0
 406|C24H50|tetracosane|646-31-1||||54.89|434.96|324.25|0.0
 407|ClD|deuterium chloride|7698-05-7|-93.33|-95.93|||31.02|193.15|
@@ -507,15 +429,6 @@ A.33
 436|F6U|uranium hexafluoride|7783-81-5|-2139.00|-2060.00|||||0.0
 437|HI|hydrogen iodide|10034-85-2|26.50|1.70|19.76||46.06|243.15|0.5
 438|H2|hydrogen|1333-74-0|0.00|0.00|0.89|0.12|28.39|20.00|0.0
-A.34
-Section B Basic Constants II (Continued)
-No.|Formula|Name|CAS #|"DelHf0,
-kJ/mol"|"DelGf0,
-kJ /mol"|"DelHb, :
-kJ /mol"|"DelHm,
-kJ /mol"|"V liq,
-cm3/mol"|"Dipole,
-T liq, K Debye"|
 439|H2|hydrogen, normal|800000-51-5|0.00|0.00|0.90|0.12|||0.0
 440|h2o|water|7732-18-5|-241.81|-228.42|40.66|6.01|18.07|298.15|1.8
 441|h2s|hydrogen sulfide|7783-06-4|-20.63|-33.43|18.68|2.38|34.32|214.00|0.9
@@ -546,4 +459,3 @@ T liq, K Debye"|
 466|Se|selenium|7782-49-2|0.00|0.00|95.48||||0.0
 467|T2|tritium|10028-17-8|0.00|0.00|||||0.0
 468|Xe|xenon|7440-63-3|0.00|0.00|12.57||42.91|165.00|0.0
-||||||||||—
