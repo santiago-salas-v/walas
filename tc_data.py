@@ -30,7 +30,7 @@ template = "./data/xsl_stylesheet_burcat.xsl"
 class App(QWidget):
     def __init__(self):
         super().__init__()
-        self.title = 'Thermodynamic data from burcat'
+        self.title = 'Thermodynamic data'
 
         screen = QDesktopWidget().screenGeometry()
         width = 600
@@ -409,26 +409,28 @@ class thTableModel(QAbstractTableModel):
         
         filtered_data = self.df.copy()
 
-        filtered_data = filtered_data[
-            (filtered_data.cas_no.str.lower().str.find(self.cas_filter)>=0)
-        ]
+        if len(self.cas_filter) > 0:
+            filtered_data = filtered_data[
+                (filtered_data.cas_no.str.lower().str.find(self.cas_filter)>=0)
+            ]
+        if len(self.formula_filter) > 0:
+            filtered_data = filtered_data[
+                    (filtered_data.formula.str.lower().str.find(self.formula_filter)>=0) |
+                    (filtered_data.formula_name_structure.str.lower().str.find(self.formula_filter)>=0) |
+                    (filtered_data.ant_formula.str.lower().str.find(self.formula_filter)>=0) |
+                    (filtered_data.poling_formula.str.lower().str.find(self.formula_filter)>=0)
+            ]
 
-        filtered_data = filtered_data[
-                (filtered_data.formula.str.lower().str.find(self.formula_filter)>=0) |
-                (filtered_data.formula_name_structure.str.lower().str.find(self.formula_filter)>=0) |
-                (filtered_data.ant_formula.str.lower().str.find(self.formula_filter)>=0) |
-                (filtered_data.poling_formula.str.lower().str.find(self.formula_filter)>=0)
-        ]
-
-        filtered_data = filtered_data[
-            (filtered_data.poling_name.str.lower().str.find(self.name_filter)>=0) | 
-            (filtered_data.ant_name.str.lower().str.find(self.name_filter)>=0) | 
-            (filtered_data.formula_name_structure.str.lower().str.find(self.name_filter)>=0)
-        ]
-
-        filtered_data = filtered_data[
-            (filtered_data.phase.str.lower().str.find(self.phase_filter)>=0)
-        ]
+        if len(self.name_filter) > 0:
+            filtered_data = filtered_data[
+                (filtered_data.poling_name.str.lower().str.find(self.name_filter)>=0) | 
+                (filtered_data.ant_name.str.lower().str.find(self.name_filter)>=0) | 
+                (filtered_data.formula_name_structure.str.lower().str.find(self.name_filter)>=0)
+            ]
+        if len(self.phase_filter) > 0:
+            filtered_data = filtered_data[
+                (filtered_data.phase.str.lower().str.find(self.phase_filter)>=0)
+            ]
 
         self.filtered_data = filtered_data
 
