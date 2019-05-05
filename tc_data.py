@@ -3,7 +3,7 @@ import sys
 import re
 import string
 import locale
-from numpy import loadtxt, asscalar, argwhere, in1d, vectorize
+from numpy import loadtxt, isnan
 from functools import partial
 import lxml.etree as et
 import csv
@@ -212,12 +212,6 @@ def helper_func3(x):
     # helper function 2 for csv reading.
     # replace - for . in cas numbers (Antoine coeff)
     return x.replace(b'.', b'-').decode('utf-8')
-
-
-def indexes_containing_string(array_a, string_x):
-    if len(array_a) < 1:
-        return []
-    return vectorize(lambda y: string_x.upper() in y.upper())(array_a)
 
 
 class thTableModel(QAbstractTableModel):
@@ -454,7 +448,7 @@ class thTableModel(QAbstractTableModel):
 
             if type(datum) == str:
                 return QVariant(datum)
-            elif datum is not None:
+            elif datum is not None and not isnan(datum):
                 return QVariant(locale.str(datum))
             else:
                 return QVariant(None)
