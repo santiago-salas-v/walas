@@ -13,9 +13,14 @@ import ctypes  # Needed to set the app icon correctly
 from PyQt5.QtWidgets import QTableView, QApplication, QWidget
 from PyQt5.QtWidgets import QDesktopWidget, QGridLayout, QLineEdit, QPushButton
 from PyQt5.QtWidgets import QComboBox, QLabel, QTableWidget, QTableWidgetItem
+from PyQt5.QtWidgets import QSizePolicy
 from PyQt5.QtCore import QAbstractTableModel, QModelIndex, Qt, QVariant, QEvent
 from PyQt5.QtGui import QKeySequence, QGuiApplication, QFont, QIcon
 from PyQt5.QtCore import pyqtSignal as SIGNAL
+import matplotlib
+matplotlib.use('Qt5Agg')
+import matplotlib.pyplot as plt
+from matplotlib.backends.backend_qt5agg import FigureCanvas
 
 
 locale.setlocale(locale.LC_ALL, '')
@@ -58,6 +63,10 @@ class App(QWidget):
         self.phase_filter = QComboBox()
         self.delete_selected_button = QPushButton()
         self.copy_selected_button = QPushButton()
+        self.phases_vol_button = QPushButton()
+        self.plot_window = PlotWindow()
+        self.cp_button = QPushButton()
+        self.psat_button = QPushButton()
 
         self.tableView1.setModel(self.model)
         self.tableWidget1.added_column_names = ['']
@@ -71,6 +80,7 @@ class App(QWidget):
         self.tableWidget1.installEventFilter(self)
         self.delete_selected_button.setText('delete selected')
         self.copy_selected_button.setText('copy selected')
+        self.phases_vol_button.setText('ph, v')
 
         # Add box layout, add table to box layout and add box layout to widget
         self.layout = QGridLayout()
@@ -87,6 +97,7 @@ class App(QWidget):
         self.layout.addWidget(self.tableWidget1, 5, 1, 1, 4)
         self.layout.addWidget(self.delete_selected_button, 6, 4, 1, 1)
         self.layout.addWidget(self.copy_selected_button, 6, 1, 1, 1)
+        self.layout.addWidget(self.phases_vol_button, 6, 2, 1, 1)
 
         self.setLayout(self.layout)
 
@@ -101,6 +112,9 @@ class App(QWidget):
         ))
         self.copy_selected_button.clicked.connect(partial(
             self.copy_selection
+        ))
+        self.phases_vol_button.clicked.connect(partial(
+            self.phases_vol
         ))
 
         # Show widget
@@ -148,6 +162,7 @@ class App(QWidget):
 
     def copy_selection(self):
         col_names = self.tableView1.model().column_names
+        col_units = self.tableView1.model().column_units
         selection = self.tableWidget1.selectedIndexes()
         if selection:
             rows = sorted(index.row() for index in selection)
@@ -155,7 +170,12 @@ class App(QWidget):
             rowcount = rows[-1] - rows[0] + 1
             colcount = columns[-1] - columns[0] + 1
             table = [[''] * colcount for _ in range(rowcount + 1)]
-            table[0] = col_names
+            table[0] = []
+            for i in range(len(col_names)):
+                text_to_add = col_names[i]
+                if len(col_units[i]) > 0:
+                    text_to_add += ' [' + col_units[i] + '] '
+                table[0] += [text_to_add]
             for index in selection:
                 row = index.row() - rows[0]
                 column = index.column() - columns[0]
@@ -188,6 +208,33 @@ class App(QWidget):
             self.tableWidget1.selectRow(current_row)
             if self.tableWidget1.rowCount() == 0:
                 self.tableWidget1.setEnabled(False)
+
+    def phases_vol(self):
+        self.plot_window.show()
+        t = 298.15
+        p = 101325
+
+
+
+
+
+class PlotWindow(QWidget):
+    def __init__(self, parent=None):
+        super(PlotWindow, self).__init__(parent)
+        self.dpi=50
+        self.glayout_2 = QGridLayout()
+        self.fig = plt.figure(dpi=self.dpi)
+        self.ax = plt.subplot()
+        self.p1 = FigureCanvas(self.fig)
+        self.title = 'plot results'
+        self.setLayout(self.glayout_2)
+        self.glayout_2.addWidget(self.p1)
+        self.setWindowTitle(self.title)
+        self.p1.setSizePolicy( 
+            QSizePolicy.Expanding, 
+            QSizePolicy.Expanding
+            )
+        self.fig.tight_layout()
 
 
 def helper_func1(x):
@@ -390,6 +437,30 @@ class thTableModel(QAbstractTableModel):
             'ant_code'
             ]
 
+        self.column_units = [
+            '', '', '',
+            '', '',
+            '', '', '',
+            'g/mol', 'K', 
+            'K', 'K', 'bar', 
+            'cm3/mol', '', '',
+            'kJ/mol', 'kJ/mol', 'kJ/mol',
+            'kJ/mol', 'cm3/mol', 'K',
+            'Debye', 
+            'K', 
+            'K', 'g/mol', 
+            '',
+            '', 'K^-1', 'K^-2', 'K^-3', 'K^-4',
+            'K^-1', '',
+            '', 'K^-1', 'K^-2', 'K^-3', 'K^-4',
+            'K^-1', '',
+            '', '', '', 
+            '', '', '', 
+            '', '', '', 
+            '°C', '°C', 
+            ''
+        ]
+
         self.apply_filter(
             cas_filter, name_filter, 
             formula_filter, phase_filter
@@ -463,7 +534,9 @@ class thTableModel(QAbstractTableModel):
         if role != Qt.DisplayRole:
             return QVariant()
         if orientation == Qt.Horizontal:
-            return QVariant(self.column_names[section])
+            return QVariant(
+                self.column_names[section]+'\n'+
+                self.column_units[section])
             
         if orientation == Qt.Vertical:
             return QVariant(section + 1)
