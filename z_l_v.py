@@ -1,3 +1,4 @@
+from poly_3_4 import solve_cubic
 import numpy as np
 from scipy import optimize
 from matplotlib import pyplot as plt
@@ -210,19 +211,24 @@ def phi_l(t, p, x_i, tc_i, pc_i, af_omega_i):
     a_mp_i_l = -a_l + 2 * s_x_j_a_ij + 2 * x_i * a_i  # partielles molares a_i
     b_mp_i_l = b_i  # partielles molares b_i
     q_mp_i_l = q_l * (1 + a_mp_i_l / a_l - b_i / b_l)  # partielles molares q_i
-    z_soln = optimize.root(
-        lambda z_var: z_l_func(z_var, beta_l, q_l),
-        beta_l)
+    #z_soln = optimize.root(
+    #    lambda z_var: z_l_func(z_var, beta_l, q_l),
+    #    beta_l)
     a1_l = beta_l * (epsilon + sigma) - beta_l - 1
     a2_l = q_l * beta_l + epsilon * sigma * beta_l ** 2 \
         - beta_l * (epsilon + sigma) * (1 + beta_l)
     a3_l = -(epsilon * sigma * beta_l ** 2 * (1 + beta_l) +
              q_l * beta_l ** 2)
-    #z_soln = solve_cubic(1, a1_l, a2_l, a3_l, return_det=True)
-    z_l = z_soln.x
-    success = z_soln.success
-    opt_func = z_soln.fun
-    nfev = z_soln.nfev
+
+    soln = solve_cubic([1, a1_l, a2_l, a3_l])
+    z_soln = soln['roots']
+    disc = soln['disc']
+    if disc <= 0:
+        # 3 real roots. smallest ist liq. largest is gas.
+        z_l = z_soln[-1][0]
+    elif disc > 0:
+        # one real root, 2 complex. First root is the real one.
+        z_l = z_soln[0][0]
     i_int_l = 1 / (sigma - epsilon) * \
         np.log((z_l + sigma * beta_l) / (z_l + epsilon * beta_l))
     ln_phi_l = b_i / b_l * (z_l - 1) - np.log(z_l -
@@ -237,75 +243,6 @@ def phi_l(t, p, x_i, tc_i, pc_i, af_omega_i):
                  'opt_func', 'nfev', 'success']:
         soln[item] = locals().get(item)
     return soln
-
-
-def solve_cubic(a, b, c, d, return_det=False):
-    """
-    solves a x^3 + b x^2 + c x + d = 0
-    :param a: cubic coef.
-    :param b: quadratic coef.
-    :param c: linear coef.
-    :param d: constant
-    """
-    y_minus_x = b / a / 3
-    p = -(b / a) ** 2 / 3 + c / a
-    q = 2 / 27 * (b / a) ** 3 - 1 / 3 * b * c / a ** 2 + d / a
-    det = (q / 2) ** 2 + (p / 3) ** 3
-
-    if det < 0:
-        # casus irreducibiles
-        # 3 real roots
-        im_x1 = 0
-        im_x2 = 0
-        im_x3 = 0
-        re_x1 = 2 * (-p / 3) ** (1 / 2) * (
-            np.cos(
-                1 / 3 * np.arccos(
-                    -q / 2 / (-p / 3) ** (3 / 2)
-                ) + 0 * 2 * np.pi / 3
-            )
-        ) - y_minus_x
-        re_x2 = 2 * (-p / 3) ** (1 / 2) * (
-            np.cos(
-                1 / 3 * np.arccos(
-                    -q / 2 / (-p / 3) ** (3 / 2)
-                ) + 1 * 2 * np.pi / 3
-            )
-        ) - y_minus_x
-        re_x3 = 2 * (-p / 3) ** (1 / 2) * (
-            np.cos(
-                1 / 3 * np.arccos(
-                    -q / 2 / (-p / 3) ** (3 / 2)
-                ) + 2 * 2 * np.pi / 3
-            )
-        ) - y_minus_x
-    elif det >= 0 and (p > 0 or p <= 0):
-        # 1 real, 2 complex
-        u = real_cube_root(-q / 2 + det ** (1 / 2))
-        v = real_cube_root(-q / 2 - det ** (1 / 2))
-        im_x1 = 0
-        re_x1 = u + v - y_minus_x
-        im_x2 = 3 ** (1 / 2) / 2 * (u - v)
-        re_x2 = -1 / 2 * (u + v) - y_minus_x
-        im_x3 = -3 ** (1 / 2) / 2 * (u - v)
-        re_x3 = re_x2
-    soln = np.array([
-        [re_x1, im_x1],
-        [re_x2, im_x2],
-        [re_x3, im_x3],
-    ], dtype=float
-    )
-    if return_det:
-        return dict([['soln', soln], ['det', det]])
-    elif not return_det:
-        return soln
-
-
-def real_cube_root(x):
-    if x >= 0:
-        return x ** (1 / 3)
-    elif x < 0:
-        return -(-x) ** (1 / 3)
 
 
 def phi_v(t, p, y_i, tc_i, pc_i, af_omega_i):
@@ -519,13 +456,13 @@ def beispiel_svn_14_2():
         print(sum(k_i * x_i))
     soln = optimize.root(
         lambda p: siedepunkt(
-            310.92, p, x_i, y_i, tc_i, pc_i, af_omega_i, max_it
-        )['opt_func'], 1.
+            310.92, p.item(), x_i, y_i, tc_i, pc_i, af_omega_i, max_it
+        )['opt_func'], np.array([1.])
     )
     print(soln)
-    print(siedepunkt(310.92, soln.x, x_i, y_i, tc_i, pc_i, af_omega_i, max_it))
+    print(siedepunkt(310.92, soln.x.item(), x_i, y_i, tc_i, pc_i, af_omega_i, max_it))
 
-    x = np.linspace(0.0, 0.8, 30)
+    x = np.linspace(0.0, 0.8, 50)
     y = np.empty_like(x)
     p_v = np.empty_like(x)
     p_v0 = 1.0
@@ -533,10 +470,10 @@ def beispiel_svn_14_2():
         x_i = np.array([x[i], 1 - x[i]])
         soln = optimize.root(
             lambda p: siedepunkt(
-                310.92, p, x_i, y_i, tc_i, pc_i, af_omega_i, max_it
+                310.92, p.item(), x_i, y_i, tc_i, pc_i, af_omega_i, max_it
             )['opt_func'], p_v0
         )
-        p_v[i] = soln.x
+        p_v[i] = soln.x.item()
         output = siedepunkt(
             310.92, p_v[i], x_i, y_i, tc_i, pc_i, af_omega_i, max_it
         )
@@ -1094,7 +1031,6 @@ beispiel_svn_14_2()
 # beispiel_pat_ue_03_flash()
 # beispiel_isot_flash_seader_4_1()
 # beispiel_pat_ue_03_vollstaendig(0.2)
-
 # optimize.root(
 #    lambda rlv: 350.0 - beispiel_pat_ue_03_vollstaendig(rlv),
 #    0.4
