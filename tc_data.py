@@ -117,6 +117,37 @@ class App(QWidget):
             self.phases_vol
         ))
 
+        # init set for testing
+        self.phase_filter.setCurrentIndex(self.phase_filter.findText('G'))
+        self.cas_filter.setText('7727-37-9')
+        self.name_filter.setText('nitrogen')
+        self.formula_filter.setText('N2')
+        self.tableView1.selectRow(0)
+
+        self.phase_filter.setCurrentIndex(self.phase_filter.findText('G'))
+        self.cas_filter.setText('74-82-8')
+        self.name_filter.setText('methane')
+        self.formula_filter.setText('ch4')
+        self.tableView1.selectRow(0)
+
+        self.phase_filter.setCurrentIndex(self.phase_filter.findText('G'))
+        self.cas_filter.setText('74-84-0')
+        self.name_filter.setText('ethane')
+        self.formula_filter.setText('c2h6')
+        self.tableView1.selectRow(0)
+
+        self.phase_filter.setCurrentIndex(self.phase_filter.findText('G'))
+        self.cas_filter.setText('74-98-6')
+        self.name_filter.setText('propane')
+        self.formula_filter.setText('c3h8')
+        self.tableView1.selectRow(0)
+        self.tableView1.selectRow(-1)
+
+        self.phase_filter.setCurrentIndex(self.phase_filter.findText(''))
+        self.cas_filter.setText('')
+        self.name_filter.setText('')
+        self.formula_filter.setText('')
+
         # Show widget
         self.show()
 
