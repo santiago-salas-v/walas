@@ -3,7 +3,7 @@ import sys
 import re
 import string
 import locale
-from numpy import loadtxt, isnan, empty_like
+from numpy import loadtxt, isnan, empty_like, linspace, dtype, zeros
 from functools import partial
 import lxml.etree as et
 import csv
@@ -20,7 +20,7 @@ from PyQt5.QtCore import pyqtSignal as SIGNAL
 import matplotlib
 matplotlib.use('Qt5Agg')
 import matplotlib.pyplot as plt
-from matplotlib.backends.backend_qt5agg import FigureCanvas
+from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 
 
 locale.setlocale(locale.LC_ALL, '')
@@ -70,9 +70,9 @@ class App(QWidget):
 
         self.tableView1.setModel(self.model)
         self.tableWidget1.added_column_names = ['']
-        self.tableWidget1.setColumnCount(self.tableView1.model().columnCount())
+        self.tableWidget1.setColumnCount(self.tableView1.model().columnCount()+1)
         self.tableWidget1.setHorizontalHeaderLabels(
-            self.tableView1.model().column_names
+            ['z_i'] + self.tableView1.model().column_names
         )
         self.phase_filter.addItems(['', 'G', 'L', 'S', 'C'])
         self.tableWidget1.setEnabled(False)
@@ -117,6 +117,9 @@ class App(QWidget):
             self.phases_vol
         ))
         #self.tableView1.horizontalHeader().setClickable(False)
+
+        self.props_i = self.tableView1.model().df.iloc[[]]
+        self.props_i['z_i'] = zeros(0)
 
         # init set for testing
         self.phase_filter.setCurrentIndex(self.phase_filter.findText('G'))
@@ -173,15 +176,19 @@ class App(QWidget):
         already_in_table = False
         for item in self.tableWidget1.findItems(cas, Qt.MatchExactly):
             if phase == self.tableWidget1.item(
-                    item.row(), column_of_phase).text():
+                    item.row(), column_of_phase+1).text():
                 already_in_table = True
         if not already_in_table:
+            row_index = self.tableView1.model().headerData(index.row(), Qt.Vertical).value()
             column_names = self.tableView1.model().column_names
+            header_to_add = QTableWidgetItem(str(row_index))
             self.tableWidget1.setRowCount(self.tableWidget1.rowCount() + 1)
+            self.tableWidget1.setVerticalHeaderItem(
+                    self.tableWidget1.rowCount() - 1,
+                    header_to_add)
             for i in range(len(column_names)):
+                # columns in TableWidget shifted by one vs. Tableview due to first column z_i
                 data = self.tableView1.model().index(index.row(), i).data()
-                row_index = self.tableView1.model().headerData(index.row(), Qt.Vertical).value()
-                header_to_add = QTableWidgetItem(str(row_index))
                 if isinstance(data, str) or data is None:
                     item_to_add = QTableWidgetItem(data)
                 else:
@@ -189,11 +196,31 @@ class App(QWidget):
                 item_to_add.setFlags(
                     Qt.ItemIsSelectable | Qt.ItemIsEnabled | Qt.ItemIsEditable)
                 self.tableWidget1.setItem(
-                    self.tableWidget1.rowCount() - 1, i,
+                    self.tableWidget1.rowCount() - 1, i+1,
                     item_to_add)
-                self.tableWidget1.setVerticalHeaderItem(
-                    self.tableWidget1.rowCount() - 1,
-                    header_to_add)
+
+            # additional column with z_i
+            item_to_add = QTableWidgetItem(locale.str(0))
+            item_to_add.setFlags(
+                    Qt.ItemIsSelectable | Qt.ItemIsEnabled | Qt.ItemIsEditable)
+            self.tableWidget1.setItem(
+                    self.tableWidget1.rowCount() - 1, 0,
+                    item_to_add)
+
+            # save df with props
+            z_i_orig = self.props_i['z_i']
+            index_orig = self.props_i.index
+            new_df_index = int(self.tableWidget1.verticalHeaderItem(
+                self.tableWidget1.rowCount()-1).text())
+            self.props_i = self.tableView1.model().df.loc[
+                [int(self.tableWidget1.verticalHeaderItem(i).text())
+                 for i in range(self.tableWidget1.rowCount())],
+                 :
+            ]
+            self.props_i['z_i'] = zeros(len(self.props_i))
+            self.props_i.loc[index_orig, 'z_i'] = z_i_orig
+            self.props_i.loc[new_df_index, 'z_i'] = float(0)
+
         if len(indexes) > 0 or self.tableWidget1.rowCount() > 0:
             self.tableWidget1.setEnabled(True)
 
@@ -252,16 +279,11 @@ class App(QWidget):
         p = 101325
         phase_fraction = empty_like(t)
         columns = self.tableView1.model().column_names
-        props = DataFrame()
-        for j in range(self.tableView1.columnCount()):
-            props
-            for i in range(self.tableView1.rowCount()):
-                pass
+
 
 
         for i in range(len(t)):
             phase_fraction[i] = pvt(p, t, zi)['v_f']
-
 
 
 class PlotWindow(QWidget):
