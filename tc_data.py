@@ -107,6 +107,9 @@ class App(QWidget):
         self.tableView1.selectionModel().selectionChanged.connect(partial(
             self.add_selection_to_widget
         ))
+        self.tableWidget1.cellChanged.connect(partial(
+            self.update_props
+            ))
         self.delete_selected_button.clicked.connect(partial(
             self.delete_selected
         ))
@@ -179,9 +182,23 @@ class App(QWidget):
                     item.row(), column_of_phase+1).text():
                 already_in_table = True
         if not already_in_table:
-            row_index = self.tableView1.model().headerData(index.row(), Qt.Vertical).value()
+            row_index = int(self.tableView1.model().headerData(index.row(), Qt.Vertical).value())
             column_names = self.tableView1.model().column_names
             header_to_add = QTableWidgetItem(str(row_index))
+
+            # save df with new props
+            z_i_orig = self.props_i['z_i']
+            index_orig = self.props_i.index
+            self.props_i = self.tableView1.model().df.loc[
+                [int(self.tableWidget1.verticalHeaderItem(i).text())
+                 for i in range(self.tableWidget1.rowCount())]+[row_index],
+                 :
+            ]
+            self.props_i['z_i'] = zeros(len(self.props_i))
+            self.props_i.loc[index_orig, 'z_i'] = z_i_orig
+            self.props_i.loc[row_index, 'z_i'] = float(0)
+
+            # add item to widget
             self.tableWidget1.setRowCount(self.tableWidget1.rowCount() + 1)
             self.tableWidget1.setVerticalHeaderItem(
                     self.tableWidget1.rowCount() - 1,
@@ -207,22 +224,21 @@ class App(QWidget):
                     self.tableWidget1.rowCount() - 1, 0,
                     item_to_add)
 
-            # save df with props
-            z_i_orig = self.props_i['z_i']
-            index_orig = self.props_i.index
-            new_df_index = int(self.tableWidget1.verticalHeaderItem(
-                self.tableWidget1.rowCount()-1).text())
-            self.props_i = self.tableView1.model().df.loc[
-                [int(self.tableWidget1.verticalHeaderItem(i).text())
-                 for i in range(self.tableWidget1.rowCount())],
-                 :
-            ]
-            self.props_i['z_i'] = zeros(len(self.props_i))
-            self.props_i.loc[index_orig, 'z_i'] = z_i_orig
-            self.props_i.loc[new_df_index, 'z_i'] = float(0)
-
         if len(indexes) > 0 or self.tableWidget1.rowCount() > 0:
             self.tableWidget1.setEnabled(True)
+
+    def update_props(self, row, col):
+        if col == 0:
+            # change z_i
+            df_index = int(self.tableWidget1.verticalHeaderItem(row).text())
+            new_value = float(
+                self.tableWidget1.item(row, col).text()
+                )
+            #print(self.props_i.loc[df_index, 'z_i'].is_copy)
+            self.props_i.loc[df_index, 'z_i'] = new_value
+            print(self.props_i.loc[df_index, 'z_i'])
+        else:
+            pass
 
     def copy_selection(self):
         col_names = self.tableView1.model().column_names
@@ -278,9 +294,11 @@ class App(QWidget):
         t = linspace(60, 220, 30)
         p = 101325
         phase_fraction = empty_like(t)
-        columns = self.tableView1.model().column_names
-
-
+        # normalize z_i
+        sum_z_i = sum(self.props_i['z_i'])
+        if sum_z_i > 0:
+            self.props_i['z_i'] = self.props_i['z_i'] / sum_z_i
+        print(self.props_i['z_i'])
 
         for i in range(len(t)):
             phase_fraction[i] = pvt(p, t, zi)['v_f']
