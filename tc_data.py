@@ -3,7 +3,7 @@ import sys
 import re
 import string
 import locale
-from numpy import loadtxt, isnan
+from numpy import loadtxt, isnan, empty_like
 from functools import partial
 import lxml.etree as et
 import csv
@@ -116,6 +116,7 @@ class App(QWidget):
         self.phases_vol_button.clicked.connect(partial(
             self.phases_vol
         ))
+        #self.tableView1.horizontalHeader().setClickable(False)
 
         # init set for testing
         self.phase_filter.setCurrentIndex(self.phase_filter.findText('G'))
@@ -179,6 +180,8 @@ class App(QWidget):
             self.tableWidget1.setRowCount(self.tableWidget1.rowCount() + 1)
             for i in range(len(column_names)):
                 data = self.tableView1.model().index(index.row(), i).data()
+                row_index = self.tableView1.model().headerData(index.row(), Qt.Vertical).value()
+                header_to_add = QTableWidgetItem(str(row_index))
                 if isinstance(data, str) or data is None:
                     item_to_add = QTableWidgetItem(data)
                 else:
@@ -188,6 +191,9 @@ class App(QWidget):
                 self.tableWidget1.setItem(
                     self.tableWidget1.rowCount() - 1, i,
                     item_to_add)
+                self.tableWidget1.setVerticalHeaderItem(
+                    self.tableWidget1.rowCount() - 1,
+                    header_to_add)
         if len(indexes) > 0 or self.tableWidget1.rowCount() > 0:
             self.tableWidget1.setEnabled(True)
 
@@ -242,10 +248,19 @@ class App(QWidget):
 
     def phases_vol(self):
         self.plot_window.show()
-        t = 298.15
+        t = linspace(60, 220, 30)
         p = 101325
+        phase_fraction = empty_like(t)
+        columns = self.tableView1.model().column_names
+        props = DataFrame()
+        for j in range(self.tableView1.columnCount()):
+            props
+            for i in range(self.tableView1.rowCount()):
+                pass
 
 
+        for i in range(len(t)):
+            phase_fraction[i] = pvt(p, t, zi)['v_f']
 
 
 
@@ -468,6 +483,27 @@ class thTableModel(QAbstractTableModel):
             'ant_code'
             ]
 
+        self.column_dtypes = [
+            str, str, str,
+            str, str,
+            float, str, str,
+            float, float,
+            float, float, float,
+            float, float, float,
+            float, float, float,
+            float, float, float,
+            float,
+            float,
+            float, float,
+            float] + [
+            float]*7 + [float]*7 + [
+            str, str, str,
+            float, str, str,
+            float, float,
+            float, float, float,
+            str
+        ]
+
         self.column_units = [
             '', '', '',
             '', '',
@@ -491,6 +527,14 @@ class thTableModel(QAbstractTableModel):
             '°C', '°C', 
             ''
         ]
+
+        self.dtypes = []
+        for units in self.column_units:
+            if len(units) > 0:
+                # numeric value with units
+                self.dtypes += [float]
+            else:
+                self.dtypes += [str]
 
         self.apply_filter(
             cas_filter, name_filter, 
@@ -570,7 +614,7 @@ class thTableModel(QAbstractTableModel):
                 self.column_units[section])
             
         if orientation == Qt.Vertical:
-            return QVariant(section + 1)
+            return QVariant(str(self.filtered_data.index[section]))
 
     def rowCount(self, index=QModelIndex()):
         # return len(self.burcat_results) #+
