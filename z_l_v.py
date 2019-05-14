@@ -1,5 +1,7 @@
 from poly_3_4 import solve_cubic
-import numpy as np
+from numpy import array, append, zeros, abs, ones, empty_like, empty
+from numpy import sqrt, empty, outer, sum, log, exp, multiply, diag
+from numpy import linspace, dot, nan
 from scipy import optimize
 from matplotlib import pyplot as plt
 import sys
@@ -11,17 +13,220 @@ t_flash = 273.16 + 60  # K
 # Nach unten hin: CO, H2, CO2, H2O, CH3OH, N2, CH4
 
 # Kritische Parameter Tc, Pc, omega(azentrischer Faktor)
-tc = np.array([
+tc = array([
     132.86, 33.19, 304.13, 647.10, 513.38, 126.19
 ])  # K
 
-pc = np.array([
+pc = array([
     34.98, 13.15, 73.77, 220.64, 82.16, 33.96
 ])  # bar
 
-omega_af = np.array([
+omega_af = array([
     0.050, -0.219, 0.224, 0.344, 0.563, 0.037
 ])
+
+
+class State:
+    def __init__(self, t, p, z_i, mm_i, tc_i, pc_i, af_omega_i, eos_name='pr'):
+        self.eos = Eos(t, p, z_i, mm_i, tc_i, pc_i, af_omega_i, eos_name)
+        self.v_f = 1.0
+        self.z_i = zeros(0)
+        self.mm_i = zeros(0)
+        self.p = 1.01325 # bar
+        self.t = 273.15 # K
+
+    def set_t(self, t):
+        self.eos.t = t
+        self.solve()
+
+    def set_p(self, p):
+        self.eos.p = p
+        self.solve()
+
+    def get_z(self):
+        return self.z
+
+    def solve(self):
+        self.soln = self.eos.solve()
+        self.z =  self.soln['z']
+        return self.soln
+
+
+class Eos:
+    def __init__(self, t, p, z_i, mm_i, tc_i, pc_i, af_omega_i, eos_name):
+        self.eos = eos_name
+        if eos_name == 'pr':
+            epsilon = 1 - sqrt(2)
+            sigma = 1 + sqrt(2)
+            omega = 0.07780
+            psi = 0.45724
+        elif eos_name == 'srk':
+            epsilon = 0.
+            sigma = 1.
+            omega = 0.08664
+            psi = 0.42748
+        elif eos_name == 'srk_simple_alpha':
+            epsilon = 0.
+            sigma = 1.
+            omega = 0.08664
+            psi = 0.42748
+        self.epsilon = epsilon
+        self.sigma = sigma
+        self.omega = omega
+        self.psi = psi
+
+        self.z_i = z_i
+        self.tr_i = t / tc_i
+        self.pr_i = p / pc_i
+        self.tc_i = tc_i
+        self.pc_i = pc_i
+        self.af_omega_i = af_omega_i
+        self.t = t
+        self.p = p
+
+    def m(self, af_omega):
+        eos = self.eos
+        if eos == 'pr':
+            return \
+            0.37464 + 1.54226 * af_omega - 0.26992 * af_omega ** 2
+        elif eos == 'srk':
+            return \
+            0.480 + 1.574 * af_omega - 0.176 * af_omega ** 2
+        elif eos == 'srk_simple_alpha':
+            return 1.0
+
+    def alpha(self, tr, m):
+        eos = self.eos
+        if eos == 'pr':
+            return \
+                (1 + m * (1 - tr ** (1 / 2.))) ** 2
+        elif eos == 'srk':
+            return \
+                (1 + m * (1 - tr ** (1 / 2.))) ** 2
+        elif eos == 'srk_simple_alpha':
+            return \
+                (tr) ** (-1 / 2.)
+
+    def dalphadt(self, t, tc, alpha_i, m):
+        eos = self.eos
+        if eos == 'pr':
+            return - alpha_i ** (1/2.) * m / sqrt(t) / sqrt(tc)
+        elif eos == 'srk':
+            return - alpha_i ** (1/2.) * m / sqrt(t) / sqrt(tc)
+        if eos == 'srk_simple_alpha':
+            pass
+
+    def q(self, tr, pr, af_omega):
+        psi = self.psi
+        omega = self.omega
+        return psi * alpha(tr, af_omega) / (omega * tr)
+
+    def solve(self):
+        omega_i = self.af_omega_i
+        tc_i = self.tc_i
+        pc_i = self.pc_i
+        tr_i = self.tr_i
+        ptr_i = self.pr_i
+        t = self.t
+        p = self.p
+        z_i = self.z_i
+        n = len(z_i)
+
+        m_i = self.m(omega_i)
+        alpha_i = self.alpha(tr_i, m_i)
+        dalphadt_i = self.dalphadt(t, tc_i, alpha_i, m_i)
+
+        a_i = psi * alpha_i * r ** 2 * tc_i ** 2 / pc_i
+        da_idt = a_i / alpha_i * dalphadt_i
+        b_i = omega * r * tc_i / pc_i
+        beta_i = b_i * p / (r * t)
+        q_i = a_i / (b_i * r * t)
+        a_i_t = a_i.reshape([n, 1])
+        a_ij = sqrt(a_i_t.dot(a_i_t.T))
+
+        # Variablen, die von der Phasen-Zusammensetzung abhängig sind
+        b = sum(z_i * b_i)
+        a = z_i.dot(a_ij.dot(z_i))
+
+        beta = b * p / (r * t)
+        q = a / (b * r * t)
+        s_x_j_a_ij = a_ij.dot(z_i)
+        mat_1 = 1/2 * diag(a_i).dot(1/sqrt(a_i_t)).dot(
+            diag(da_idt).dot(1/sqrt(a_i_t)).T
+        )
+        da_ijdt = mat_1 + mat_1.T
+        da_dt = z_i.dot(da_ijdt.dot(z_i))
+
+        a_mp_i = -a + 2 * s_x_j_a_ij + 2 * z_i * a_i  # partielles molares a_i
+        b_mp_i = b_i  # partielles molares b_i
+        q_mp_i = q * (1 + a_mp_i / a - b_i / b)  # partielles molares q_i
+
+        a1 = 1.0
+        a2 = beta * (epsilon + sigma) - beta - 1
+        a3 = q * beta + epsilon * sigma * beta ** 2 \
+               - beta * (epsilon + sigma) * (1 + beta)
+        a4 = -(epsilon * sigma * beta ** 2 * (1 + beta) +
+                 q * beta ** 2)
+
+        soln = solve_cubic([a1, a2, a3, a4])
+        z_roots = array(soln['roots'])
+        disc = soln['disc']
+        
+        if disc <= 0:
+            # 2 phases Region
+            # 3 real roots. smallest ist liq. largest is gas.
+            z_l = z_roots[-1][0]
+            z_v = z_roots[0][0]
+            phasen = 'L,V'
+
+
+        elif disc > 0:
+            # 1 phase region
+            # one real root, 2 complex. First root is the real one.
+            z = z_roots[0][0]
+            v = z * r * t / p
+            dp_dt = r / (v - b) - da_dt * 1 / (
+                    (v + epsilon * b)*(v + sigma * b)
+            )
+            dp_dv = - r * t / (v - b) ** 2 + a * 1 / (
+                    (v + epsilon * b) * (v + sigma * b)
+            ) * (1 / (v + epsilon * b) + 1 / (v + sigma * b))
+            d2p_dvdt = - r/(v - b)**2 + da_dt * 1 / (
+                (v + epsilon * b) * (v + sigma * b)
+            ) * (1 / (v + epsilon * b) + 1 / (v + sigma * b))
+            d2p_dv2 = - 2 * r * t / (v - b)**3 - 2 * a * 1 / (
+                (v + epsilon * b) * (v + sigma * b)
+            ) * (1 / (v + epsilon * b)**2 + 1 / (
+                    (v + epsilon * b) * (v + sigma * b)
+            ) + 1 / (v + sigma * b)**2
+            )
+
+            # Phase parameter :
+            # Ref. Fluid Phase Equilibria 301 (2011) 225–233
+            pi_ph = v * (
+                    d2p_dvdt / dp_dt - d2p_dv2 / dp_dv
+            )
+
+            if pi_ph > 1:
+                # liquid or liquid-like vapor
+                v_f = 0.0
+                phasen = 'L'
+            elif pi_ph <= 1:
+                # vapor
+                v_f = 1.0
+                phasen = 'V'
+
+        result = dict()
+        for item in [
+            'v_f', 'phasen', 'z', 'a', 'b',
+            'phi', 'ln_phi', 'i_int'
+        ]:
+            result[item] = locals().get(item)
+
+        return result
+
+
+
 
 
 def use_pr_eos():
@@ -32,8 +237,8 @@ def use_pr_eos():
     global psi
     global alpha
 
-    epsilon = 1 - np.sqrt(2)
-    sigma = 1 + np.sqrt(2)
+    epsilon = 1 - sqrt(2)
+    sigma = 1 + sqrt(2)
     omega = 0.07780
     psi = 0.45724
 
@@ -118,21 +323,21 @@ def p_sat_func(psat, t, af_omega, tc, pc, full_output=False):
         1.0
     ).x.item()
 
-    i_i_l = +1 / (sigma - epsilon) * np.log(
+    i_i_l = +1 / (sigma - epsilon) * log(
         (z_l + sigma * beta_i) / (z_l + epsilon * beta_i)
     )
-    i_i_v = +1 / (sigma - epsilon) * np.log(
+    i_i_v = +1 / (sigma - epsilon) * log(
         (z_v + sigma * beta_i) / (z_v + epsilon * beta_i)
     )
     ln_phi_l = + z_l - 1 - \
-        np.log(z_l - beta_i) - q_i * i_i_l
+        log(z_l - beta_i) - q_i * i_i_l
     ln_phi_v = + z_v - 1 - \
-        np.log(z_v - beta_i) - q_i * i_i_v
+        log(z_v - beta_i) - q_i * i_i_v
     f1 = -ln_phi_v + ln_phi_l
     if full_output:
         opt_func = f1
-        phi_l = np.exp(ln_phi_l)
-        phi_v = np.exp(ln_phi_v)
+        phi_l = exp(ln_phi_l)
+        phi_v = exp(ln_phi_v)
         soln = dict()
         for item in ['z_l', 'z_v', 'phi_l', 'phi_v', 'opt_func']:
             soln[item] = locals().get(item)
@@ -155,12 +360,12 @@ def z_non_sat(t, p, x_i, tc_i, pc_i, af_omega_i):
     b_i = omega * r * tc_i / pc_i
     beta_i = b_i * p / (r * t)
     q_i = a_i / (b_i * r * t)
-    a_ij = np.sqrt(np.outer(a_i, a_i))
+    a_ij = sqrt(outer(a_i, a_i))
     b = sum(x_i * b_i)
-    a = np.sum(np.outer(x_i, x_i) * a_ij)
+    a = sum(outer(x_i, x_i) * a_ij)
     beta = b * p / (r * t)
     q = a / (b * r * t)
-    s_x_j_a_ij = a_ij.dot(x_i) - np.diag(np.diag(a_ij)).dot(x_i)
+    s_x_j_a_ij = a_ij.dot(x_i) - diag(diag(a_ij)).dot(x_i)
     a_mp_i = -a + 2 * s_x_j_a_ij + 2 * x_i * a_i  # partielles molares a_i
     b_mp_i = b_i  # partielles molares b_i
     q_mp_i = q * (1 + a_mp_i / a - b_i / b)  # partielles molares q_i
@@ -168,9 +373,9 @@ def z_non_sat(t, p, x_i, tc_i, pc_i, af_omega_i):
         lambda z_var: z_v_func(z_var, beta, q),
         1.0).x
     i_int = 1 / (sigma - epsilon) * \
-        np.log((z + sigma * beta) / (z + epsilon * beta))
-    ln_phi = b_i / b * (z - 1) - np.log(z - beta) - q_mp_i * i_int
-    phi = np.exp(ln_phi)
+        log((z + sigma * beta) / (z + epsilon * beta))
+    ln_phi = b_i / b * (z - 1) - log(z - beta) - q_mp_i * i_int
+    phi = exp(ln_phi)
 
     soln = dict()
     for item in ['a_i', 'b_i', 'b', 'a', 'q',
@@ -186,10 +391,10 @@ def phi_l(t, p, x_i, tc_i, pc_i, af_omega_i):
     b_i = omega * r * tc_i / pc_i
     beta_i = b_i * p / (r * t)
     q_i = a_i / (b_i * r * t)
-    a_ij = np.empty([len(x_i), len(x_i)])
+    a_ij = empty([len(x_i), len(x_i)])
     for i in range(len(x_i)):
         for j in range(len(x_i)):
-            a_ij[i, j] = np.sqrt(a_i[i] * a_i[j])
+            a_ij[i, j] = sqrt(a_i[i] * a_i[j])
 
     # Variablen, die von der Flüssigkeit-Zusammensetzung abhängig sind
     b_l = sum(x_i * b_i)
@@ -199,7 +404,7 @@ def phi_l(t, p, x_i, tc_i, pc_i, af_omega_i):
             a_l = a_l + x_i[i] * x_i[j] * a_ij[i, j]
     beta_l = b_l * p / (r * t)
     q_l = a_l / (b_l * r * t)
-    s_x_j_a_ij = np.empty([len(x_i)])
+    s_x_j_a_ij = empty([len(x_i)])
     for i in range(len(x_i)):
         s_x_j_a_ij[i] = 0
         for j in range(len(x_i)):
@@ -211,9 +416,14 @@ def phi_l(t, p, x_i, tc_i, pc_i, af_omega_i):
     a_mp_i_l = -a_l + 2 * s_x_j_a_ij + 2 * x_i * a_i  # partielles molares a_i
     b_mp_i_l = b_i  # partielles molares b_i
     q_mp_i_l = q_l * (1 + a_mp_i_l / a_l - b_i / b_l)  # partielles molares q_i
-    #z_soln = optimize.root(
-    #    lambda z_var: z_l_func(z_var, beta_l, q_l),
-    #    beta_l)
+    z_soln = optimize.root(
+        lambda z_var: z_l_func(z_var, beta_l, q_l),
+        beta_l)
+    z_l = z_soln.x
+    success = z_soln.success
+    #success = True
+    opt_func = z_soln.fun
+    nfev = z_soln.nfev
     a1_l = beta_l * (epsilon + sigma) - beta_l - 1
     a2_l = q_l * beta_l + epsilon * sigma * beta_l ** 2 \
         - beta_l * (epsilon + sigma) * (1 + beta_l)
@@ -225,15 +435,15 @@ def phi_l(t, p, x_i, tc_i, pc_i, af_omega_i):
     disc = soln['disc']
     if disc <= 0:
         # 3 real roots. smallest ist liq. largest is gas.
-        z_l = z_soln[-1][0]
+        z_l = array([z_soln[-1][0]])
     elif disc > 0:
         # one real root, 2 complex. First root is the real one.
-        z_l = z_soln[0][0]
+        z_l = array([z_soln[0][0]])
     i_int_l = 1 / (sigma - epsilon) * \
-        np.log((z_l + sigma * beta_l) / (z_l + epsilon * beta_l))
-    ln_phi_l = b_i / b_l * (z_l - 1) - np.log(z_l -
+        log((z_l + sigma * beta_l) / (z_l + epsilon * beta_l))
+    ln_phi_l = b_i / b_l * (z_l - 1) - log(z_l -
                                               beta_l) - q_mp_i_l * i_int_l
-    phi_l = np.exp(ln_phi_l)
+    phi_l = exp(ln_phi_l)
 
     soln = dict()
     for item in ['a_i', 'b_i',
@@ -251,10 +461,10 @@ def phi_v(t, p, y_i, tc_i, pc_i, af_omega_i):
     b_i = omega * r * tc_i / pc_i
     beta_i = b_i * p / (r * t)
     q_i = a_i / (b_i * r * t)
-    a_ij = np.empty([len(y_i), len(y_i)])
+    a_ij = empty([len(y_i), len(y_i)])
     for i in range(len(y_i)):
         for j in range(len(y_i)):
-            a_ij[i, j] = np.sqrt(a_i[i] * a_i[j])
+            a_ij[i, j] = sqrt(a_i[i] * a_i[j])
     # Variablen, die von der Gasphase-Zusammensetzung abhängig sind
     b_v = sum(y_i * b_i)
     a_v = 0
@@ -263,7 +473,7 @@ def phi_v(t, p, y_i, tc_i, pc_i, af_omega_i):
             a_v = a_v + y_i[i] * y_i[j] * a_ij[i, j]
     beta_v = b_v * p / (r * t)
     q_v = a_v / (b_v * r * t)
-    s_x_j_a_ij = np.empty([len(y_i)])
+    s_x_j_a_ij = empty([len(y_i)])
     for i in range(len(y_i)):
         s_x_j_a_ij[i] = 0
         for j in range(len(y_i)):
@@ -280,13 +490,28 @@ def phi_v(t, p, y_i, tc_i, pc_i, af_omega_i):
         1.0)
     z_v = z_soln.x
     success = z_soln.success
+    #success = True
     opt_func = z_soln.fun
     nfev = z_soln.nfev
+    a1 = beta_v * (epsilon + sigma) - beta_v - 1
+    a2 = q_v * beta_v + epsilon * sigma * beta_v ** 2 \
+        - beta_v * (epsilon + sigma) * (1 + beta_v)
+    a3 = -(epsilon * sigma * beta_v ** 2 * (1 + beta_v) +
+             q_v * beta_v ** 2)
+    soln = solve_cubic([1, a1, a2, a3])
+    z_soln = soln['roots']
+    disc = soln['disc']
+    if disc <= 0:
+        # 3 real roots. smallest ist liq. largest is gas.
+        z_v = array([z_soln[0][0]])
+    elif disc > 0:
+        # one real root, 2 complex. First root is the real one.
+        z_v = array([z_soln[0][0]])
     i_int_v = 1 / (sigma - epsilon) * \
-        np.log((z_v + sigma * beta_v) / (z_v + epsilon * beta_v))
-    ln_phi_v = b_i / b_v * (z_v - 1) - np.log(z_v -
+        log((z_v + sigma * beta_v) / (z_v + epsilon * beta_v))
+    ln_phi_v = b_i / b_v * (z_v - 1) - log(z_v -
                                               beta_v) - q_mp_i_v * i_int_v
-    phi_v = np.exp(ln_phi_v)
+    phi_v = exp(ln_phi_v)
 
     soln = dict()
     for item in ['a_i', 'b_i',
@@ -338,7 +563,7 @@ def siedepunkt(t, p, x_i, y_i, tc_i, pc_i, af_omega_i, max_it, tol=1e-14):
         k_i = soln_l['phi_l'] / soln_v['phi_v']
         sum_k_i_n = sum(k_i * x_i)
         y_i = k_i * x_i / sum_k_i_n
-        stop = np.abs((sum_k_i_n_min_1 - sum_k_i_n) / sum_k_i_n) <= tol
+        stop = abs((sum_k_i_n_min_1 - sum_k_i_n) / sum_k_i_n) <= tol
         # print('i='+str(i))
 
     opt_func = 1 - sum(k_i * x_i)
@@ -375,9 +600,9 @@ def isot_flash(t, p, x_i, y_i, z_i, tc_i, pc_i, af_omega_i):
 def isot_flash_solve(t, p, z_i, tc_i, pc_i, af_omega_i, max_it=20,
                      x_i=None, y_i=None):
     if not x_i:
-        x_i = np.ones(len(z_i)) / len(z_i)
+        x_i = ones(len(z_i)) / len(z_i)
     if not y_i:
-        y_i = np.ones(len(z_i)) / len(z_i)
+        y_i = ones(len(z_i)) / len(z_i)
     for i in range(max_it):
         soln = isot_flash(t, p, x_i, y_i, z_i, tc_i, pc_i, af_omega_i)
         y_i = soln['y_i']
@@ -395,8 +620,8 @@ def beispiel_wdi_atlas():
             p_sat(-256.6 + 273.15, -0.216, 33.19, 13.13).x.item() * 1000
         ) + ' mbar. (Literaturwert 250mbar)'
     )
-    t = 273.15 + np.linspace(-200, 500, 30)
-    res = np.empty_like(t)
+    t = 273.15 + linspace(-200, 500, 30)
+    res = empty_like(t)
     success = True
     i = 0
     res_0 = 1.
@@ -413,7 +638,7 @@ def beispiel_wdi_atlas():
             res[i] = root.x
             res_0 = res[i]
         else:
-            res[i:] = np.nan
+            res[i:] = nan
             success = False
         i += 1
 
@@ -422,20 +647,25 @@ def beispiel_wdi_atlas():
 
 def beispiel_svn_14_1():
     use_srk_eos_simple_alpha()
-    x_i = np.array([0.4, 0.6])
-    tc_i = np.array([126.2, 190.6])
-    pc_i = np.array([34., 45.99])
-    af_omega_i = np.array([0.038, 0.012])
+    x_i = array([0.4, 0.6])
+    tc_i = array([126.2, 190.6])
+    pc_i = array([34., 45.99])
+    af_omega_i = array([0.038, 0.012])
     print(z_non_sat(200, 30, x_i, tc_i, pc_i, af_omega_i))
+
+    mm_i = zeros(2)
+    state1 = State(200, 30, x_i, mm_i, tc_i, pc_i, af_omega_i, 'srk')
+    print(state1.solve())
+
 
 
 def beispiel_svn_14_2():
     use_srk_eos()
-    x_i = np.array([0.2, 0.8])
-    y_i = np.array([0.2, 0.8])  # Est
-    tc_i = np.array([190.6, 425.1])
-    pc_i = np.array([45.99, 37.96])
-    af_omega_i = np.array([0.012, 0.200])
+    x_i = array([0.2, 0.8])
+    y_i = array([0.2, 0.8])  # Est
+    tc_i = array([190.6, 425.1])
+    pc_i = array([45.99, 37.96])
+    af_omega_i = array([0.012, 0.200])
     max_it = 100
     print(siedepunkt(310.92, 30, x_i, y_i, tc_i, pc_i, af_omega_i, max_it))
     y_i = siedepunkt(
@@ -457,17 +687,17 @@ def beispiel_svn_14_2():
     soln = optimize.root(
         lambda p: siedepunkt(
             310.92, p.item(), x_i, y_i, tc_i, pc_i, af_omega_i, max_it
-        )['opt_func'], np.array([1.])
+        )['opt_func'], array([1.])
     )
     print(soln)
     print(siedepunkt(310.92, soln.x.item(), x_i, y_i, tc_i, pc_i, af_omega_i, max_it))
 
-    x = np.linspace(0.0, 0.8, 50)
-    y = np.empty_like(x)
-    p_v = np.empty_like(x)
+    x = linspace(0.0, 0.8, 50)
+    y = empty_like(x)
+    p_v = empty_like(x)
     p_v0 = 1.0
     for i in range(len(x)):
-        x_i = np.array([x[i], 1 - x[i]])
+        x_i = array([x[i], 1 - x[i]])
         soln = optimize.root(
             lambda p: siedepunkt(
                 310.92, p.item(), x_i, y_i, tc_i, pc_i, af_omega_i, max_it
@@ -486,7 +716,7 @@ def beispiel_svn_14_2():
 
 def beispiel_pat_ue_03_flash():
     use_pr_eos()
-    n = np.array([
+    n = array([
         205.66,
         14377.78,
         1489.88,
@@ -496,8 +726,8 @@ def beispiel_pat_ue_03_flash():
     ])
 
     z_i = n / sum(n)
-    x_i = 1 / len(n) * np.ones(len(n))
-    y_i = 1 / len(n) * np.ones(len(n))
+    x_i = 1 / len(n) * ones(len(n))
+    y_i = 1 / len(n) * ones(len(n))
     tc_i = tc
     pc_i = pc
     af_omega_i = omega_af
@@ -522,28 +752,28 @@ def beispiel_pat_ue_03_flash():
 
 def beispiel_isot_flash_seader_4_1():
     use_pr_eos()
-    n = np.array([
+    n = array([
         10,
         20,
         30,
         40
     ], dtype=float)
     z_i = n / sum(n)
-    x_i = 1 / len(n) * np.ones(len(n))
-    y_i = 1 / len(n) * np.ones(len(n))
-    tc_i = np.array([
+    x_i = 1 / len(n) * ones(len(n))
+    y_i = 1 / len(n) * ones(len(n))
+    tc_i = array([
         369.82,
         425.13,
         469.66,
         507.79
     ])
-    pc_i = np.array([
+    pc_i = array([
         42.48,
         37.96,
         33.69,
         30.42
     ])
-    af_omega_i = np.array([
+    af_omega_i = array([
         0.152,
         0.201,
         0.252,
@@ -589,28 +819,28 @@ def beispiel_pat_ue_03_vollstaendig(rlv, print_output=False):
     n0ch3oh = 0.  # kmol/h
     n0n2 = 500.  # kmol/h
 
-    ne = np.array([n0co, n0h2, n0co2, n0h2o, n0ch3oh, n0n2])
+    ne = array([n0co, n0h2, n0co2, n0h2o, n0ch3oh, n0n2])
 
-    nuij = np.array([[-1, -2, 0, 0, +1, 0],
+    nuij = array([[-1, -2, 0, 0, +1, 0],
                      [0, -3, -1, +1, +1, 0],
                      [-1, +1, +1, -1, 0, 0]]).T
 
-    h_298 = np.array(
+    h_298 = array(
         [-110.541, 0., -393.505, -241.826, -201.167, 0.]) * 1000  # J/mol
 
-    g_298 = np.array([-169.474, -38.962, -457.240, -
+    g_298 = array([-169.474, -38.962, -457.240, -
                       298.164, -272.667, -57.128]) * 1000  # J/mol
 
     # Kritische Parameter Tc, Pc, omega(azentrischer Faktor)
-    tc = np.array([
+    tc = array([
         132.86, 33.19, 304.13, 647.10, 513.38, 126.19
     ])  # K
 
-    pc = np.array([
+    pc = array([
         34.98, 13.15, 73.77, 220.64, 82.16, 33.96
     ])  # bar
 
-    omega_af = np.array(
+    omega_af = array(
         [0.050, -0.219, 0.224, 0.344, 0.563, 0.037]
     )
 
@@ -619,7 +849,7 @@ def beispiel_pat_ue_03_vollstaendig(rlv, print_output=False):
     # Koeffizienten für Cp(T)/R = A + B*T + C*T^2 + D*T^-2, T[=]K
     # Nach rechts hin: A, B, C, D
     # Nach unten hin: CO, H2, CO2, H2O, CH3OH, N2
-    cp_coefs = np.array([z for z in [
+    cp_coefs = array([z for z in [
         [
             y.replace(',', '.') for y in x.split('\t')
         ] for x in """
@@ -653,7 +883,7 @@ def beispiel_pat_ue_03_vollstaendig(rlv, print_output=False):
     def g(t, h_t):
         return (
             h_t - t / t0_ref * (h_298 - g_298) -
-            r * cp_coefs[:, 0] * t * np.log(t / t0_ref) -
+            r * cp_coefs[:, 0] * t * log(t / t0_ref) -
             r * cp_coefs[:, 1] * t ** 2 * (1 - t0_ref / t) -
             r * cp_coefs[:, 2] / 2. * t ** 3 * (1 - (t0_ref / t) ** 2) +
             r * cp_coefs[:, 3] / 2. * 1 / t * (1 - (t / t0_ref) ** 2)
@@ -661,7 +891,7 @@ def beispiel_pat_ue_03_vollstaendig(rlv, print_output=False):
 
     def k(t, g_t):
         delta_g_t = nuij.T.dot(g_t)
-        return np.exp(-delta_g_t / (r * t))
+        return exp(-delta_g_t / (r * t))
 
     delta_gr_298 = nuij.T.dot(g_298)
 
@@ -694,16 +924,16 @@ def beispiel_pat_ue_03_vollstaendig(rlv, print_output=False):
             t2 = x_vec[7]
 
         # Stoffströme am Ausgang des Reaktors
-        n2 = np.array([n2co, n2h2, n2co2, n2h2o, n2ch3oh, n2n2])
+        n2 = array([n2co, n2h2, n2co2, n2h2o, n2ch3oh, n2n2])
         n2_t = sum(n2)
         # Stoffströme am Austritt des Systems (Gas)
-        # n = np.array([nco, nh2, nco2, nh2o, nch3oh, nn2])
+        # n = array([nco, nh2, nco2, nh2o, nch3oh, nn2])
         # Stoffströme am Austritt des Systems (Flüssigkeit)
         # nl = n0 - n
         # Stoffströme im Rücklaufstrom
         # nr = rlv * n
         # Reaktionslaufzahlen
-        xi = np.array([xi1, xi2, xi3])
+        xi = array([xi1, xi2, xi3])
 
         h_0 = h(t_feed)
         cp_0 = cp(t_feed)
@@ -714,8 +944,8 @@ def beispiel_pat_ue_03_vollstaendig(rlv, print_output=False):
 
         # phi_l, phi_v, k_i. Lösung des isothermischen Verdampfers
         z_i = n2 / sum(n2)
-        x_i = 1 / len(n2) * np.ones(len(n2))
-        y_i = 1 / len(n2) * np.ones(len(n2))
+        x_i = 1 / len(n2) * ones(len(n2))
+        y_i = 1 / len(n2) * ones(len(n2))
         for i in range(10):
             soln = isot_flash(
                 t_flash, p, x_i, y_i, z_i, tc, pc, omega_af
@@ -753,9 +983,9 @@ def beispiel_pat_ue_03_vollstaendig(rlv, print_output=False):
             n2ch3oh * n2h2o * (p / 1.) ** -2 * (n2_t) ** -(-2)
         f9 = -k_t2[2] * (n2co * n2h2o) + \
             n2co2 * n2h2 * (p / 1.) ** 0 * (n2_t) ** -0
-        f10 = np.sum(
-            np.multiply(ne + rlv * nv, (h_0 - h_298)) -
-            np.multiply(n2, (h_t2 - h_298))) + np.dot(xi, -delta_h_t2)
+        f10 = sum(
+            multiply(ne + rlv * nv, (h_0 - h_298)) -
+            multiply(n2, (h_t2 - h_298))) + dot(xi, -delta_h_t2)
 
         res = [f1, f2, f3, f4, f5, f6, f7, f10]
 
@@ -773,22 +1003,22 @@ def beispiel_pat_ue_03_vollstaendig(rlv, print_output=False):
     t0 = 493.15  # K
     t_feed = 493.15  # K
 
-    xi0 = np.zeros([1, 1])
+    xi0 = zeros([1, 1])
 
-    x0 = np.append(n0, xi0)
-    x0 = np.append(x0, [t0])
+    x0 = append(n0, xi0)
+    x0 = append(x0, [t0])
 
     sol = optimize.root(fun, x0)
     print(sol)
 
     # Mit der Lösung des vereinfachten Falls als Anfangswerte erreicht
     # man Konvergenz des vollständigen Problems.
-    xi0 = np.array([sol.x[-2], 0., 0.])
+    xi0 = array([sol.x[-2], 0., 0.])
     t0 = sol.x[-1]
     n0 = sol.x[:6]
 
-    x0 = np.append(n0, xi0)
-    x0 = np.append(x0, [t0])
+    x0 = append(n0, xi0)
+    x0 = append(x0, [t0])
 
     sol = optimize.root(fun, x0)
 
@@ -812,8 +1042,8 @@ def beispiel_pat_ue_03_vollstaendig(rlv, print_output=False):
 
     # phi_l, phi_v, k_i. Lösung des isothermischen Verdampfers
     z_i = n2 / sum(n2)
-    x_i = 1 / len(n2) * np.ones(len(n2))
-    y_i = 1 / len(n2) * np.ones(len(n2))
+    x_i = 1 / len(n2) * ones(len(n2))
+    y_i = 1 / len(n2) * ones(len(n2))
     for i in range(10):
         soln = isot_flash(
             t_flash, p, x_i, y_i, z_i, tc, pc, omega_af
@@ -830,24 +1060,24 @@ def beispiel_pat_ue_03_vollstaendig(rlv, print_output=False):
 
     tmischung = optimize.root(
         lambda t: sum(
-            np.multiply(rlv * nv, (h(t_flash) - h_298)) +
-            np.multiply(ne, (h_0 - h_298)) -
-            np.multiply(ne + rlv * nv, (h(t) - h_298))
+            multiply(rlv * nv, (h(t_flash) - h_298)) +
+            multiply(ne, (h_0 - h_298)) -
+            multiply(ne + rlv * nv, (h(t) - h_298))
         ), (493.15 + t_flash) / 2
     ).x  # K
 
-    q_f_heiz = np.sum(
-        np.multiply(ne + rlv * nv, (h_0 - h_298)) -
-        np.multiply(ne + rlv * nv, (h(tmischung) - h_298)))  # kJ/h
+    q_f_heiz = sum(
+        multiply(ne + rlv * nv, (h_0 - h_298)) -
+        multiply(ne + rlv * nv, (h(tmischung) - h_298)))  # kJ/h
 
-    q_a_reak = np.sum(
-        np.multiply(ne + rlv * nv, (h_0 - h_298)) -
-        np.multiply(n2, (h(t2) - h_298))) + \
-        np.dot(xi, -delta_h_t2)  # kJ/h
+    q_a_reak = sum(
+        multiply(ne + rlv * nv, (h_0 - h_298)) -
+        multiply(n2, (h(t2) - h_298))) + \
+        dot(xi, -delta_h_t2)  # kJ/h
 
-    q_g_kueh = np.sum(
-        np.multiply(n2, (h(t_flash) - h_298)) -
-        np.multiply(n2, (h_t2 - h_298)))  # kJ/h
+    q_g_kueh = sum(
+        multiply(n2, (h(t_flash) - h_298)) -
+        multiply(n2, (h_t2 - h_298)))  # kJ/h
 
     print('========================================')
     print('MISCHER')
@@ -859,7 +1089,7 @@ def beispiel_pat_ue_03_vollstaendig(rlv, print_output=False):
     print('T: ' + '{:g}'.format(t_feed) + ' K')
     print('p: ' + '{:g}'.format(p) + ' bar')
     print('H: ' + '{:g}'.format(
-        sum(np.multiply(ne, h(t_feed)))) + ' kJ/h')
+        sum(multiply(ne, h(t_feed)))) + ' kJ/h')
     print('\n')
     print('Rücklaufstrom bei Rücklaufverhältnis ' +
           str(rlv) + ' :')
@@ -869,7 +1099,7 @@ def beispiel_pat_ue_03_vollstaendig(rlv, print_output=False):
     print('T: ' + '{:g}'.format(t_flash) + ' K')
     print('p: ' + '{:g}'.format(p) + ' bar')
     print('H: ' + '{:g}'.format(
-        sum(np.multiply(nr, h_t_flash))) + ' kJ/h')
+        sum(multiply(nr, h_t_flash))) + ' kJ/h')
     print('\n')
     print('Erzeugnis des Mischers:')
     for i in range(len(namen)):
@@ -878,7 +1108,7 @@ def beispiel_pat_ue_03_vollstaendig(rlv, print_output=False):
     print('T: ' + '{:g}'.format(tmischung.item()) + ' K')
     print('p: ' + '{:g}'.format(p) + ' bar')
     print('H: ' + '{:g}'.format(
-        sum(np.multiply(ne + rlv * nv, h(tmischung)))) + ' kJ/h')
+        sum(multiply(ne + rlv * nv, h(tmischung)))) + ' kJ/h')
     print('\n\n')
 
     print('========================================')
@@ -898,7 +1128,7 @@ def beispiel_pat_ue_03_vollstaendig(rlv, print_output=False):
     print('T: ' + '{:g}'.format(t_feed) + ' K')
     print('p: ' + '{:g}'.format(p) + ' bar')
     print('H: ' + '{:g}'.format(
-        sum(np.multiply(ne + rlv * nv, h_493))) + ' kJ/h')
+        sum(multiply(ne + rlv * nv, h_493))) + ' kJ/h')
     print('\n')
 
     print('Reaktionslaufzahlen des adiabatisch betriebenen Reaktors:')
@@ -914,7 +1144,7 @@ def beispiel_pat_ue_03_vollstaendig(rlv, print_output=False):
     print('T: ' + '{:g}'.format(t2) + ' K')
     print('p: ' + '{:g}'.format(p) + ' bar')
     print('H: ' + '{:g}'.format(
-        sum(np.multiply(n2, h_t2))) + ' kJ/h')
+        sum(multiply(n2, h_t2))) + ' kJ/h')
     print('\n\n')
 
     print('========================================')
@@ -937,7 +1167,7 @@ def beispiel_pat_ue_03_vollstaendig(rlv, print_output=False):
     print('T: ' + '{:g}'.format(t2) + ' K')
     print('p: ' + '{:g}'.format(p) + ' bar')
     print('H: ' + '{:g}'.format(
-        sum(np.multiply(n2, h_t2))) + ' kJ/h')
+        sum(multiply(n2, h_t2))) + ' kJ/h')
     print('\n\n')
 
     print('Dampf/Flüssigkeit Verhältnis am Flash:')
@@ -954,7 +1184,7 @@ def beispiel_pat_ue_03_vollstaendig(rlv, print_output=False):
     print('T: ' + '{:g}'.format(t_flash) + ' K')
     print('p: ' + '{:g}'.format(p) + ' bar')
     print('H: ' + '{:g}'.format(
-        sum(np.multiply(nl, h_t_flash))) + ' kJ/h')
+        sum(multiply(nl, h_t_flash))) + ' kJ/h')
     print('\n\n')
 
     print('Dampf aus Verdampfer:')
@@ -967,7 +1197,7 @@ def beispiel_pat_ue_03_vollstaendig(rlv, print_output=False):
     print('T: ' + '{:g}'.format(t_flash) + ' K')
     print('p: ' + '{:g}'.format(p) + ' bar')
     print('H: ' + '{:g}'.format(
-        sum(np.multiply(nv, h_t_flash))) + ' kJ/h')
+        sum(multiply(nv, h_t_flash))) + ' kJ/h')
     print('\n\n')
 
     print('Dampf-Ablauf:')
@@ -980,7 +1210,7 @@ def beispiel_pat_ue_03_vollstaendig(rlv, print_output=False):
     print('T: ' + '{:g}'.format(t_flash) + ' K')
     print('p: ' + '{:g}'.format(p) + ' bar')
     print('H: ' + '{:g}'.format(
-        sum(np.multiply(npr, h_t_flash))) + ' kJ/h')
+        sum(multiply(npr, h_t_flash))) + ' kJ/h')
     print('\n\n')
 
     print('Rücklaufstrom bei Rücklaufverhältnis ' +
@@ -991,7 +1221,7 @@ def beispiel_pat_ue_03_vollstaendig(rlv, print_output=False):
     print('T: ' + '{:g}'.format(t_flash) + ' K')
     print('p: ' + '{:g}'.format(p) + ' bar')
     print('H: ' + '{:g}'.format(
-        sum(np.multiply(nr, h_t_flash))) + ' kJ/h')
+        sum(multiply(nr, h_t_flash))) + ' kJ/h')
     print('\n\n')
 
     print('Umsatz (CO): ' + '{:g}'.format(
@@ -1026,8 +1256,8 @@ def beispiel_pat_ue_03_vollstaendig(rlv, print_output=False):
 
 
 # beispiel_wdi_atlas()
-# beispiel_svn_14_1()
-beispiel_svn_14_2()
+beispiel_svn_14_1()
+# beispiel_svn_14_2()
 # beispiel_pat_ue_03_flash()
 # beispiel_isot_flash_seader_4_1()
 # beispiel_pat_ue_03_vollstaendig(0.2)

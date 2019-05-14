@@ -234,9 +234,7 @@ class App(QWidget):
             new_value = float(
                 self.tableWidget1.item(row, col).text()
                 )
-            #print(self.props_i.loc[df_index, 'z_i'].is_copy)
             self.props_i.loc[df_index, 'z_i'] = new_value
-            print(self.props_i.loc[df_index, 'z_i'])
         else:
             pass
 
@@ -297,12 +295,16 @@ class App(QWidget):
         # normalize z_i
         sum_z_i = sum(self.props_i['z_i'])
         if sum_z_i > 0:
-            self.props_i['z_i'] = self.props_i['z_i'] / sum_z_i
-        print(self.props_i['z_i'])
+            self.props_i.loc[:, 'z_i'] = self.props_i['z_i'] / sum_z_i
+        z_i = self.props_i['z_i'].tolist()
+        mm_i = (self.props_i['poling_molwt']/1000).tolist() # kg/mol
+        tc_i = self.props_i['poling_tc'].tolist() # K
+        pc_i = (self.props_i['poling_pc']*10**5).tolist() # Pa
+        omega_i = self.props_i['poling_omega'].tolist()
+        vc_i = (self.props_i['poling_Vc']*10**-6).tolist() # m^3/mol
 
         for i in range(len(t)):
-            phase_fraction[i] = pvt(p, t, zi)['v_f']
-
+            phase_fraction[i] = pvt(p, t, z_i, pc_i, tc_i, omega_i, method='RKS')['v_f']
 
 class PlotWindow(QWidget):
     def __init__(self, parent=None):
