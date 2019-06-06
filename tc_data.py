@@ -18,7 +18,7 @@ from PyQt5.QtCore import QAbstractTableModel, QModelIndex, Qt, QVariant, QEvent
 from PyQt5.QtGui import QKeySequence, QGuiApplication, QFont, QIcon
 from PyQt5.QtCore import pyqtSignal as SIGNAL
 import matplotlib
-matplotlib.use('Qt5Agg')
+#matplotlib.use('Qt5Agg')
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 
@@ -29,7 +29,9 @@ antoine_csv = './data/The-Yaws-Handbook-of-Vapor-Pressure-Second-Edition-Antoine
 poling_basic_i_csv = './data/basic_constants_i_properties_of_gases_and_liquids.csv'
 poling_basic_ii_csv = './data/basic_constants_ii_properties_of_gases_and_liquids.csv'
 poling_cp_l_ig_poly_csv = './data/ig_l_heat_capacities_properties_of_gases_and_liquids.csv'
+poling_pv_csv = './data/vapor_pressure_correlations_parameters_clean.csv'
 template = "./data/xsl_stylesheet_burcat.xsl"
+linesep_b = os.linesep.encode('utf-8')
 
 
 class App(QWidget):
@@ -64,7 +66,7 @@ class App(QWidget):
         self.delete_selected_button = QPushButton()
         self.copy_selected_button = QPushButton()
         self.phases_vol_button = QPushButton()
-        self.plot_window = PlotWindow()
+        #self.plot_window = PlotWindow()
         self.cp_button = QPushButton()
         self.psat_button = QPushButton()
 
@@ -191,8 +193,8 @@ class App(QWidget):
             index_orig = self.props_i.index
             self.props_i = self.tableView1.model().df.loc[
                 [int(self.tableWidget1.verticalHeaderItem(i).text())
-                 for i in range(self.tableWidget1.rowCount())]+[row_index],
-                 :
+                 for i in range(self.tableWidget1.rowCount())]+[
+                    row_index], :
             ]
             self.props_i['z_i'] = zeros(len(self.props_i))
             self.props_i.loc[index_orig, 'z_i'] = z_i_orig
@@ -240,17 +242,17 @@ class App(QWidget):
 
     def copy_selection(self):
         col_names = self.tableView1.model().column_names
-        col_units = self.tableView1.model().column_units
+        col_units = [''] + self.tableView1.model().column_units
         selection = self.tableWidget1.selectedIndexes()
         if selection:
             rows = sorted(index.row() for index in selection)
             columns = range(len(col_names))
             rowcount = rows[-1] - rows[0] + 1
-            colcount = columns[-1] - columns[0] + 1
+            colcount = columns[-1] - columns[0] + 1 + 1
             table = [[''] * colcount for _ in range(rowcount + 1)]
             table[0] = []
-            for i in range(len(col_names)):
-                text_to_add = col_names[i]
+            for i in range(len(col_units)):
+                text_to_add = self.tableWidget1.horizontalHeaderItem(i).text()
                 if len(col_units[i]) > 0:
                     text_to_add += ' [' + col_units[i] + '] '
                 table[0] += [text_to_add]
@@ -279,10 +281,11 @@ class App(QWidget):
 
     def delete_selected(self):
         if len(self.tableWidget1.selectedIndexes()) > 0:
-            current_row = self.tableWidget1.selectedIndexes()[0].row()
             while len(self.tableWidget1.selectedIndexes()) > 0:
                 current_row = self.tableWidget1.selectedIndexes()[0].row()
+                row_index = int(self.tableWidget1.verticalHeaderItem(current_row).text())
                 self.tableWidget1.removeRow(current_row)
+                self.props_i = self.props_i.drop([row_index])
             self.tableWidget1.selectRow(current_row)
             if self.tableWidget1.rowCount() == 0:
                 self.tableWidget1.setEnabled(False)
@@ -301,7 +304,7 @@ class App(QWidget):
         tc_i = self.props_i['poling_tc'].tolist() # K
         pc_i = (self.props_i['poling_pc']*10**5).tolist() # Pa
         omega_i = self.props_i['poling_omega'].tolist()
-        vc_i = (self.props_i['poling_Vc']*10**-6).tolist() # m^3/mol
+        vc_i = (self.props_i['poling_vc']*10**-6).tolist() # m^3/mol
 
         for i in range(len(t)):
             phase_fraction[i] = pvt(p, t, z_i, pc_i, tc_i, omega_i, method='RKS')['v_f']
@@ -338,15 +341,21 @@ def helper_func1(x):
 def helper_func2(x):
     # helper function 2 for csv reading.
     # Return None when empty string
-    if len(x) == 0:
-        return 'nan'
+    if len(x) == 0 or x == linesep_b:
+        return b'nan'
     return x.replace(b' ', b'')
 
 
 def helper_func3(x):
-    # helper function 2 for csv reading.
+    # helper function 3 for csv reading.
     # replace - for . in cas numbers (Antoine coeff)
     return x.replace(b'.', b'-').decode('utf-8')
+
+
+def helper_func4(x):
+    # helper function 4 for csv reading.
+    # replace whitespace ' ' for '' in float numbers
+    return x.replace(b' ', b'')
 
 
 class thTableModel(QAbstractTableModel):
@@ -431,7 +440,7 @@ class thTableModel(QAbstractTableModel):
                     'poling_no', 'poling_formula', 'poling_name',
                     'cas_no', 'poling_molwt', 'poling_tfp',
                     'poling_tb', 'poling_tc', 'poling_pc',
-                    'poling_Vc', 'poling_Zc', 'poling_omega'],
+                    'poling_vc', 'poling_zc', 'poling_omega'],
                 'formats': [
                     int, object, object,
                     object, float, float,
@@ -489,10 +498,110 @@ class thTableModel(QAbstractTableModel):
             }
         ))
 
+        conv = dict([[i, lambda x: helper_func4(helper_func2(x)).decode('utf-8')]
+                     for i in [0, 1, 2, 4, 5,
+                               ]+[8, 9, 10, 11, 12, 13, 14, 15, 16]])
+        conv[3] = lambda x: helper_func3(x)
+        conv[6] = lambda x: helper_func4(helper_func2(x)).decode('utf-8')
+        conv[7] = lambda x: helper_func4(helper_func2(x)).decode('utf-8')
+
+        poling_pv_df = DataFrame(loadtxt(
+            open(poling_pv_csv, 'rb'),
+            delimiter='|',
+            skiprows=3,
+            dtype={
+                'names': [
+                    'poling_no',
+                    'poling_formula',
+                    'poling_name',
+                    'cas_no',
+                    'poling_pv_eq',
+                    'A/A/Tc',
+                    'B/B/a',
+                    'C/C/b',
+                    'Tc/c',
+                    'to/d',
+                    'n/Pc',
+                    'E',
+                    'F',
+                    'poling_pvpmin',
+                    'poling_pv_tmin',
+                    'poling_pvpmax',
+                    'poling_pv_tmax'],
+                'formats': [
+                               int, object, object, object, int] + [float] * 12},
+            converters=conv
+        ))
+
+        poling_pv_df_eq_3 = poling_pv_df[poling_pv_df['poling_pv_eq'] == 3][
+            [x for x in poling_pv_df.keys() if x not in [
+                'E', 'F', 'poling_name', 'poling_formula']]
+        ].rename(columns={
+            'A/A/Tc': 'poling_tc', 'B/B/a': 'wagn_a', 'C/C/b': 'wagn_b',
+            'Tc/c': 'wagn_c', 'to/d': 'wagn_d', 'n/Pc': 'poling_pc'})
+        poling_pv_df_eq_2 = poling_pv_df[poling_pv_df['poling_pv_eq'] == 2][
+            [x for x in poling_pv_df.keys() if x not in [
+                'A/A/Tc', 'B/B/a', 'C/C/b', 'poling_name', 'poling_formula']]
+        ].rename(columns={
+            'A/A/Tc': 'p_ant_a', 'B/B/a': 'p_ant_b',
+            'C/C/b': 'p_ant_c', 'Tc/c': 'poling_tc', 'to/d': 'eant_to',
+            'n/Pc': 'eant_n', 'E': 'eant_e', 'F': 'eant_f'})
+        poling_pv_df_eq_1 = poling_pv_df[poling_pv_df['poling_pv_eq'] == 1][
+            [x for x in poling_pv_df.keys() if x not in [
+                'E', 'F', 'Tc/c', 'to/d', 'n/Pc', 'poling_name', 'poling_formula']]
+        ].rename(columns={
+            'A/A/Tc': 'p_ant_a', 'B/B/a': 'p_ant_b', 'C/C/b': 'p_ant_c'})
+
+        poling_pv_df = merge(merge(
+            poling_pv_df_eq_1, poling_pv_df_eq_2,
+            how='outer', on=['poling_no', 'cas_no'], suffixes=['_1', '_2']),
+              poling_pv_df_eq_3, how='outer', on=['poling_no', 'cas_no'],
+            suffixes=['', '_3'])
+
+        poling_pv_df.update(
+            poling_pv_df.rename(
+                columns={'poling_tc': 'poling_tc_4',
+                         'poling_tc_3': 'poling_tc',
+                         'poling_pc': 'poling_pc_4',
+                         'poling_pc_3': 'poling_pc'}))
+        poling_pv_df.update(
+            poling_pv_df.rename(columns={
+                'poling_tc': 'poling_tc_4',
+                'poling_tc_3': 'poling_tc'}))
+
         poling_df = merge(merge(    
             poling_basic_i_df, poling_basic_ii_df,
-            how='outer', on='cas_no'), 
+            how='outer', on=['cas_no', 'poling_no']),
             poling_cp_ig_l_df, how='outer', on='cas_no')
+
+        del poling_df['poling_no_y']
+        poling_df = poling_df.rename(columns={'poling_no_x': 'poling_no'})
+        poling_df = merge(poling_df, poling_pv_df, on=['cas_no', 'poling_no'], how='outer')
+
+        poling_df = poling_df.rename(
+            columns={'poling_pc_x': 'poling_pc', 'poling_tc_x': 'poling_tc',
+                     'poling_pv_tmin_1': 'p_ant_tmin',
+                     'poling_pv_tmax_1': 'p_ant_tmax',
+                     'poling_pvpmin_1': 'p_ant_pvpmin',
+                     'poling_pvpmax_1': 'p_ant_pvpmax',
+                     'poling_pv_tmin_2': 'eant_tmin',
+                     'poling_pv_tmax_2': 'eant_tmax',
+                     'poling_pvpmin_2': 'eant_pvpmin',
+                     'poling_pvpmax_2': 'eant_pvpmax',
+                     'poling_pv_tmin': 'wagn_tmin',
+                     'poling_pv_tmax': 'wagn_tmax',
+                     'poling_pvpmin': 'wagn_pvpmin',
+                     'poling_pvpmax': 'wagn_pvpmax'
+                     })
+        poling_df.update(poling_df.rename(
+            columns={'poling_pc': 'poling_pc_x', 'poling_pc_y': 'poling_pc'}))
+
+        del poling_df['poling_tc_y']
+        del poling_df['poling_pc_y']
+        del poling_df['poling_tc_3']
+        del poling_df['poling_pv_eq_1']
+        del poling_df['poling_pv_eq_2']
+        del poling_df['poling_pv_eq']
 
         poling_burcat_df = merge(burcat_df, poling_df, on='cas_no', how='outer')
         self.df = merge(poling_burcat_df, ant_df, on='cas_no', how='outer')
@@ -508,10 +617,21 @@ class thTableModel(QAbstractTableModel):
             'poling_no', 'poling_formula', 'poling_name',
             'poling_molwt', 'poling_tfp',
             'poling_tb', 'poling_tc', 'poling_pc',
-            'poling_Vc', 'poling_Zc', 'poling_omega',
+            'poling_vc', 'poling_zc', 'poling_omega',
             'poling_delhf0', 'poling_delgf0', 'poling_delhb',
             'poling_delhm', 'poling_v_liq', 'poling_t_liq',
             'poling_dipole',
+            'p_ant_a', 'p_ant_b', 'p_ant_c',
+            'p_ant_tmin', 'p_ant_tmax',
+            'p_ant_pvpmin', 'p_ant_pvpmax',
+            'eant_to', 'eant_n',
+            'eant_e', 'eant_f',
+            'eant_tmin', 'eant_tmax',
+            'eant_pvpmin', 'eant_pvpmax',
+            'wagn_a', 'wagn_b',
+            'wagn_c', 'wagn_d',
+            'wagn_tmin', 'wagn_tmax',
+            'wagn_pvpmin', 'wagn_pvpmax',
             'range_tmin_to_1000',
             'range_1000_to_tmax', 'molecular_weight',
             'hf298_div_r'] + [
@@ -526,37 +646,55 @@ class thTableModel(QAbstractTableModel):
             ]
 
         self.column_dtypes = [
-            str, str, str,
-            str, str,
-            float, str, str,
-            float, float,
-            float, float, float,
-            float, float, float,
-            float, float, float,
-            float, float, float,
-            float,
-            float,
-            float, float,
-            float] + [
-            float]*7 + [float]*7 + [
-            str, str, str,
-            float, str, str,
-            float, float,
-            float, float, float,
-            str
-        ]
+             str, str, str,
+             str, str,
+             float, str, str,
+             float, float,
+             float, float, float,
+             float, float, float,
+             float, float, float,
+             float, float, float,
+             float,
+             float, float, float,
+             float, float,
+             float, float,
+             float, float,
+             float, float,
+             float, float,
+             float, float,
+             float, float,
+             float, float,
+             float, float,
+             float, float,
+             float,
+             float, float,
+             float] + [
+             float]*7 + [float]*7 + [
+             str, str, str,
+             float, str, str,
+             float, float,
+             float, float, float,
+             str
+         ]
 
         self.column_units = [
             '', '', '',
+
             '', '',
             '', '', '',
-            'g/mol', 'K', 
-            'K', 'K', 'bar', 
+            'g/mol', 'K',
+            'K', 'K', 'bar',
             'cm3/mol', '', '',
             'kJ/mol', 'kJ/mol', 'kJ/mol',
             'kJ/mol', 'cm3/mol', 'K',
-            'Debye', 
-            'K', 
+            'Debye',
+            '', 'K', 'K',
+            'K', 'K', 'bar', 'bar',
+            'K', '', '', '',
+            'K', 'K', 'bar', 'bar',
+            '', '', '', '',
+            'K', 'K', 'bar', 'bar',
+            'K',
             'K', 'g/mol', 
             '',
             '', 'K^-1', 'K^-2', 'K^-3', 'K^-4',
