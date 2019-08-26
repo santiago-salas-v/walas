@@ -10,15 +10,15 @@ import csv
 import io
 from pandas import DataFrame, merge, to_numeric
 import ctypes  # Needed to set the app icon correctly
-from PyQt5.QtWidgets import QTableView, QApplication, QWidget
-from PyQt5.QtWidgets import QDesktopWidget, QGridLayout, QLineEdit, QPushButton
-from PyQt5.QtWidgets import QComboBox, QLabel, QTableWidget, QTableWidgetItem
-from PyQt5.QtWidgets import QSizePolicy
-from PyQt5.QtCore import QAbstractTableModel, QModelIndex, Qt, QVariant, QEvent
-from PyQt5.QtGui import QKeySequence, QGuiApplication, QFont, QIcon
-from PyQt5.QtCore import pyqtSignal as SIGNAL
+from PySide2.QtWidgets import QTableView, QApplication, QWidget
+from PySide2.QtWidgets import QDesktopWidget, QGridLayout, QLineEdit, QPushButton
+from PySide2.QtWidgets import QComboBox, QLabel, QTableWidget, QTableWidgetItem
+from PySide2.QtWidgets import QSizePolicy
+from PySide2.QtCore import QAbstractTableModel, QModelIndex, Qt, QEvent
+from PySide2.QtGui import QKeySequence, QGuiApplication, QFont, QIcon
+from PySide2.QtCore import SIGNAL
 import matplotlib
-#matplotlib.use('Qt5Agg')
+matplotlib.use('Qt5Agg')
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 
@@ -39,7 +39,8 @@ class App(QWidget):
         super().__init__()
         self.title = 'Thermodynamic data'
 
-        screen = QDesktopWidget().screenGeometry()
+        qd = QDesktopWidget()
+        screen = qd.screenGeometry(qd)
         width = 600
         height = 300
 
@@ -171,8 +172,9 @@ class App(QWidget):
             formula_filter,
             phase_filter)
 
-    def add_selection_to_widget(self):
-        indexes = self.tableView1.selectedIndexes()
+    def add_selection_to_widget(self, selected, deselected):
+        # indexes = self.tableView1.selectedIndexes()
+        indexes = selected.indexes()
         index = indexes[0]
         column_of_cas = self.tableView1.model().column_names.index('cas_no')
         column_of_phase = self.tableView1.model().column_names.index('phase')
@@ -184,7 +186,7 @@ class App(QWidget):
                     item.row(), column_of_phase+1).text():
                 already_in_table = True
         if not already_in_table:
-            row_index = int(self.tableView1.model().headerData(index.row(), Qt.Vertical).value())
+            row_index = int(self.tableView1.model().headerData(index.row(), Qt.Vertical))
             column_names = self.tableView1.model().column_names
             header_to_add = QTableWidgetItem(str(row_index))
 
@@ -766,7 +768,7 @@ class thTableModel(QAbstractTableModel):
         if not index.isValid() or \
                 index.row() < 0 or \
                 index.column() < 0 or index.column() > self.columnCount():
-            return QVariant()
+            return None
         if role == Qt.DisplayRole:
             column = index.column()
             row = index.row()
@@ -775,26 +777,26 @@ class thTableModel(QAbstractTableModel):
             datum = self.filtered_data[column_name].values[row]
 
             if type(datum) == str:
-                return QVariant(datum)
+                return datum
             elif datum is not None and not isnan(datum):
-                return QVariant(locale.str(datum))
+                return locale.str(datum)
             else:
-                return QVariant(None)
+                return None
 
     def headerData(self, section: int, orientation: Qt.Orientation, role: int= Qt.DisplayRole):
         if role == Qt.TextAlignmentRole:
             if orientation == Qt.Horizontal:
-                return QVariant(int(Qt.AlignLeft | Qt.AlignVCenter))
-            return QVariant(int(Qt.AlignRight | Qt.AlignVCenter))
+                return int(Qt.AlignLeft | Qt.AlignVCenter)
+            return int(Qt.AlignRight | Qt.AlignVCenter)
         if role != Qt.DisplayRole:
-            return QVariant()
+            return None
         if orientation == Qt.Horizontal:
-            return QVariant(
-                self.column_names[section]+'\n'+
-                self.column_units[section])
+            return \
+                self.column_names[section]+'\n'+ \
+                self.column_units[section]
             
         if orientation == Qt.Vertical:
-            return QVariant(str(self.filtered_data.index[section]))
+            return str(self.filtered_data.index[section])
 
     def rowCount(self, index=QModelIndex()):
         # return len(self.burcat_results) #+
