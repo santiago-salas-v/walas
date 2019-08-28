@@ -122,6 +122,11 @@ class Eos:
         return psi * alpha(tr, af_omega) / (omega * tr)
 
     def solve(self):
+        epsilon = self.epsilon
+        sigma = self.sigma
+        omega = self.omega
+        psi = self.psi
+
         omega_i = self.af_omega_i
         tc_i = self.tc_i
         pc_i = self.pc_i
@@ -137,11 +142,11 @@ class Eos:
         dalphadt_i = self.dalphadt(t, tc_i, alpha_i, m_i)
 
         a_i = psi * alpha_i * r ** 2 * tc_i ** 2 / pc_i
+        a_i_t = a_i.reshape([n, 1])
         da_idt = a_i / alpha_i * dalphadt_i
         b_i = omega * r * tc_i / pc_i
         beta_i = b_i * p / (r * t)
         q_i = a_i / (b_i * r * t)
-        a_i_t = a_i.reshape([n, 1])
         a_ij = sqrt(a_i_t.dot(a_i_t.T))
 
         # Variablen, die von der Phasen-Zusammensetzung abhängig sind
@@ -391,39 +396,17 @@ def phi_l(t, p, x_i, tc_i, pc_i, af_omega_i):
     b_i = omega * r * tc_i / pc_i
     beta_i = b_i * p / (r * t)
     q_i = a_i / (b_i * r * t)
-    a_ij = empty([len(x_i), len(x_i)])
-    for i in range(len(x_i)):
-        for j in range(len(x_i)):
-            a_ij[i, j] = sqrt(a_i[i] * a_i[j])
+    a_ij = sqrt(outer(a_i, a_i))
 
     # Variablen, die von der Flüssigkeit-Zusammensetzung abhängig sind
     b_l = sum(x_i * b_i)
-    a_l = 0
-    for i in range(len(x_i)):
-        for j in range(len(x_i)):
-            a_l = a_l + x_i[i] * x_i[j] * a_ij[i, j]
+    a_l = x_i.dot(a_ij).dot(x_i)
     beta_l = b_l * p / (r * t)
     q_l = a_l / (b_l * r * t)
-    s_x_j_a_ij = empty([len(x_i)])
-    for i in range(len(x_i)):
-        s_x_j_a_ij[i] = 0
-        for j in range(len(x_i)):
-            if i != j:
-                s_x_j_a_ij[i] = s_x_j_a_ij[i] + x_i[j] * a_ij[i, j]
-            elif i == j:
-                # 0 summieren
-                pass
-    a_mp_i_l = -a_l + 2 * s_x_j_a_ij + 2 * x_i * a_i  # partielles molares a_i
+    a_mp_i_l = -a_l + 2 * a_ij.dot(x_i) # partielles molares a_i
     b_mp_i_l = b_i  # partielles molares b_i
     q_mp_i_l = q_l * (1 + a_mp_i_l / a_l - b_i / b_l)  # partielles molares q_i
-    z_soln = optimize.root(
-        lambda z_var: z_l_func(z_var, beta_l, q_l),
-        beta_l)
-    z_l = z_soln.x
-    success = z_soln.success
-    #success = True
-    opt_func = z_soln.fun
-    nfev = z_soln.nfev
+
     a1_l = beta_l * (epsilon + sigma) - beta_l - 1
     a2_l = q_l * beta_l + epsilon * sigma * beta_l ** 2 \
         - beta_l * (epsilon + sigma) * (1 + beta_l)
@@ -436,9 +419,11 @@ def phi_l(t, p, x_i, tc_i, pc_i, af_omega_i):
     if disc <= 0:
         # 3 real roots. smallest ist liq. largest is gas.
         z_l = array([z_soln[-1][0]])
+        phases = 1
     elif disc > 0:
         # one real root, 2 complex. First root is the real one.
         z_l = array([z_soln[0][0]])
+        phases = 2
     i_int_l = 1 / (sigma - epsilon) * \
         log((z_l + sigma * beta_l) / (z_l + epsilon * beta_l))
     ln_phi_l = b_i / b_l * (z_l - 1) - log(z_l -
@@ -450,7 +435,7 @@ def phi_l(t, p, x_i, tc_i, pc_i, af_omega_i):
                  'b_l', 'a_l', 'q_l',
                  'a_mp_i_l', 'b_mp_i_l', 'q_mp_i_l',
                  'beta_l', 'z_l', 'i_int_l', 'ln_phi_l', 'phi_l',
-                 'opt_func', 'nfev', 'success']:
+                 'phases']:
         soln[item] = locals().get(item)
     return soln
 
@@ -461,38 +446,16 @@ def phi_v(t, p, y_i, tc_i, pc_i, af_omega_i):
     b_i = omega * r * tc_i / pc_i
     beta_i = b_i * p / (r * t)
     q_i = a_i / (b_i * r * t)
-    a_ij = empty([len(y_i), len(y_i)])
-    for i in range(len(y_i)):
-        for j in range(len(y_i)):
-            a_ij[i, j] = sqrt(a_i[i] * a_i[j])
+    a_ij = sqrt(outer(a_i, a_i))
     # Variablen, die von der Gasphase-Zusammensetzung abhängig sind
     b_v = sum(y_i * b_i)
-    a_v = 0
-    for i in range(len(y_i)):
-        for j in range(len(y_i)):
-            a_v = a_v + y_i[i] * y_i[j] * a_ij[i, j]
+    a_v = y_i.dot(a_ij).dot(y_i)
     beta_v = b_v * p / (r * t)
     q_v = a_v / (b_v * r * t)
-    s_x_j_a_ij = empty([len(y_i)])
-    for i in range(len(y_i)):
-        s_x_j_a_ij[i] = 0
-        for j in range(len(y_i)):
-            if i != j:
-                s_x_j_a_ij[i] = s_x_j_a_ij[i] + y_i[j] * a_ij[i, j]
-            elif i == j:
-                # 0 summieren
-                pass
-    a_mp_i_v = -a_v + 2 * s_x_j_a_ij + 2 * y_i * a_i  # partielles molares a_i
+    a_mp_i_v = -a_v + 2 * a_ij.dot(y_i) # partielles molares a_i
     b_mp_i_v = b_i  # partielles molares b_i
     q_mp_i_v = q_v * (1 + a_mp_i_v / a_v - b_i / b_v)  # partielles molares q_i
-    z_soln = optimize.root(
-        lambda z_var: z_v_func(z_var, beta_v, q_v),
-        1.0)
-    z_v = z_soln.x
-    success = z_soln.success
-    #success = True
-    opt_func = z_soln.fun
-    nfev = z_soln.nfev
+
     a1 = beta_v * (epsilon + sigma) - beta_v - 1
     a2 = q_v * beta_v + epsilon * sigma * beta_v ** 2 \
         - beta_v * (epsilon + sigma) * (1 + beta_v)
@@ -504,9 +467,11 @@ def phi_v(t, p, y_i, tc_i, pc_i, af_omega_i):
     if disc <= 0:
         # 3 real roots. smallest ist liq. largest is gas.
         z_v = array([z_soln[0][0]])
+        phases = 1
     elif disc > 0:
         # one real root, 2 complex. First root is the real one.
         z_v = array([z_soln[0][0]])
+        phases = 2
     i_int_v = 1 / (sigma - epsilon) * \
         log((z_v + sigma * beta_v) / (z_v + epsilon * beta_v))
     ln_phi_v = b_i / b_v * (z_v - 1) - log(z_v -
@@ -518,12 +483,12 @@ def phi_v(t, p, y_i, tc_i, pc_i, af_omega_i):
                  'b_v', 'a_v', 'q_v',
                  'a_mp_i_v', 'b_mp_i_v', 'q_mp_i_v',
                  'beta_v', 'z_v', 'i_int_v', 'ln_phi_v', 'phi_v',
-                 'opt_func', 'nfev', 'success']:
+                 'phases']:
         soln[item] = locals().get(item)
     return soln
 
 
-def siedepunkt(t, p, x_i, y_i, tc_i, pc_i, af_omega_i, max_it, tol=1e-14):
+def siedepunkt(t, p, x_i, y_i, tc_i, pc_i, af_omega_i, ant_a, ant_b, ant_c, max_it, tol=1e-14):
     """Siedepunkt-Bestimmung
 
     Bei gegebenen Temperatur-Wert und Flüssigkeit-Zusammenstellung (mit geschätzten\
@@ -549,9 +514,9 @@ def siedepunkt(t, p, x_i, y_i, tc_i, pc_i, af_omega_i, max_it, tol=1e-14):
     :param tol: Fehlertoleranz
     :return: soln (dict)
     """
+    psat_i = 10**(ant_a - ant_b/(ant_c + t - 273.15)) # bar
+    k_i = psat_i / p # init
     soln_l = phi_l(t, p, x_i, tc_i, pc_i, af_omega_i)
-    soln_v = phi_v(t, p, y_i, tc_i, pc_i, af_omega_i)
-    k_i = soln_l['phi_l'] / soln_v['phi_v']
     sum_k_i_n = sum(k_i * x_i)
     y_i = k_i * x_i / sum_k_i_n
     stop = False
@@ -563,7 +528,12 @@ def siedepunkt(t, p, x_i, y_i, tc_i, pc_i, af_omega_i, max_it, tol=1e-14):
         k_i = soln_l['phi_l'] / soln_v['phi_v']
         sum_k_i_n = sum(k_i * x_i)
         y_i = k_i * x_i / sum_k_i_n
-        stop = abs((sum_k_i_n_min_1 - sum_k_i_n) / sum_k_i_n) <= tol
+        #if (sum_k_i_n - 1) >= tol:
+            # adjust p
+        #    p = p+1
+        #else:
+        #    stop = True
+        stop = stop and abs((sum_k_i_n_min_1 - sum_k_i_n) / sum_k_i_n) <= tol
         # print('i='+str(i))
 
     opt_func = 1 - sum(k_i * x_i)
@@ -646,12 +616,10 @@ def beispiel_wdi_atlas():
 
 
 def beispiel_svn_14_1():
-    use_srk_eos_simple_alpha()
     x_i = array([0.4, 0.6])
     tc_i = array([126.2, 190.6])
     pc_i = array([34., 45.99])
     af_omega_i = array([0.038, 0.012])
-    print(z_non_sat(200, 30, x_i, tc_i, pc_i, af_omega_i))
 
     mm_i = zeros(2)
     state1 = State(200, 30, x_i, mm_i, tc_i, pc_i, af_omega_i, 'srk')
@@ -666,8 +634,11 @@ def beispiel_svn_14_2():
     tc_i = array([190.6, 425.1])
     pc_i = array([45.99, 37.96])
     af_omega_i = array([0.012, 0.200])
+    ant_a = array([3.7687, 3.93266])
+    ant_b = array([395.744, 935.773])
+    ant_c = array([266.681, 238.789])
     max_it = 100
-    print(siedepunkt(310.92, 30, x_i, y_i, tc_i, pc_i, af_omega_i, max_it))
+    print(siedepunkt(310.92, 30, x_i, y_i, tc_i, pc_i, af_omega_i, ant_a, ant_b, ant_c, max_it))
     y_i = siedepunkt(
         310.92,
         30,
@@ -675,10 +646,10 @@ def beispiel_svn_14_2():
         y_i,
         tc_i,
         pc_i,
-        af_omega_i,
+        af_omega_i, ant_a, ant_b, ant_c,
         max_it)['y_i']
     for i in range(5):
-        soln = siedepunkt(310.92, 30, x_i, y_i, tc_i, pc_i, af_omega_i, max_it)
+        soln = siedepunkt(310.92, 30, x_i, y_i, tc_i, pc_i, af_omega_i, ant_a, ant_b, ant_c, max_it)
         y_i = soln['y_i']
         k_i = soln['k_i']
         print(y_i)
@@ -686,11 +657,11 @@ def beispiel_svn_14_2():
         print(sum(k_i * x_i))
     soln = optimize.root(
         lambda p: siedepunkt(
-            310.92, p.item(), x_i, y_i, tc_i, pc_i, af_omega_i, max_it
+            310.92, p.item(), x_i, y_i, tc_i, pc_i, af_omega_i, ant_a, ant_b, ant_c, max_it
         )['opt_func'], array([1.])
     )
     print(soln)
-    print(siedepunkt(310.92, soln.x.item(), x_i, y_i, tc_i, pc_i, af_omega_i, max_it))
+    print(siedepunkt(310.92, soln.x.item(), x_i, y_i, tc_i, pc_i, af_omega_i, ant_a, ant_b, ant_c, max_it))
 
     x = linspace(0.0, 0.8, 50)
     y = empty_like(x)
@@ -700,12 +671,12 @@ def beispiel_svn_14_2():
         x_i = array([x[i], 1 - x[i]])
         soln = optimize.root(
             lambda p: siedepunkt(
-                310.92, p.item(), x_i, y_i, tc_i, pc_i, af_omega_i, max_it
+                310.92, p.item(), x_i, y_i, tc_i, pc_i, af_omega_i, ant_a, ant_b, ant_c, max_it
             )['opt_func'], p_v0
         )
         p_v[i] = soln.x.item()
         output = siedepunkt(
-            310.92, p_v[i], x_i, y_i, tc_i, pc_i, af_omega_i, max_it
+            310.92, p_v[i], x_i, y_i, tc_i, pc_i, af_omega_i, ant_a, ant_b, ant_c,  max_it
         )
         y[i] = output['y_i'][0]
         if soln.success:
@@ -1256,8 +1227,8 @@ def beispiel_pat_ue_03_vollstaendig(rlv, print_output=False):
 
 
 # beispiel_wdi_atlas()
-beispiel_svn_14_1()
-# beispiel_svn_14_2()
+# beispiel_svn_14_1()
+beispiel_svn_14_2()
 # beispiel_pat_ue_03_flash()
 # beispiel_isot_flash_seader_4_1()
 # beispiel_pat_ue_03_vollstaendig(0.2)
