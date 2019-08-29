@@ -1,7 +1,7 @@
 from poly_3_4 import solve_cubic
 from numpy import array, append, zeros, abs, ones, empty_like, empty
 from numpy import sqrt, empty, outer, sum, log, exp, multiply, diag
-from numpy import linspace, dot, nan
+from numpy import linspace, dot, nan, finfo
 from scipy import optimize
 from matplotlib import pyplot as plt
 import sys
@@ -9,6 +9,7 @@ import sys
 r = 8.314 * 10. ** 6 / 10. ** 5  # bar cm^3/(mol K)
 rlv = 0.8  # Rücklaufverhältnis
 t_flash = 273.16 + 60  # K
+tol = finfo(float).eps
 
 # Nach unten hin: CO, H2, CO2, H2O, CH3OH, N2, CH4
 
@@ -419,11 +420,11 @@ def phi_l(t, p, x_i, tc_i, pc_i, af_omega_i):
     if disc <= 0:
         # 3 real roots. smallest ist liq. largest is gas.
         z_l = array([z_soln[-1][0]])
-        phases = 1
+        phases = 2
     elif disc > 0:
         # one real root, 2 complex. First root is the real one.
         z_l = array([z_soln[0][0]])
-        phases = 2
+        phases = 1
     i_int_l = 1 / (sigma - epsilon) * \
         log((z_l + sigma * beta_l) / (z_l + epsilon * beta_l))
     ln_phi_l = b_i / b_l * (z_l - 1) - log(z_l -
@@ -467,11 +468,11 @@ def phi_v(t, p, y_i, tc_i, pc_i, af_omega_i):
     if disc <= 0:
         # 3 real roots. smallest ist liq. largest is gas.
         z_v = array([z_soln[0][0]])
-        phases = 1
+        phases = 2
     elif disc > 0:
         # one real root, 2 complex. First root is the real one.
         z_v = array([z_soln[0][0]])
-        phases = 2
+        phases = 1
     i_int_v = 1 / (sigma - epsilon) * \
         log((z_v + sigma * beta_v) / (z_v + epsilon * beta_v))
     ln_phi_v = b_i / b_v * (z_v - 1) - log(z_v -
@@ -488,7 +489,7 @@ def phi_v(t, p, y_i, tc_i, pc_i, af_omega_i):
     return soln
 
 
-def siedepunkt(t, p, x_i, y_i, tc_i, pc_i, af_omega_i, ant_a, ant_b, ant_c, max_it, tol=1e-14):
+def siedepunkt(t, p, x_i, y_i, tc_i, pc_i, af_omega_i, ant_a, ant_b, ant_c, max_it, tol=tol):
     """Siedepunkt-Bestimmung
 
     Bei gegebenen Temperatur-Wert und Flüssigkeit-Zusammenstellung (mit geschätzten\
@@ -514,8 +515,9 @@ def siedepunkt(t, p, x_i, y_i, tc_i, pc_i, af_omega_i, ant_a, ant_b, ant_c, max_
     :param tol: Fehlertoleranz
     :return: soln (dict)
     """
-    psat_i = 10**(ant_a - ant_b/(ant_c + t - 273.15)) # bar
-    k_i = psat_i / p # init
+    psat_i = 10**(ant_a - ant_b/(ant_c + t - 273.15))  # bar
+    k_i = psat_i / p # Ideal K-value estimate
+    k_i = exp(log(pc_i/p)+5.373*(1+af_omega_i)*(1-tc_i/t))  # Wilson K-Value estimates
     soln_l = phi_l(t, p, x_i, tc_i, pc_i, af_omega_i)
     sum_k_i_n = sum(k_i * x_i)
     y_i = k_i * x_i / sum_k_i_n
@@ -528,12 +530,7 @@ def siedepunkt(t, p, x_i, y_i, tc_i, pc_i, af_omega_i, ant_a, ant_b, ant_c, max_
         k_i = soln_l['phi_l'] / soln_v['phi_v']
         sum_k_i_n = sum(k_i * x_i)
         y_i = k_i * x_i / sum_k_i_n
-        #if (sum_k_i_n - 1) >= tol:
-            # adjust p
-        #    p = p+1
-        #else:
-        #    stop = True
-        stop = stop and abs((sum_k_i_n_min_1 - sum_k_i_n) / sum_k_i_n) <= tol
+        stop = abs((sum_k_i_n_min_1 - sum_k_i_n) / sum_k_i_n) <= tol
         # print('i='+str(i))
 
     opt_func = 1 - sum(k_i * x_i)
@@ -543,6 +540,99 @@ def siedepunkt(t, p, x_i, y_i, tc_i, pc_i, af_omega_i, ant_a, ant_b, ant_c, max_
         soln[item] = locals().get(item)
     return soln
 
+def bubl_p(t, p, x_i, y_i, tc_i, pc_i, af_omega_i, max_it, tol=tol):
+    # read t, x, estimate p, y
+    soln_l = phi_l(t, p, x_i, tc_i, pc_i, af_omega_i)
+    k_i = soln_l['phi_l']  # est. phi_v ~ 1
+    sum_ki_xi = sum(k_i * x_i)
+    y_i = k_i * x_i / sum_ki_xi
+    for j in range(max_it):
+        # loop until sum(Ki xi) = 1
+        for i in range(max_it):
+            # loop until y-convergence
+            if any(x_i == 1):
+                # single component p_sat
+                pass
+            if all(k_i == 1):
+                # trivial solution
+                # find p such that 3 real roots disc: (p/3)^3+(q/2)^2 < 0
+                p = p_for_3_real_roots(t, p, x_i, tc_i, pc_i, af_omega_i, max_it, tol)
+                soln_l = phi_l(t, p, x_i, tc_i, pc_i, af_omega_i)
+
+            sum_ki_xi_old = sum_ki_xi
+            # calculate k
+            soln_v = phi_v(t, p, y_i, tc_i, pc_i, af_omega_i)
+            k_i = soln_l['phi_l'] / soln_v['phi_v']
+            sum_ki_xi = sum(k_i * x_i)
+            # calculate y
+            y_i = k_i * x_i / sum_ki_xi
+            # normalize y and compare estimated and normalized values
+            if abs((sum_ki_xi_old - sum_ki_xi) / sum_ki_xi) <= tol:
+                break
+        if abs(1 - sum_ki_xi) <= tol:
+            break
+        else:
+            # reestimate p (secant), evaluate phil_l, k_i
+            if j == 0:
+                # secant needs two valid points p, sum_ki_xi
+                p_k_minus_1 = p
+                sum_ki_xi_k_minus_1 = sum_ki_xi
+                p = 0.9 * p
+            else:
+                inv_slope = (p - p_k_minus_1) / (- sum_ki_xi + sum_ki_xi_k_minus_1)
+                p_k_minus_1 = p
+                sum_ki_xi_k_minus_1 = sum_ki_xi
+                p = p - (1 - sum_ki_xi) * inv_slope
+            if p < 0:
+                success = False
+                break
+            soln_l = phi_l(t, p, x_i, tc_i, pc_i, af_omega_i)
+
+    soln = dict()
+    for item in ['soln_l', 'soln_v', 'k_i', 'y_i', 'p', 'success']:
+        soln[item] = locals().get(item)
+    return soln
+
+def p_for_3_real_roots(t, p, x_i, tc_i, pc_i, af_omega_i, max_it, tol=tol):
+    tr_i = t / tc_i
+    a_i = psi * alpha(tr_i, af_omega_i) * r ** 2 * tc_i ** 2 / pc_i
+    b_i = omega * r * tc_i / pc_i
+    q_i = a_i / (b_i * r * t)
+    a_ij = sqrt(outer(a_i, a_i))
+
+    # Variablen, die von der Flüssigkeit-Zusammensetzung abhängig sind
+    b = sum(x_i * b_i)
+    a = x_i.dot(a_ij).dot(x_i)
+
+    # p loop
+    for i in range(max_it):
+        beta_i = b_i * p / (r * t)
+        beta = b * p / (r * t)
+        q = a / (b * r * t)
+        a_mp_i = -a + 2 * a_ij.dot(x_i)  # partielles molares a_i
+        b_mp_i = b_i  # partielles molares b_i
+        q_mp_i = q * (1 + a_mp_i / a - b_i / b)  # partielles molares q_i
+
+        a1 = beta * (epsilon + sigma) - beta - 1
+        a2 = q * beta + epsilon * sigma * beta ** 2 \
+               - beta * (epsilon + sigma) * (1 + beta)
+        a3 = -(epsilon * sigma * beta ** 2 * (1 + beta) +
+                 q * beta ** 2)
+        disc = 1/27 * (- 1 / 3 * a1**2 + a2)**3 + \
+               1 / 4 * (2 / 27 * a1**3 - 1 / 3 * a1 * a2 + a3)**2
+        if i == 0:
+            # secant needs 2 valid sets
+            p_old = p
+            disc_old = disc
+            p = 0.9 * p
+        else:
+            inv_slope = (p - p_old) / (disc - disc_old)
+            disc_old = disc
+            p_old = p
+            p = p_old - inv_slope * disc
+            if disc < 0:
+                break
+    return min(p, p_old)
 
 def isot_flash(t, p, x_i, y_i, z_i, tc_i, pc_i, af_omega_i):
     soln_l = phi_l(t, p, x_i, tc_i, pc_i, af_omega_i)
@@ -648,20 +738,7 @@ def beispiel_svn_14_2():
         pc_i,
         af_omega_i, ant_a, ant_b, ant_c,
         max_it)['y_i']
-    for i in range(5):
-        soln = siedepunkt(310.92, 30, x_i, y_i, tc_i, pc_i, af_omega_i, ant_a, ant_b, ant_c, max_it)
-        y_i = soln['y_i']
-        k_i = soln['k_i']
-        print(y_i)
-        print(1 - sum(y_i))
-        print(sum(k_i * x_i))
-    soln = optimize.root(
-        lambda p: siedepunkt(
-            310.92, p.item(), x_i, y_i, tc_i, pc_i, af_omega_i, ant_a, ant_b, ant_c, max_it
-        )['opt_func'], array([1.])
-    )
-    print(soln)
-    print(siedepunkt(310.92, soln.x.item(), x_i, y_i, tc_i, pc_i, af_omega_i, ant_a, ant_b, ant_c, max_it))
+    print(bubl_p(310.92, 30, x_i, y_i, tc_i, pc_i, af_omega_i, max_it))
 
     x = linspace(0.0, 0.8, 50)
     y = empty_like(x)
@@ -669,17 +746,10 @@ def beispiel_svn_14_2():
     p_v0 = 1.0
     for i in range(len(x)):
         x_i = array([x[i], 1 - x[i]])
-        soln = optimize.root(
-            lambda p: siedepunkt(
-                310.92, p.item(), x_i, y_i, tc_i, pc_i, af_omega_i, ant_a, ant_b, ant_c, max_it
-            )['opt_func'], p_v0
-        )
-        p_v[i] = soln.x.item()
-        output = siedepunkt(
-            310.92, p_v[i], x_i, y_i, tc_i, pc_i, af_omega_i, ant_a, ant_b, ant_c,  max_it
-        )
-        y[i] = output['y_i'][0]
-        if soln.success:
+        soln = bubl_p(310.92, 30, x_i, y_i, tc_i, pc_i, af_omega_i, max_it)
+        p_v[i] = soln['p']
+        y[i] = soln['y_i'][0]
+        if soln['success']:
             p_v0 = p_v[i]
     plt.plot(x, p_v, y, p_v)
     plt.show()
