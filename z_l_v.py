@@ -1,7 +1,7 @@
 from poly_3_4 import solve_cubic
 from numpy import array, append, zeros, abs, ones, empty_like, empty
 from numpy import sqrt, empty, outer, sum, log, exp, multiply, diag
-from numpy import linspace, dot, nan, finfo
+from numpy import linspace, dot, nan, finfo, isnan, isinf
 from scipy import optimize
 from matplotlib import pyplot as plt
 import sys
@@ -358,6 +358,42 @@ def p_sat(t, af_omega, tc, pc):
     # Das Levenberg-Marquardt Algorithmus weist wenigere Sprunge auf.
     return optimize.root(fs, 1., method='lm')
 
+def p_i_sat(t, p0, x_i, tc_i, pc_i, af_omega_i, max_it, tol=tol):
+    p_sat_list = zeros(len(x_i))
+    for i in range(len(x_i)):
+        tr_i = t / tc_i[i]
+        a_i = psi * alpha(tr_i, af_omega_i[i]) * r ** 2 * tc_i[i] ** 2 / pc_i[i]
+        b_i = omega * r * tc_i[i] / pc_i[i]
+        p = p0
+        for j in range(max_it):
+            beta = b_i * p / (r * t)
+            q = a_i / (b_i * r * t)
+            a1 = beta * (epsilon + sigma) - beta - 1
+            a2 = q * beta + epsilon * sigma * beta ** 2 \
+                 - beta * (epsilon + sigma) * (1 + beta)
+            a3 = -(epsilon * sigma * beta ** 2 * (1 + beta) +
+                   q * beta ** 2)
+            da1_dp = 1 / p * beta * (epsilon + sigma - 1)
+            da2_dp = 1 / p * (q * beta + 2 * epsilon * sigma * beta**2 \
+                    - beta * (epsilon + sigma) * (1 + 2 * beta))
+            da3_dp = 1 / p * (-(epsilon * sigma * beta**2 * (2 + 3 * beta) +
+                    2 * q * beta**2))
+            disc = 1 / 27 * (- 1 / 3 * a1 ** 2 + a2) ** 3 + \
+                   1 / 4 * (2 / 27 * a1 ** 3 - 1 / 3 * a1 * a2 + a3) ** 2
+            ddisc_dp = 1 / 9 * (- 1 / 3 * a1 ** 2 + a2) ** 2 * (
+                    -2 / 3 * a1 * da1_dp + da2_dp) + \
+                    1 / 2 * (2 / 27 * a1 ** 3 - 1 / 3 * a1 * a2 + a3) * (
+                        2 / 9 * a1**2 * da1_dp
+                        - 1 / 3 * (a1 * da2_dp + a2 * da1_dp) + da3_dp)
+            f = disc + tol
+            df_dp = ddisc_dp
+            inv_slope = 1 / df_dp
+            p_old = p
+            p = p_old - inv_slope * f
+            if disc <= -tol:
+                break
+        p_sat_list[i] = p
+    return p_sat_list
 
 def z_non_sat(t, p, x_i, tc_i, pc_i, af_omega_i):
     tr_i = t / tc_i
@@ -390,8 +426,11 @@ def z_non_sat(t, p, x_i, tc_i, pc_i, af_omega_i):
         soln[item] = locals().get(item)
     return soln
 
-
-def phi_l(t, p, x_i, tc_i, pc_i, af_omega_i):
+def phi(t, p, z_i, tc_i, pc_i, af_omega_i, lv):
+    if lv == 'l':
+        z_index = -1
+    elif lv == 'v':
+        z_index = 0
     tr_i = t / tc_i
     a_i = psi * alpha(tr_i, af_omega_i) * r ** 2 * tc_i ** 2 / pc_i
     b_i = omega * r * tc_i / pc_i
@@ -400,93 +439,108 @@ def phi_l(t, p, x_i, tc_i, pc_i, af_omega_i):
     a_ij = sqrt(outer(a_i, a_i))
 
     # Variablen, die von der Flüssigkeit-Zusammensetzung abhängig sind
-    b_l = sum(x_i * b_i)
-    a_l = x_i.dot(a_ij).dot(x_i)
-    beta_l = b_l * p / (r * t)
-    q_l = a_l / (b_l * r * t)
-    a_mp_i_l = -a_l + 2 * a_ij.dot(x_i) # partielles molares a_i
-    b_mp_i_l = b_i  # partielles molares b_i
-    q_mp_i_l = q_l * (1 + a_mp_i_l / a_l - b_i / b_l)  # partielles molares q_i
+    b = sum(z_i * b_i)
+    a = z_i.dot(a_ij).dot(z_i)
+    beta = b * p / (r * t)
+    q = a / (b * r * t)
+    a_mp_i = -a + 2 * a_ij.dot(z_i) # partielles molares a_i
+    b_mp_i = b_i  # partielles molares b_i
+    q_mp_i = q * (1 + a_mp_i / a - b_i / b)  # partielles molares q_i
 
-    a1_l = beta_l * (epsilon + sigma) - beta_l - 1
-    a2_l = q_l * beta_l + epsilon * sigma * beta_l ** 2 \
-        - beta_l * (epsilon + sigma) * (1 + beta_l)
-    a3_l = -(epsilon * sigma * beta_l ** 2 * (1 + beta_l) +
-             q_l * beta_l ** 2)
+    a1 = beta * (epsilon + sigma) - beta - 1
+    a2 = q * beta + epsilon * sigma * beta ** 2 \
+        - beta * (epsilon + sigma) * (1 + beta)
+    a3 = -(epsilon * sigma * beta ** 2 * (1 + beta) +
+             q * beta ** 2)
 
-    soln = solve_cubic([1, a1_l, a2_l, a3_l])
-    z_soln = soln['roots']
-    disc = soln['disc']
-    if disc <= 0:
-        # 3 real roots. smallest ist liq. largest is gas.
-        z_l = array([z_soln[-1][0]])
-        phases = 2
-    elif disc > 0:
-        # one real root, 2 complex. First root is the real one.
-        z_l = array([z_soln[0][0]])
-        phases = 1
-    i_int_l = 1 / (sigma - epsilon) * \
-        log((z_l + sigma * beta_l) / (z_l + epsilon * beta_l))
-    ln_phi_l = b_i / b_l * (z_l - 1) - log(z_l -
-                                              beta_l) - q_mp_i_l * i_int_l
-    phi_l = exp(ln_phi_l)
-
-    soln = dict()
-    for item in ['a_i', 'b_i',
-                 'b_l', 'a_l', 'q_l',
-                 'a_mp_i_l', 'b_mp_i_l', 'q_mp_i_l',
-                 'beta_l', 'z_l', 'i_int_l', 'ln_phi_l', 'phi_l',
-                 'phases']:
-        soln[item] = locals().get(item)
-    return soln
-
-
-def phi_v(t, p, y_i, tc_i, pc_i, af_omega_i):
-    tr_i = t / tc_i
-    a_i = psi * alpha(tr_i, af_omega_i) * r ** 2 * tc_i ** 2 / pc_i
-    b_i = omega * r * tc_i / pc_i
-    beta_i = b_i * p / (r * t)
-    q_i = a_i / (b_i * r * t)
-    a_ij = sqrt(outer(a_i, a_i))
-    # Variablen, die von der Gasphase-Zusammensetzung abhängig sind
-    b_v = sum(y_i * b_i)
-    a_v = y_i.dot(a_ij).dot(y_i)
-    beta_v = b_v * p / (r * t)
-    q_v = a_v / (b_v * r * t)
-    a_mp_i_v = -a_v + 2 * a_ij.dot(y_i) # partielles molares a_i
-    b_mp_i_v = b_i  # partielles molares b_i
-    q_mp_i_v = q_v * (1 + a_mp_i_v / a_v - b_i / b_v)  # partielles molares q_i
-
-    a1 = beta_v * (epsilon + sigma) - beta_v - 1
-    a2 = q_v * beta_v + epsilon * sigma * beta_v ** 2 \
-        - beta_v * (epsilon + sigma) * (1 + beta_v)
-    a3 = -(epsilon * sigma * beta_v ** 2 * (1 + beta_v) +
-             q_v * beta_v ** 2)
     soln = solve_cubic([1, a1, a2, a3])
     z_soln = soln['roots']
     disc = soln['disc']
     if disc <= 0:
         # 3 real roots. smallest ist liq. largest is gas.
-        z_v = array([z_soln[0][0]])
+        z = array([z_soln[z_index][0]])
         phases = 2
     elif disc > 0:
         # one real root, 2 complex. First root is the real one.
-        z_v = array([z_soln[0][0]])
+        z = array([z_soln[0][0]])
         phases = 1
-    i_int_v = 1 / (sigma - epsilon) * \
-        log((z_v + sigma * beta_v) / (z_v + epsilon * beta_v))
-    ln_phi_v = b_i / b_v * (z_v - 1) - log(z_v -
-                                              beta_v) - q_mp_i_v * i_int_v
-    phi_v = exp(ln_phi_v)
+    i_int = 1 / (sigma - epsilon) * \
+        log((z + sigma * beta) / (z + epsilon * beta))
+    ln_phi = b_i / b * (z - 1) - log(z -
+                                              beta) - q_mp_i * i_int
+    phi = exp(ln_phi)
 
     soln = dict()
     for item in ['a_i', 'b_i',
-                 'b_v', 'a_v', 'q_v',
-                 'a_mp_i_v', 'b_mp_i_v', 'q_mp_i_v',
-                 'beta_v', 'z_v', 'i_int_v', 'ln_phi_v', 'phi_v',
+                 'b', 'a', 'q',
+                 'a_mp_i', 'b_mp_i', 'q_mp_i',
+                 'beta', 'z', 'i_int', 'ln_phi', 'phi',
                  'phases']:
         soln[item] = locals().get(item)
     return soln
+
+def phi_pure(t, p, tc_i, pc_i, af_omega_i, lv, max_it, tol=tol):
+    phi_pure_list = zeros(len(tc_i))
+    stop = False
+    for i in range(len(tc_i)):
+        while not stop and j < max_it:
+            tr_i = t / tc_i[i]
+            a_i = psi * alpha(tr_i, af_omega_i[i]) * r ** 2 * tc_i[i] ** 2 / pc_i[i]
+            b_i = omega * r * tc_i[i] / pc_i[i]
+            beta = b_i * p / (r * t)
+            q = a_i / (b_i * r * t)
+            a1 = beta * (epsilon + sigma) - beta - 1
+            a2 = q * beta + epsilon * sigma * beta ** 2 \
+                 - beta * (epsilon + sigma) * (1 + beta)
+            a3 = -(epsilon * sigma * beta ** 2 * (1 + beta) +
+                   q * beta ** 2)
+            # disc = 1 / 27 * (- 1 / 3 * a1 ** 2 + a2) ** 3 + \
+            #        1 / 4 * (2 / 27 * a1 ** 3 - 1 / 3 * a1 * a2 + a3) ** 2
+            soln = solve_cubic([1, a1, a2, a3])
+            roots, disc = soln['roots'], soln['disc']
+            re_roots = array([roots[0][0], roots[1][0], roots[2][0]])
+
+            if disc <= 0:
+                # disc < 0: 3 real roots, all distinct: case III
+                # disc = 0: 3 real roots, two equal: case III also
+                z_l = min(roots)
+                z_v = max(roots)
+                if lv == 'l':
+                    z = z_l
+                elif lv == 'v':
+                    z = z_v
+                if (z_v >= 1/3 and z_l >= 1.3) or z_v / z_l <= 1.2:
+                    # action a) reduce pressure and continue
+                    p = 0.9 * p
+                else:
+                    stop = True
+            elif disc == 0 and sqrt(sum((re_roots - sum(re_roots) / 3) ** 2)) < tol:
+                # 3 real roots: all equal: case I, V
+                # action c) produce artificial lv density and continue
+                p = p_for_3_real_roots(t, p, tc_i, pc_i, af_omega_i, lv, max_it, tol)
+                z = sum(roots) / 3
+                if z <= 1/3:
+                    # case V, action d) conserve liquid density value
+                    z_l_old = z
+                    p_old = p
+                elif z > 1/3:
+                    # case I, action d) conserve liquid density value
+                    z_v = z
+                    z_l = z_l_old * p / p_old
+                    if lv == 'l':
+                        z = z_l
+                    elif lv == 'v':
+                        z = z_v
+                    stop = True
+            elif disc > 0:
+                # 2 complex, 1 real root: case IV, II
+                # action b) artificial density values
+                pass
+        i_int = 1 / (sigma - epsilon) * log((z + sigma * beta) / (z + epsilon * beta))
+        ln_phi = z - 1 - log(z - beta) - q * i_int
+        phi_pure_list[i] = exp(ln_phi)
+        stop = False
+    return phi_pure_list
 
 
 def siedepunkt(t, p, x_i, y_i, tc_i, pc_i, af_omega_i, ant_a, ant_b, ant_c, max_it, tol=tol):
@@ -518,7 +572,7 @@ def siedepunkt(t, p, x_i, y_i, tc_i, pc_i, af_omega_i, ant_a, ant_b, ant_c, max_
     psat_i = 10**(ant_a - ant_b/(ant_c + t - 273.15))  # bar
     k_i = psat_i / p # Ideal K-value estimate
     k_i = exp(log(pc_i/p)+5.373*(1+af_omega_i)*(1-tc_i/t))  # Wilson K-Value estimates
-    soln_l = phi_l(t, p, x_i, tc_i, pc_i, af_omega_i)
+    soln_l = phi(t, p, x_i, tc_i, pc_i, af_omega_i, 'l')
     sum_k_i_n = sum(k_i * x_i)
     y_i = k_i * x_i / sum_k_i_n
     stop = False
@@ -526,8 +580,8 @@ def siedepunkt(t, p, x_i, y_i, tc_i, pc_i, af_omega_i, ant_a, ant_b, ant_c, max_
     while i < max_it and not stop:
         sum_k_i_n_min_1 = sum_k_i_n
         i = i + 1
-        soln_v = phi_v(t, p, y_i, tc_i, pc_i, af_omega_i)
-        k_i = soln_l['phi_l'] / soln_v['phi_v']
+        soln_v = phi(t, p, y_i, tc_i, pc_i, af_omega_i, 'v')
+        k_i = soln_l['phi'] / soln_v['phi']
         sum_k_i_n = sum(k_i * x_i)
         y_i = k_i * x_i / sum_k_i_n
         stop = abs((sum_k_i_n_min_1 - sum_k_i_n) / sum_k_i_n) <= tol
@@ -542,8 +596,9 @@ def siedepunkt(t, p, x_i, y_i, tc_i, pc_i, af_omega_i, ant_a, ant_b, ant_c, max_
 
 def bubl_p(t, p, x_i, y_i, tc_i, pc_i, af_omega_i, max_it, tol=tol):
     # read t, x, estimate p, y
-    soln_l = phi_l(t, p, x_i, tc_i, pc_i, af_omega_i)
-    k_i = soln_l['phi_l']  # est. phi_v ~ 1
+    p = p_for_3_real_roots(t, p, x_i, tc_i, pc_i, af_omega_i, max_it, tol)
+    soln_l = phi(t, p, x_i, tc_i, pc_i, af_omega_i, 'l')
+    k_i = soln_l['phi']  # est. phi_v ~ 1
     sum_ki_xi = sum(k_i * x_i)
     y_i = k_i * x_i / sum_ki_xi
     for j in range(max_it):
@@ -552,17 +607,18 @@ def bubl_p(t, p, x_i, y_i, tc_i, pc_i, af_omega_i, max_it, tol=tol):
             # loop until y-convergence
             if any(x_i == 1):
                 # single component p_sat
+                p_sat_all = p_i_sat(t, p, x_i, tc_i, pc_i, af_omega_i, max_it, tol)
                 pass
             if all(k_i == 1):
                 # trivial solution
                 # find p such that 3 real roots disc: (p/3)^3+(q/2)^2 < 0
                 p = p_for_3_real_roots(t, p, x_i, tc_i, pc_i, af_omega_i, max_it, tol)
-                soln_l = phi_l(t, p, x_i, tc_i, pc_i, af_omega_i)
+                soln_l = phi(t, p, x_i, tc_i, pc_i, af_omega_i, 'l')
 
             sum_ki_xi_old = sum_ki_xi
             # calculate k
-            soln_v = phi_v(t, p, y_i, tc_i, pc_i, af_omega_i)
-            k_i = soln_l['phi_l'] / soln_v['phi_v']
+            soln_v = phi(t, p, y_i, tc_i, pc_i, af_omega_i, 'v')
+            k_i = soln_l['phi'] / soln_v['phi']
             sum_ki_xi = sum(k_i * x_i)
             # calculate y
             y_i = k_i * x_i / sum_ki_xi
@@ -577,16 +633,20 @@ def bubl_p(t, p, x_i, y_i, tc_i, pc_i, af_omega_i, max_it, tol=tol):
                 # secant needs two valid points p, sum_ki_xi
                 p_k_minus_1 = p
                 sum_ki_xi_k_minus_1 = sum_ki_xi
-                p = 0.9 * p
+                if sum_ki_xi < 1:
+                    p = 0.9 * p
+                else:
+                    #p = 1.1 * p
+                    p = 0.9 * p
             else:
                 inv_slope = (p - p_k_minus_1) / (- sum_ki_xi + sum_ki_xi_k_minus_1)
                 p_k_minus_1 = p
                 sum_ki_xi_k_minus_1 = sum_ki_xi
                 p = p - (1 - sum_ki_xi) * inv_slope
-            if p < 0:
+            if p < 0 or isnan(p) or isinf(p):
                 success = False
                 break
-            soln_l = phi_l(t, p, x_i, tc_i, pc_i, af_omega_i)
+            soln_l = phi(t, p, x_i, tc_i, pc_i, af_omega_i, 'l')
 
     soln = dict()
     for item in ['soln_l', 'soln_v', 'k_i', 'y_i', 'p', 'success']:
@@ -620,24 +680,32 @@ def p_for_3_real_roots(t, p, x_i, tc_i, pc_i, af_omega_i, max_it, tol=tol):
                  q * beta ** 2)
         disc = 1/27 * (- 1 / 3 * a1**2 + a2)**3 + \
                1 / 4 * (2 / 27 * a1**3 - 1 / 3 * a1 * a2 + a3)**2
-        if i == 0:
-            # secant needs 2 valid sets
-            p_old = p
-            disc_old = disc
-            p = 0.9 * p
-        else:
-            inv_slope = (p - p_old) / (disc - disc_old)
-            disc_old = disc
-            p_old = p
-            p = p_old - inv_slope * disc
-            if disc < 0:
-                break
-    return min(p, p_old)
+        da1_dp = 1 / p * beta * (epsilon + sigma - 1)
+        da2_dp = 1 / p * (q * beta + 2 * epsilon * sigma * beta ** 2 \
+                          - beta * (epsilon + sigma) * (1 + 2 * beta))
+        da3_dp = 1 / p * (-(epsilon * sigma * beta ** 2 * (2 + 3 * beta) +
+                            2 * q * beta ** 2))
+        disc = 1 / 27 * (- 1 / 3 * a1 ** 2 + a2) ** 3 + \
+               1 / 4 * (2 / 27 * a1 ** 3 - 1 / 3 * a1 * a2 + a3) ** 2
+        ddisc_dp = 1 / 9 * (- 1 / 3 * a1 ** 2 + a2) ** 2 * (
+                -2 / 3 * a1 * da1_dp + da2_dp) + \
+                   1 / 2 * (2 / 27 * a1 ** 3 - 1 / 3 * a1 * a2 + a3) * (
+                           2 / 9 * a1 ** 2 * da1_dp
+                           - 1 / 3 * (a1 * da2_dp + a2 * da1_dp) + da3_dp)
+
+        f = disc + tol
+        df_dp = ddisc_dp
+        inv_slope = 1 / df_dp
+        p_old = p
+        p = p_old - inv_slope * f
+        if disc <= -tol:
+            break
+    return p
 
 def isot_flash(t, p, x_i, y_i, z_i, tc_i, pc_i, af_omega_i):
-    soln_l = phi_l(t, p, x_i, tc_i, pc_i, af_omega_i)
-    soln_v = phi_v(t, p, y_i, tc_i, pc_i, af_omega_i)
-    k_i = soln_l['phi_l'] / soln_v['phi_v']
+    soln_l = phi(t, p, x_i, tc_i, pc_i, af_omega_i, 'l')
+    soln_v = phi(t, p, y_i, tc_i, pc_i, af_omega_i, 'v')
+    k_i = soln_l['phi'] / soln_v['phi']
     soln_v_f = optimize.root(
         lambda v_f: sum(
             z_i * (1 - k_i) / (1 + v_f * (k_i - 1))),
@@ -743,10 +811,10 @@ def beispiel_svn_14_2():
     x = linspace(0.0, 0.8, 50)
     y = empty_like(x)
     p_v = empty_like(x)
-    p_v0 = 1.0
+    p_v0 = 30.0
     for i in range(len(x)):
         x_i = array([x[i], 1 - x[i]])
-        soln = bubl_p(310.92, 30, x_i, y_i, tc_i, pc_i, af_omega_i, max_it)
+        soln = bubl_p(310.92, p_v0, x_i, y_i, tc_i, pc_i, af_omega_i, max_it)
         p_v[i] = soln['p']
         y[i] = soln['y_i'][0]
         if soln['success']:
