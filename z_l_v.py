@@ -358,42 +358,40 @@ def p_sat(t, af_omega, tc, pc):
     # Das Levenberg-Marquardt Algorithmus weist wenigere Sprunge auf.
     return optimize.root(fs, 1., method='lm')
 
-def p_i_sat(t, p0, x_i, tc_i, pc_i, af_omega_i, max_it, tol=tol):
-    p_sat_list = zeros(len(x_i))
-    for i in range(len(x_i)):
-        tr_i = t / tc_i[i]
-        a_i = psi * alpha(tr_i, af_omega_i[i]) * r ** 2 * tc_i[i] ** 2 / pc_i[i]
-        b_i = omega * r * tc_i[i] / pc_i[i]
-        p = p0
-        for j in range(max_it):
-            beta = b_i * p / (r * t)
-            q = a_i / (b_i * r * t)
-            a1 = beta * (epsilon + sigma) - beta - 1
-            a2 = q * beta + epsilon * sigma * beta ** 2 \
-                 - beta * (epsilon + sigma) * (1 + beta)
-            a3 = -(epsilon * sigma * beta ** 2 * (1 + beta) +
-                   q * beta ** 2)
-            da1_dp = 1 / p * beta * (epsilon + sigma - 1)
-            da2_dp = 1 / p * (q * beta + 2 * epsilon * sigma * beta**2 \
-                    - beta * (epsilon + sigma) * (1 + 2 * beta))
-            da3_dp = 1 / p * (-(epsilon * sigma * beta**2 * (2 + 3 * beta) +
-                    2 * q * beta**2))
-            disc = 1 / 27 * (- 1 / 3 * a1 ** 2 + a2) ** 3 + \
-                   1 / 4 * (2 / 27 * a1 ** 3 - 1 / 3 * a1 * a2 + a3) ** 2
-            ddisc_dp = 1 / 9 * (- 1 / 3 * a1 ** 2 + a2) ** 2 * (
-                    -2 / 3 * a1 * da1_dp + da2_dp) + \
-                    1 / 2 * (2 / 27 * a1 ** 3 - 1 / 3 * a1 * a2 + a3) * (
-                        2 / 9 * a1**2 * da1_dp
-                        - 1 / 3 * (a1 * da2_dp + a2 * da1_dp) + da3_dp)
-            f = disc + tol
-            df_dp = ddisc_dp
-            inv_slope = 1 / df_dp
-            p_old = p
-            p = p_old - inv_slope * f
-            if disc <= -tol:
-                break
-        p_sat_list[i] = p
-    return p_sat_list
+def p_i_sat(t, p0, tc_i, pc_i, af_omega_i, max_it, tol=tol):
+    p_sat_list = zeros(tc_i.size)
+    tr_i = t / tc_i
+    a_i = psi * alpha(tr_i, af_omega_i) * r ** 2 * tc_i ** 2 / pc_i
+    b_i = omega * r * tc_i / pc_i
+    p = p0 * ones(tc_i.size)
+    for j in range(max_it):
+        beta = b_i * p / (r * t)
+        q = a_i / (b_i * r * t)
+        a1 = beta * (epsilon + sigma) - beta - 1
+        a2 = q * beta + epsilon * sigma * beta ** 2 \
+             - beta * (epsilon + sigma) * (1 + beta)
+        a3 = -(epsilon * sigma * beta ** 2 * (1 + beta) +
+               q * beta ** 2)
+        da1_dp = 1 / p * beta * (epsilon + sigma - 1)
+        da2_dp = 1 / p * (q * beta + 2 * epsilon * sigma * beta**2 \
+                - beta * (epsilon + sigma) * (1 + 2 * beta))
+        da3_dp = 1 / p * (-(epsilon * sigma * beta**2 * (2 + 3 * beta) +
+                2 * q * beta**2))
+        disc = 1 / 27 * (- 1 / 3 * a1 ** 2 + a2) ** 3 + \
+               1 / 4 * (2 / 27 * a1 ** 3 - 1 / 3 * a1 * a2 + a3) ** 2
+        ddisc_dp = 1 / 9 * (- 1 / 3 * a1 ** 2 + a2) ** 2 * (
+                -2 / 3 * a1 * da1_dp + da2_dp) + \
+                1 / 2 * (2 / 27 * a1 ** 3 - 1 / 3 * a1 * a2 + a3) * (
+                    2 / 9 * a1**2 * da1_dp
+                    - 1 / 3 * (a1 * da2_dp + a2 * da1_dp) + da3_dp)
+        f = disc + tol
+        df_dp = ddisc_dp
+        inv_slope = 1 / df_dp
+        p_old = p
+        p = p_old - inv_slope * f
+        if all(disc <= -tol):
+            break
+    return p
 
 def z_non_sat(t, p, x_i, tc_i, pc_i, af_omega_i):
     tr_i = t / tc_i
@@ -483,6 +481,7 @@ def phi_pure(t, p, tc_i, pc_i, af_omega_i, lv, max_it, tol=tol):
     phi_pure_list = zeros(len(tc_i))
     stop = False
     for i in range(len(tc_i)):
+        j = 0
         while not stop and j < max_it:
             tr_i = t / tc_i[i]
             a_i = psi * alpha(tr_i, af_omega_i[i]) * r ** 2 * tc_i[i] ** 2 / pc_i[i]
@@ -503,12 +502,8 @@ def phi_pure(t, p, tc_i, pc_i, af_omega_i, lv, max_it, tol=tol):
             if disc <= 0:
                 # disc < 0: 3 real roots, all distinct: case III
                 # disc = 0: 3 real roots, two equal: case III also
-                z_l = min(roots)
-                z_v = max(roots)
-                if lv == 'l':
-                    z = z_l
-                elif lv == 'v':
-                    z = z_v
+                z_l = min(re_roots)
+                z_v = max(re_roots)
                 if (z_v >= 1/3 and z_l >= 1.3) or z_v / z_l <= 1.2:
                     # action a) reduce pressure and continue
                     p = 0.9 * p
@@ -517,25 +512,43 @@ def phi_pure(t, p, tc_i, pc_i, af_omega_i, lv, max_it, tol=tol):
             elif disc == 0 and sqrt(sum((re_roots - sum(re_roots) / 3) ** 2)) < tol:
                 # 3 real roots: all equal: case I, V
                 # action c) produce artificial lv density and continue
-                p = p_for_3_real_roots(t, p, tc_i, pc_i, af_omega_i, lv, max_it, tol)
-                z = sum(roots) / 3
+                p = p_i_sat(t, p, tc_i[i], pc_i[i], af_omega_i[i], max_it, tol).item()
+                z = sum(re_roots) / 3
                 if z <= 1/3:
-                    # case V, action d) conserve liquid density value
+                    # case V, action d) conserve liquid density value and continue
                     z_l_old = z
                     p_old = p
                 elif z > 1/3:
                     # case I, action d) conserve liquid density value
                     z_v = z
                     z_l = z_l_old * p / p_old
-                    if lv == 'l':
-                        z = z_l
-                    elif lv == 'v':
-                        z = z_v
                     stop = True
             elif disc > 0:
-                # 2 complex, 1 real root: case IV, II
-                # action b) artificial density values
-                pass
+                # 2 complex, 1 real root: case IV, II or I
+                p_term = 1 / 3 * (-1 / 3 * a1**2 + a2)
+                if p_term < 0:
+                    # case IV or II
+                    # action b) artificial density values
+                    z_l = -a1 / 3 - sqrt(-p_term)
+                    z_v = -a1 / 3 + sqrt(-p_term)
+                    stop = True
+                else:
+                    # case V or I
+                    p = p_i_sat(t, p, tc_i[i], pc_i[i], af_omega_i[i], max_it, tol).item()
+                    z = roots[0][0]  # real root likely like case V
+                    if z <= 1 / 3:
+                        # case V, action d) conserve liquid density value and continue
+                        z_l_old = z
+                        p_old = p
+                    elif z > 1 / 3:
+                        # case I, action d) conserve liquid density value
+                        z_v = z
+                        z_l = z_l_old * p / p_old
+                        stop = True
+            if lv == 'l':
+                z = z_l
+            elif lv == 'v':
+                z = z_v
         i_int = 1 / (sigma - epsilon) * log((z + sigma * beta) / (z + epsilon * beta))
         ln_phi = z - 1 - log(z - beta) - q * i_int
         phi_pure_list[i] = exp(ln_phi)
@@ -598,7 +611,8 @@ def bubl_p(t, p, x_i, y_i, tc_i, pc_i, af_omega_i, max_it, tol=tol):
     # read t, x, estimate p, y
     p = p_for_3_real_roots(t, p, x_i, tc_i, pc_i, af_omega_i, max_it, tol)
     soln_l = phi(t, p, x_i, tc_i, pc_i, af_omega_i, 'l')
-    k_i = soln_l['phi']  # est. phi_v ~ 1
+    phi_v_pure = phi_pure(t, p, tc_i, pc_i, af_omega_i, 'v', max_it, tol)
+    k_i = soln_l['phi'] / phi_v_pure  # est. phi_v ~ 1
     sum_ki_xi = sum(k_i * x_i)
     y_i = k_i * x_i / sum_ki_xi
     for j in range(max_it):
@@ -607,7 +621,7 @@ def bubl_p(t, p, x_i, y_i, tc_i, pc_i, af_omega_i, max_it, tol=tol):
             # loop until y-convergence
             if any(x_i == 1):
                 # single component p_sat
-                p_sat_all = p_i_sat(t, p, x_i, tc_i, pc_i, af_omega_i, max_it, tol)
+                p_sat_all = p_i_sat(t, p, tc_i, pc_i, af_omega_i, max_it, tol)
                 pass
             if all(k_i == 1):
                 # trivial solution
