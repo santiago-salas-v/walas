@@ -483,6 +483,7 @@ def phi_pure(t, p, tc_i, pc_i, af_omega_i, lv, max_it, tol=tol):
     for i in range(len(tc_i)):
         j = 0
         while not stop and j < max_it:
+            j += 1
             tr_i = t / tc_i[i]
             a_i = psi * alpha(tr_i, af_omega_i[i]) * r ** 2 * tc_i[i] ** 2 / pc_i[i]
             b_i = omega * r * tc_i[i] / pc_i[i]
@@ -493,10 +494,9 @@ def phi_pure(t, p, tc_i, pc_i, af_omega_i, lv, max_it, tol=tol):
                  - beta * (epsilon + sigma) * (1 + beta)
             a3 = -(epsilon * sigma * beta ** 2 * (1 + beta) +
                    q * beta ** 2)
-            # disc = 1 / 27 * (- 1 / 3 * a1 ** 2 + a2) ** 3 + \
-            #        1 / 4 * (2 / 27 * a1 ** 3 - 1 / 3 * a1 * a2 + a3) ** 2
             soln = solve_cubic([1, a1, a2, a3])
             roots, disc = soln['roots'], soln['disc']
+            p_term, q_term = 1/3 * soln['p'], soln['q']
             re_roots = array([roots[0][0], roots[1][0], roots[2][0]])
 
             if disc <= 0:
@@ -504,36 +504,24 @@ def phi_pure(t, p, tc_i, pc_i, af_omega_i, lv, max_it, tol=tol):
                 # disc = 0: 3 real roots, two equal: case III also
                 z_l = min(re_roots)
                 z_v = max(re_roots)
-                if (z_v >= 1/3 and z_l >= 1.3) or z_v / z_l <= 1.2:
-                    # action a) reduce pressure and continue
+                if (z_v >= 1/3 and z_l >= 1/3) or z_v / z_l <= 1.2 or p_term == 0:
+                    # p_term = 0: 3 real roots: all equal: neither I nor V (disc = 0 too)
+                    # or max(re_roots)/min(re_roots) too close to 1
+                    # action a) reduce pressure, to "separate z values", and continue
                     p = 0.9 * p
                 else:
                     stop = True
-            elif disc == 0 and sqrt(sum((re_roots - sum(re_roots) / 3) ** 2)) < tol:
-                # 3 real roots: all equal: case I, V
-                # action c) produce artificial lv density and continue
-                p = p_i_sat(t, p, tc_i[i], pc_i[i], af_omega_i[i], max_it, tol).item()
-                z = sum(re_roots) / 3
-                if z <= 1/3:
-                    # case V, action d) conserve liquid density value and continue
-                    z_l_old = z
-                    p_old = p
-                elif z > 1/3:
-                    # case I, action d) conserve liquid density value
-                    z_v = z
-                    z_l = z_l_old * p / p_old
-                    stop = True
             elif disc > 0:
-                # 2 complex, 1 real root: case IV, II or I
-                p_term = 1 / 3 * (-1 / 3 * a1**2 + a2)
+                # 2 complex, 1 real root: case IV, II, I or V
                 if p_term < 0:
                     # case IV or II
                     # action b) artificial density values
-                    z_l = -a1 / 3 - sqrt(-p_term)
-                    z_v = -a1 / 3 + sqrt(-p_term)
+                    z_l = -a1 / 3 - sqrt(-1 / 3 * p_term)
+                    z_v = -a1 / 3 + sqrt(-1 / 3 * p_term)
                     stop = True
-                else:
+                elif p_term > 0:
                     # case V or I
+                    # action d) conserve liquid density value
                     p = p_i_sat(t, p, tc_i[i], pc_i[i], af_omega_i[i], max_it, tol).item()
                     z = roots[0][0]  # real root likely like case V
                     if z <= 1 / 3:
