@@ -389,9 +389,10 @@ def p_i_sat(t, p0, tc_i, pc_i, af_omega_i, max_it, tol=tol):
         inv_slope = 1 / df_dp
         p_old = p
         p = p_old - inv_slope * f
-        if all(disc <= -tol):
+        success = disc <= -tol
+        if all(success):
             break
-    return p
+    return p, success
 
 def z_non_sat(t, p, x_i, tc_i, pc_i, af_omega_i):
     tr_i = t / tc_i
@@ -522,7 +523,8 @@ def phi_pure(t, p, tc_i, pc_i, af_omega_i, lv, max_it, tol=tol):
                 elif p_term > 0:
                     # case V or I
                     # action d) conserve liquid density value
-                    p = p_i_sat(t, p, tc_i[i], pc_i[i], af_omega_i[i], max_it, tol).item()
+                    p, _ = p_i_sat(t, p, tc_i[i], pc_i[i], af_omega_i[i], max_it, tol)
+                    p = p.item()
                     z = roots[0][0]  # real root likely like case V
                     if z <= 1 / 3:
                         # case V, action d) conserve liquid density value and continue
@@ -595,21 +597,22 @@ def siedepunkt(t, p, x_i, y_i, tc_i, pc_i, af_omega_i, ant_a, ant_b, ant_c, max_
         soln[item] = locals().get(item)
     return soln
 
-def bubl_p(t, p, x_i, y_i, tc_i, pc_i, af_omega_i, max_it, tol=tol):
+def bubl_p(t, p0, x_i, tc_i, pc_i, af_omega_i, max_it, tol=tol):
     # read t, x, estimate p, y
-    p = p_for_3_real_roots(t, p, x_i, tc_i, pc_i, af_omega_i, max_it, tol)
-    soln_l = phi(t, p, x_i, tc_i, pc_i, af_omega_i, 'l')
-    phi_v_pure = phi_pure(t, p, tc_i, pc_i, af_omega_i, 'v', max_it, tol)
-    k_i = soln_l['phi'] / phi_v_pure  # est. phi_v ~ 1
+    p_sat_all, _ = p_i_sat(t, p0, tc_i, pc_i, af_omega_i, max_it, tol)
+    p = sum(p_sat_all * x_i)
+    phi_l = phi_pure(t, p, tc_i, pc_i, af_omega_i, 'l', max_it, tol)
+    phi_v = phi_pure(t, p, tc_i, pc_i, af_omega_i, 'v', max_it, tol)
+    k_i = phi_l / phi_v  # est. phi_v ~ 1
     sum_ki_xi = sum(k_i * x_i)
     y_i = k_i * x_i / sum_ki_xi
+    success = True
     for j in range(max_it):
         # loop until sum(Ki xi) = 1
         for i in range(max_it):
             # loop until y-convergence
             if any(x_i == 1):
                 # single component p_sat
-                p_sat_all = p_i_sat(t, p, tc_i, pc_i, af_omega_i, max_it, tol)
                 pass
             if all(k_i == 1):
                 # trivial solution
@@ -619,8 +622,8 @@ def bubl_p(t, p, x_i, y_i, tc_i, pc_i, af_omega_i, max_it, tol=tol):
 
             sum_ki_xi_old = sum_ki_xi
             # calculate k
-            soln_v = phi(t, p, y_i, tc_i, pc_i, af_omega_i, 'v')
-            k_i = soln_l['phi'] / soln_v['phi']
+            phi_v = phi(t, p, y_i, tc_i, pc_i, af_omega_i, 'v')['phi']
+            k_i = phi_l / phi_v
             sum_ki_xi = sum(k_i * x_i)
             # calculate y
             y_i = k_i * x_i / sum_ki_xi
@@ -638,18 +641,28 @@ def bubl_p(t, p, x_i, y_i, tc_i, pc_i, af_omega_i, max_it, tol=tol):
                 if sum_ki_xi < 1:
                     p = 0.9 * p
                 else:
-                    #p = 1.1 * p
-                    p = 0.9 * p
+                    p = 1.1 * p
+
             else:
                 inv_slope = (p - p_k_minus_1) / (- sum_ki_xi + sum_ki_xi_k_minus_1)
                 p_k_minus_1 = p
                 sum_ki_xi_k_minus_1 = sum_ki_xi
                 p = p - (1 - sum_ki_xi) * inv_slope
-            if p < 0 or isnan(p) or isinf(p):
+                if p < 0:
+                    # keep approaching p
+                    p = p_k_minus_1
+                    sum_ki_xi = sum_ki_xi_k_minus_1
+                    if sum_ki_xi < 1:
+                        p = 0.9 * p
+                    else:
+                        p = 1.1 * p
+            if isnan(p) or isinf(p):
+                p = p_k_minus_1
                 success = False
                 break
-            soln_l = phi(t, p, x_i, tc_i, pc_i, af_omega_i, 'l')
-
+            phi_l = phi(t, p, x_i, tc_i, pc_i, af_omega_i, 'l')['phi']
+    if j == max_it - 1 or i == max_it - 1:
+        success = False
     soln = dict()
     for item in ['soln_l', 'soln_v', 'k_i', 'y_i', 'p', 'success']:
         soln[item] = locals().get(item)
@@ -808,7 +821,7 @@ def beispiel_svn_14_2():
         pc_i,
         af_omega_i, ant_a, ant_b, ant_c,
         max_it)['y_i']
-    print(bubl_p(310.92, 30, x_i, y_i, tc_i, pc_i, af_omega_i, max_it))
+    print(bubl_p(310.92, 30, x_i, tc_i, pc_i, af_omega_i, max_it))
 
     x = linspace(0.0, 0.8, 50)
     y = empty_like(x)
@@ -816,7 +829,7 @@ def beispiel_svn_14_2():
     p_v0 = 30.0
     for i in range(len(x)):
         x_i = array([x[i], 1 - x[i]])
-        soln = bubl_p(310.92, p_v0, x_i, y_i, tc_i, pc_i, af_omega_i, max_it)
+        soln = bubl_p(310.92, p_v0, x_i, tc_i, pc_i, af_omega_i, max_it)
         p_v[i] = soln['p']
         y[i] = soln['y_i'][0]
         if soln['success']:
