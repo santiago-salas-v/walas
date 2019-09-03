@@ -1,7 +1,9 @@
 from poly_3_4 import solve_cubic
+from poly_n import zroots
 from numpy import array, append, zeros, abs, ones, empty_like, empty
 from numpy import sqrt, empty, outer, sum, log, exp, multiply, diag
 from numpy import linspace, dot, nan, finfo, isnan, isinf
+from numpy.random import randint
 from scipy import optimize
 from matplotlib import pyplot as plt
 import sys
@@ -483,7 +485,7 @@ def phi_pure(t, p, tc_i, pc_i, af_omega_i, lv, max_it, tol=tol):
     stop = False
     for i in range(len(tc_i)):
         j = 0
-        while not stop and j < max_it:
+        while not stop and j in range(max_it):
             j += 1
             tr_i = t / tc_i[i]
             a_i = psi * alpha(tr_i, af_omega_i[i]) * r ** 2 * tc_i[i] ** 2 / pc_i[i]
@@ -597,10 +599,8 @@ def siedepunkt(t, p, x_i, y_i, tc_i, pc_i, af_omega_i, ant_a, ant_b, ant_c, max_
         soln[item] = locals().get(item)
     return soln
 
-def bubl_p(t, p0, x_i, tc_i, pc_i, af_omega_i, max_it, tol=tol):
+def bubl_p(t, p, x_i, tc_i, pc_i, af_omega_i, max_it, tol=tol):
     # read t, x, estimate p, y
-    p_sat_all, _ = p_i_sat(t, p0, tc_i, pc_i, af_omega_i, max_it, tol)
-    p = sum(p_sat_all * x_i)
     phi_l = phi_pure(t, p, tc_i, pc_i, af_omega_i, 'l', max_it, tol)
     phi_v = phi_pure(t, p, tc_i, pc_i, af_omega_i, 'v', max_it, tol)
     k_i = phi_l / phi_v  # est. phi_v ~ 1
@@ -611,15 +611,6 @@ def bubl_p(t, p0, x_i, tc_i, pc_i, af_omega_i, max_it, tol=tol):
         # loop until sum(Ki xi) = 1
         for i in range(max_it):
             # loop until y-convergence
-            if any(x_i == 1):
-                # single component p_sat
-                pass
-            if all(k_i == 1):
-                # trivial solution
-                # find p such that 3 real roots disc: (p/3)^3+(q/2)^2 < 0
-                p = p_for_3_real_roots(t, p, x_i, tc_i, pc_i, af_omega_i, max_it, tol)
-                soln_l = phi(t, p, x_i, tc_i, pc_i, af_omega_i, 'l')
-
             sum_ki_xi_old = sum_ki_xi
             # calculate k
             phi_v = phi(t, p, y_i, tc_i, pc_i, af_omega_i, 'v')['phi']
@@ -714,6 +705,147 @@ def p_for_3_real_roots(t, p, x_i, tc_i, pc_i, af_omega_i, max_it, tol=tol):
         p_old = p
         p = p_old - inv_slope * f
         if disc <= -tol:
+            break
+    return p
+
+def p_est(t, p, x_i, tc_i, pc_i, af_omega_i, max_it, tol=tol):
+    tr_i = t / tc_i
+    a_i = psi * alpha(tr_i, af_omega_i) * r ** 2 * tc_i ** 2 / pc_i
+    b_i = omega * r * tc_i / pc_i
+    q_i = a_i / (b_i * r * t)
+    a_ij = sqrt(outer(a_i, a_i))
+
+    # Variablen, die von der Flüssigkeit-Zusammensetzung abhängig sind
+    b = sum(x_i * b_i)
+    a = x_i.dot(a_ij).dot(x_i)
+
+    for i in range(max_it):
+        beta_i = b_i * p / (r * t)
+        beta = b * p / (r * t)
+        q = a / (b * r * t)
+        a_mp_i = -a + 2 * a_ij.dot(x_i)  # partielles molares a_i
+        b_mp_i = b_i  # partielles molares b_i
+        q_mp_i = q * (1 + a_mp_i / a - b_i / b)  # partielles molares q_i
+
+        rho_lim = 1 / b
+        rho_small = 0.0001 * rho_lim
+        v = 1 / rho_small
+        dp_dv_at_rho_small = -r * t / (v - b) ** 2 + a / ((v + epsilon * b) * (v + sigma * b)) * (
+                1 / (v + epsilon * b) + 1 / (v + sigma * b)
+        )
+        d2p_dv2_at_rho_small = 2 * r * t / (v - b) ** 3 - a / ((v + epsilon * b) * (v + sigma * b)) * (
+                1 / (v + epsilon * b) ** 2 + 1 / (v + sigma * b) ** 2
+        ) - a / ((v + epsilon * b) * (v + sigma * b)) ** 2 * (
+                                       1 + (v + epsilon * b) / (v + sigma * b) + 1 + (v + sigma * b) / (v + epsilon * b)
+                               )
+
+        a1 = beta * (epsilon + sigma) - beta - 1
+        a2 = q * beta + epsilon * sigma * beta ** 2 \
+             - beta * (epsilon + sigma) * (1 + beta)
+        a3 = -(epsilon * sigma * beta ** 2 * (1 + beta) +
+               q * beta ** 2)
+
+        p0 = 2 * a * b**5 * epsilon**2 + 2 * a * b**5 * epsilon * sigma + \
+            2 * a * b**5 * sigma**2 + 2 * b**6 * epsilon**3 * r * t * sigma**3
+        p1 = -3 * a * b**4 * epsilon**2 - 3 * a * b**4 * epsilon * sigma + \
+             3 * a * b**4 * epsilon - 3 * a * b**4 * sigma**2 + \
+             3 * a * b**4 * sigma + 3 * b**5 * epsilon**3 * r * t * sigma**2 + \
+             3 * b**5 * epsilon**3 * r * t * sigma**2 + \
+             3 * b**5 * epsilon**2 * r * t * sigma**3
+        p2 = 6 * a * b**3 * epsilon**2 + 6 * a * b**3 * epsilon * sigma - \
+            18 * a * b**3 * epsilon + 6 * a * b**3 * sigma**2 - \
+            18 * a * b**3 * sigma + 6 * a * b**3 + \
+             6 * b**4 * epsilon**3 * r * t * sigma + \
+            18 * b**4 * epsilon**2 * r * t * sigma**2 + \
+             6 * b**4 * epsilon * r * t * sigma**3
+        p3 = -2 * a * b**2 * epsilon**2 - 2 * a * b**2 * epsilon * sigma + \
+            18 * a * b**2 * epsilon - 2 * a * b**2 * sigma**2 + \
+            18 * a * b**2 * sigma - 18 * a * b**2 + \
+             2 * b**3 * epsilon**3 * r * t + \
+            18 * b**3 * epsilon**2 * r * t * sigma + \
+            18 * b**3 * epsilon * r * t * sigma**2 + 2 * b**3 * r * t * sigma**3
+        p4 = -6 * a * b * epsilon - 6 * a * b * sigma + 18 * a * b + \
+             6 * b**2 * epsilon**2 * r * t + \
+            18 * b**2 * epsilon * r * t * sigma + 6 * b**2 * r * t * sigma**2
+        p5 = -6 * a + 6 * b * epsilon * r * t + 6 * b * r * t * sigma
+        p6 = 2 * r * t
+
+        v_inf_roots = zroots([p0, p1, p2, p3, p4, p5, p6])
+
+        v = v_inf_roots[v_inf_roots.imag == 0].real
+        dp_dv = -r * t / (v - b) ** 2 + a / ((v + epsilon * b) * (v + sigma * b)) * (
+                1 / (v + epsilon * b) + 1 / (v + sigma * b)
+        )
+        d2p_dv2 = 2 * r * t / (v - b) ** 3 - a / ((v + epsilon * b) * (v + sigma * b)) * (
+                1 / (v + epsilon * b) ** 2 + 1 / (v + sigma * b) ** 2
+        ) - a / ((v + epsilon * b) * (v + sigma * b)) ** 2 * (
+                          1 + (v + epsilon * b) / (v + sigma * b) + 1 + (v + sigma * b) / (v + epsilon * b)
+                  )
+        if len(v) == 2 and all(dp_dv < 0):
+            # above pseudocritical temperature
+            v_inf = v[dp_dv == max(dp_dv)].item()
+            d2p_dv2 = d2p_dv2[dp_dv == max(dp_dv)].item()
+            dp_dv = dp_dv[dp_dv == max(dp_dv)].item()
+        elif len(v) == 0:
+            # above Boyle-temperature
+            pass
+        elif len(v) == 1:
+            v_inf = v.item()
+            d2p_dv2 = d2p_dv2.item()
+            dp_dv = dp_dv.item()
+        elif len(v) == 2:
+            v_inf = v[dp_dv>0].item()
+            d2p_dv2 = d2p_dv2[dp_dv > 0].item()
+            dp_dv = dp_dv[dp_dv > 0].item()
+
+        p_rho_inf = r * t / (v_inf - b) - a / ((v_inf + epsilon * b) * (v_inf + sigma * b))
+
+        soln = solve_cubic([1, a1, a2, a3])
+        roots, disc = soln['roots'], soln['disc']
+        p_term, q_term = 1 / 3 * soln['p'], soln['q']
+        re_roots = array([roots[0][0], roots[1][0], roots[2][0]])
+
+        # supercritical: inflection point.
+        # subcritical: condition for 3 real roots.
+        if disc <= 0:
+            # disc < 0: 3 real roots, all distinct: case III
+            # disc = 0: 3 real roots, two equal: case III also
+            z_l = min(re_roots)
+            z_v = max(re_roots)
+            if (z_v >= 1 / 3 and z_l >= 1 / 3) or z_v / z_l <= 1.2 or p_term == 0:
+                # p_term = 0: 3 real roots: all equal: neither I nor V (disc = 0 too)
+                # or max(re_roots)/min(re_roots) too close to 1
+                # action a) reduce pressure, to "separate z values", and continue
+                p = 0.9 * p
+            else:
+                stop = True
+        elif disc > 0:
+            # 2 complex, 1 real root: case IV, II, I or V
+            if p_term < 0:
+                # case IV or II
+                # action b) artificial density values
+                z_l = -a1 / 3 - sqrt(-1 / 3 * p_term)
+                z_v = -a1 / 3 + sqrt(-1 / 3 * p_term)
+                stop = True
+            elif p_term > 0:
+                # case V or I
+                # action d) conserve liquid density value
+                p, _ = p_i_sat(t, p, tc_i[i], pc_i[i], af_omega_i[i], max_it, tol)
+                p = p.item()
+                z = roots[0][0]  # real root likely like case V
+                if z <= 1 / 3:
+                    # case V, action d) conserve liquid density value and continue
+                    z_l_old = z
+                    p_old = p
+                elif z > 1 / 3:
+                    # case I, action d) conserve liquid density value
+                    z_v = z
+                    z_l = z_l_old * p / p_old
+                    stop = True
+
+
+
+        if abs((p - p_old)/p) <= -tol:
             break
     return p
 
@@ -821,12 +953,89 @@ def beispiel_svn_14_2():
         pc_i,
         af_omega_i, ant_a, ant_b, ant_c,
         max_it)['y_i']
-    print(bubl_p(310.92, 30, x_i, tc_i, pc_i, af_omega_i, max_it))
+    p_sat_all, _ = p_i_sat(310.92, 30, tc_i, pc_i, af_omega_i, max_it, tol)
+    p = sum(p_sat_all * x_i)
+    print(bubl_p(310.92, p, x_i, tc_i, pc_i, af_omega_i, max_it))
 
+    # plot fig 14.8
+    markers = plt.Line2D.filled_markers
+    p_range = linspace(0.1, 140, 300)
+    for x in linspace(0.0, 1.0, 10+1):
+        z_i = array([x, 1-x])
+        v_plot = []
+        p_plot = []
+        rho_plot = []
+        t = 310.92
+        for p in p_range:
+            tr_i = t / tc_i
+            a_i = psi * alpha(tr_i, af_omega_i) * r ** 2 * tc_i ** 2 / pc_i
+            b_i = omega * r * tc_i / pc_i
+            beta_i = b_i * p / (r * t)
+            q_i = a_i / (b_i * r * t)
+            a_ij = sqrt(outer(a_i, a_i))
+
+            # Variablen, die von der Flüssigkeit-Zusammensetzung abhängig sind
+            b = sum(z_i * b_i)
+            a = z_i.dot(a_ij).dot(z_i)
+            beta = b * p / (r * t)
+            q = a / (b * r * t)
+            a_mp_i = -a + 2 * a_ij.dot(z_i)  # partielles molares a_i
+            b_mp_i = b_i  # partielles molares b_i
+            q_mp_i = q * (1 + a_mp_i / a - b_i / b)  # partielles molares q_i
+
+            a1 = beta * (epsilon + sigma) - beta - 1
+            a2 = q * beta + epsilon * sigma * beta ** 2 \
+                 - beta * (epsilon + sigma) * (1 + beta)
+            a3 = -(epsilon * sigma * beta ** 2 * (1 + beta) +
+                   q * beta ** 2)
+
+            soln = solve_cubic([1, a1, a2, a3])
+            roots, disc = soln['roots'], soln['disc']
+            re_roots = array([roots[0][0], roots[1][0], roots[2][0]])
+
+            if disc <= 0 and all(re_roots >= 0):
+                # 3 real roots. smallest ist liq. largest is gas.
+                z_l = re_roots[0]
+                z_mid = re_roots[1]
+                z_v = re_roots[2]
+                v_l = z_l * r * t / p
+                v_mid = z_mid * r * t / p
+                v_v = z_v * r * t / p
+                p_plot += [p, p, p]
+                v_plot += [v_l, v_mid, v_v]
+                rho_plot += [1/v_l, 1/v_mid, 1/v_v]
+            elif disc > 0:
+                # one real root, 2 complex. First root is the real one.
+                z = re_roots[0]
+                v = z * r * t / abs(p)
+                p_plot += [p]
+                v_plot += [v]
+                rho_plot += [1/v]
+
+        plt.subplot(1, 2, 1)
+        plt.semilogx(v_plot, p_plot, markers[randint(0, len(markers))],
+                     label=r'$z_1={:g}, z_2={:g}$'.format(z_i[0], z_i[1]),
+                     fillstyle='none')
+        plt.subplot(1, 2, 2)
+        plt.semilogx(rho_plot, p_plot, markers[randint(0, len(markers))],
+                     label=r'$z_1={:g}, z_2={:g}$'.format(z_i[0], z_i[1]),
+                     fillstyle='none')
+        if x >= 0.6:
+            p_est(t, p, z_i, tc_i, pc_i, af_omega_i, max_it, tol)
+    plt.subplot(1, 2, 1)
+    plt.xlabel(r'$\frac{v}{m^3/mol}$')
+    plt.ylabel('p / bar')
+    plt.legend()
+    plt.subplot(1, 2, 2)
+    plt.xlabel(r'$\frac{rho}{mol / m^3}$')
+    plt.ylabel('p / bar')
+    plt.tight_layout()
+    plt.figure()
     x = linspace(0.0, 0.8, 50)
     y = empty_like(x)
     p_v = empty_like(x)
-    p_v0 = 30.0
+    p_sat_all, _ = p_i_sat(310.92, 30, tc_i, pc_i, af_omega_i, max_it, tol)
+    p_v0 = sum(p_sat_all * x_i)
     for i in range(len(x)):
         x_i = array([x[i], 1 - x[i]])
         soln = bubl_p(310.92, p_v0, x_i, tc_i, pc_i, af_omega_i, max_it)
@@ -834,7 +1043,13 @@ def beispiel_svn_14_2():
         y[i] = soln['y_i'][0]
         if soln['success']:
             p_v0 = p_v[i]
-    plt.plot(x, p_v, y, p_v)
+        else:
+            p = sum(p_sat_all * x_i)
+    plt.plot(x, p_v, label=r'$x_1(L)$')
+    plt.plot(y, p_v, label=r'$y_1(V)$')
+    plt.ylabel('p / bar')
+    plt.xlabel(r'$x_1 , y_1$')
+    plt.legend()
     plt.show()
 
 
