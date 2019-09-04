@@ -738,6 +738,9 @@ def p_est(t, p, x_i, tc_i, pc_i, af_omega_i, max_it, tol=tol):
                                    1 + (v + epsilon * b) / (v + sigma * b) + 1 + (v + sigma * b) / (v + epsilon * b)
                            )
 
+    dp_drho_at_rho_small = - 1/rho_small**2 * dp_dv_at_rho_small
+    d2p_drho_at_rho_small = 1/rho_small**4 * d2p_dv2_at_rho_small + dp_dv_at_rho_small * 2 / rho_small**3
+    
     if d2p_dv2_at_rho_small > 0:
         # no inflection point, curve is monotonic
         pass
@@ -951,36 +954,24 @@ def beispiel_svn_14_2():
             roots, disc = soln['roots'], soln['disc']
             re_roots = array([roots[0][0], roots[1][0], roots[2][0]])
 
-            a1_rho = a2 / a3 * (p / (r * t))
-            a2_rho = a1 / a3 * (p / (r * t))**2
-            a3_rho = 1 / a3 * (p / (r * t))**3
-
-            soln_rho = solve_cubic([1, a1_rho, a2_rho, a3_rho])
-            roots_rho, disc_rho = soln_rho['roots'], soln_rho['disc']
-            re_roots_rho = array([roots_rho[0][0], roots_rho[1][0], roots_rho[2][0]])
-
             if disc <= 0 and all(re_roots >= 0):
                 # 3 real roots. smallest ist liq. largest is gas.
                 z_l = re_roots[0]
                 z_mid = re_roots[1]
                 z_v = re_roots[2]
-                rho_l = re_roots_rho[0]
-                rho_mid = re_roots_rho[1]
-                rho_v = re_roots_rho[2]
                 v_l = z_l * r * t / p
                 v_mid = z_mid * r * t / p
                 v_v = z_v * r * t / p
                 p_plot += [p, p, p]
                 v_plot += [v_l, v_mid, v_v]
-                rho_plot += [rho_l, rho_mid, rho_v]
+                rho_plot += [1/v_l, 1/v_mid, 1/v_v]
             elif disc > 0:
                 # one real root, 2 complex. First root is the real one.
                 z = re_roots[0]
-                rho = re_roots_rho[0]
                 v = z * r * t / abs(p)
                 p_plot += [p]
                 v_plot += [v]
-                rho_plot += [rho]
+                rho_plot += [1/v]
 
         plt.subplot(1, 2, 1)
         plt.semilogx(v_plot, p_plot, markers[randint(0, len(markers))],
