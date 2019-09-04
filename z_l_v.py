@@ -1,4 +1,4 @@
-from poly_3_4 import solve_cubic
+from poly_3_4 import solve_cubic, solve_quartic
 from poly_n import zroots
 from numpy import array, append, zeros, abs, ones, empty_like, empty
 from numpy import sqrt, empty, outer, sum, log, exp, multiply, diag
@@ -177,21 +177,21 @@ class Eos:
                  q * beta ** 2)
 
         soln = solve_cubic([a1, a2, a3, a4])
-        z_roots = array(soln['roots'])
+        roots_z = array(soln['roots'])
         disc = soln['disc']
         
         if disc <= 0:
             # 2 phases Region
             # 3 real roots. smallest ist liq. largest is gas.
-            z_l = z_roots[-1][0]
-            z_v = z_roots[0][0]
+            z_l = roots_z[-1][0]
+            z_v = roots_z[0][0]
             phasen = 'L,V'
 
 
         elif disc > 0:
             # 1 phase region
             # one real root, 2 complex. First root is the real one.
-            z = z_roots[0][0]
+            z = roots_z[0][0]
             v = z * r * t / p
             dp_dt = r / (v - b) - da_dt * 1 / (
                     (v + epsilon * b)*(v + sigma * b)
@@ -718,40 +718,28 @@ def p_est(t, p, x_i, tc_i, pc_i, af_omega_i, max_it, tol=tol):
     # Variablen, die von der Flüssigkeit-Zusammensetzung abhängig sind
     b = sum(x_i * b_i)
     a = x_i.dot(a_ij).dot(x_i)
-
-    beta_i = b_i * p / (r * t)
-    beta = b * p / (r * t)
     q = a / (b * r * t)
-    a_mp_i = -a + 2 * a_ij.dot(x_i)  # partielles molares a_i
-    b_mp_i = b_i  # partielles molares b_i
-    q_mp_i = q * (1 + a_mp_i / a - b_i / b)  # partielles molares q_i
 
     rho_lim = 1 / b
-    rho_small = 0.0001 * rho_lim
-    v = 1 / rho_small
-    dp_dv_at_rho_small = -r * t / (v - b) ** 2 + a / ((v + epsilon * b) * (v + sigma * b)) * (
+    rho_lb = 0.0001 * rho_lim
+    v = 1 / rho_lb
+    dp_dv_at_rho_lb = -r * t / (v - b) ** 2 + a / ((v + epsilon * b) * (v + sigma * b)) * (
             1 / (v + epsilon * b) + 1 / (v + sigma * b)
     )
-    d2p_dv2_at_rho_small = 2 * r * t / (v - b) ** 3 - a / ((v + epsilon * b) * (v + sigma * b)) * (
+    d2p_dv2_at_rho_lb = 2 * r * t / (v - b) ** 3 - a / ((v + epsilon * b) * (v + sigma * b)) * (
             1 / (v + epsilon * b) ** 2 + 1 / (v + sigma * b) ** 2
     ) - a / ((v + epsilon * b) * (v + sigma * b)) ** 2 * (
                                    1 + (v + epsilon * b) / (v + sigma * b) + 1 + (v + sigma * b) / (v + epsilon * b)
                            )
 
-    dp_drho_at_rho_small = - 1/rho_small**2 * dp_dv_at_rho_small
-    d2p_drho_at_rho_small = 1/rho_small**4 * d2p_dv2_at_rho_small + dp_dv_at_rho_small * 2 / rho_small**3
+    dp_drho_at_rho_lb = - 1/rho_lb**2 * dp_dv_at_rho_lb
+    d2p_drho_at_rho_lb = 1/rho_lb**4 * d2p_dv2_at_rho_lb + dp_dv_at_rho_lb * 2 / rho_lb**3
     
-    if d2p_dv2_at_rho_small > 0:
+    if d2p_drho_at_rho_lb > 0:
         # no inflection point, curve is monotonic
         pass
     else:
         # find inflection point
-        a1 = beta * (epsilon + sigma) - beta - 1
-        a2 = q * beta + epsilon * sigma * beta ** 2 \
-             - beta * (epsilon + sigma) * (1 + beta)
-        a3 = -(epsilon * sigma * beta ** 2 * (1 + beta) +
-               q * beta ** 2)
-
         p0 = 2 * a * b ** 5 * epsilon ** 2 + 2 * a * b ** 5 * epsilon * sigma + \
              2 * a * b ** 5 * sigma ** 2 + 2 * b ** 6 * epsilon ** 3 * r * t * sigma ** 3
         p1 = -3 * a * b ** 4 * epsilon ** 2 - 3 * a * b ** 4 * epsilon * sigma + \
@@ -806,8 +794,57 @@ def p_est(t, p, x_i, tc_i, pc_i, af_omega_i, max_it, tol=tol):
             dp_dv = dp_dv[dp_dv > 0].item()
 
         p_rho_inf = r * t / (v_inf - b) - a / ((v_inf + epsilon * b) * (v_inf + sigma * b))
-            #if abs((p - p_old)/p) <= -tol:
-            #    break
+        z_inf = p * v_inf / (r * t)
+
+        beta = b * p_rho_inf / (r * t)
+
+        a1 = beta * (epsilon + sigma) - beta - 1
+        a2 = q * beta + epsilon * sigma * beta ** 2 \
+             - beta * (epsilon + sigma) * (1 + beta)
+        a3 = -(epsilon * sigma * beta ** 2 * (1 + beta) +
+               q * beta ** 2)
+
+        soln = solve_cubic([1, a1, a2, a3])
+        z_p_inf = array(soln['roots'])
+        v_p_inf = z_p_inf * r * t / p_rho_inf
+        z_l_p_inf = z_p_inf[-1][0]
+        z_v_p_inf = z_p_inf[0][0]
+        v_l_p_inf = v_p_inf[-1][0]
+        v_v_p_inf = v_p_inf[0][0]
+        #if abs((p - p_old)/p) <= -tol:
+        #    break
+
+        # find local min and max (extrema)
+        p0 = a*b**3*epsilon + a*b**3*sigma - b**4*epsilon**2*r*sigma**2*t
+        p1 = -2*a*b**2*epsilon - 2*a*b**2*sigma + \
+             2*a*b**2 - 2*b**3*epsilon**2*r*sigma*t - \
+             2*b**3*epsilon*r*sigma**2*t
+        p2 = a*b*epsilon + a*b*sigma - 4*a*b - b**2*epsilon**2*r*t - \
+             4*b**2*epsilon*r*sigma*t - b**2*r*sigma**2*t
+        p3 = 2*a - 2*b*epsilon*r*t - 2*b*r*sigma*t
+        p4 = -r*t
+
+        #v_roots = zroots([p0, p1, p2, p3, p4])
+        soln = solve_quartic([p4, p3, p2, p1, p0])
+        v_roots = array(soln['roots'])
+        re_v_roots = v_roots[v_roots[:, 1] == 0][:, 0]
+        v_ex = re_v_roots[re_v_roots > b]
+        v_l_ex = min(v_ex)
+        v_v_ex = max(v_ex)
+        z_l_ex = p * v_l_ex / (r * t)
+        z_v_ex = p * v_v_ex / (r * t)
+
+        p_min_l = r * t / (v_l_ex - b) - a / ((v_l_ex + epsilon * b) * (v_l_ex + sigma * b))
+        p_max_v = r * t / (v_v_ex - b) - a / ((v_v_ex + epsilon * b) * (v_v_ex + sigma * b))
+
+        if p <= p_min_l:
+            p = p_min_l
+        elif p >= p_max_v:
+            p = p_max_v
+    for item in ['p_inf', 'z_inf', 'v_inf', 'p_min_l', 'p_max_v',
+                 'z_l_ex', 'z_v_ex', 'v_l_ex', 'v_v_ex']:
+        soln[item] = locals().get(item)
+    return soln
     return p
 
 def isot_flash(t, p, x_i, y_i, z_i, tc_i, pc_i, af_omega_i):
@@ -921,11 +958,15 @@ def beispiel_svn_14_2():
     # plot fig 14.8
     markers = plt.Line2D.filled_markers
     p_range = linspace(0.1, 140, 300)
+    plot1 = plt.subplot2grid([2, 2], [1, 0], rowspan=1, colspan=1)
+    plot2 = plt.subplot2grid([2, 2], [1, 1], rowspan=1, colspan=1)
+    plot3 = plt.subplot2grid([2, 2], [0, 0], rowspan=1, colspan=2)
     for x in linspace(0.0, 1.0, 10+1):
         z_i = array([x, 1-x])
         v_plot = []
         p_plot = []
         rho_plot = []
+        z_plot = []
         t = 310.92
         for p in p_range:
             tr_i = t / tc_i
@@ -965,6 +1006,7 @@ def beispiel_svn_14_2():
                 p_plot += [p, p, p]
                 v_plot += [v_l, v_mid, v_v]
                 rho_plot += [1/v_l, 1/v_mid, 1/v_v]
+                z_plot += [z_l, z_mid, z_v]
             elif disc > 0:
                 # one real root, 2 complex. First root is the real one.
                 z = re_roots[0]
@@ -972,24 +1014,28 @@ def beispiel_svn_14_2():
                 p_plot += [p]
                 v_plot += [v]
                 rho_plot += [1/v]
+                z_plot += [z]
 
-        plt.subplot(1, 2, 1)
-        plt.semilogx(v_plot, p_plot, markers[randint(0, len(markers))],
+        plot1.axvline(b, linestyle='--')
+        plot2.axvline(1 / b, linestyle='--')
+        plot1.semilogx(v_plot, p_plot, markers[randint(0, len(markers))],
                      label=r'$z_1={:g}, z_2={:g}$'.format(z_i[0], z_i[1]),
                      fillstyle='none')
-        plt.subplot(1, 2, 2)
-        plt.plot(rho_plot, p_plot, markers[randint(0, len(markers))],
+        plot2.plot(rho_plot, p_plot, markers[randint(0, len(markers))],
                      label=r'$z_1={:g}, z_2={:g}$'.format(z_i[0], z_i[1]),
                      fillstyle='none')
+        plot3.plot(z_plot, p_plot, markers[randint(0, len(markers))],
+                 label=r'$z_1={:g}, z_2={:g}$'.format(z_i[0], z_i[1]),
+                 fillstyle='none')
         if x >= 0.5:
             p_est(t, p, z_i, tc_i, pc_i, af_omega_i, max_it, tol)
-    plt.subplot(1, 2, 1)
-    plt.xlabel(r'$\frac{v}{m^3/mol}$')
-    plt.ylabel('p / bar')
-    plt.legend()
-    plt.subplot(1, 2, 2)
-    plt.xlabel(r'$\frac{rho}{mol / m^3}$')
-    plt.ylabel('p / bar')
+    plot1.xlabel(r'$\frac{v}{m^3/mol}$')
+    plot1.ylabel('p / bar')
+    plot1.legend()
+    plot2.xlabel(r'$\frac{rho}{mol / m^3}$')
+    plot2.ylabel('p / bar')
+    plot3.xlabel(r'$Z$')
+    plot3.ylabel('p / bar')
     plt.tight_layout()
     plt.figure()
     x = linspace(0.0, 0.8, 50)
