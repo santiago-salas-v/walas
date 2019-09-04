@@ -719,54 +719,58 @@ def p_est(t, p, x_i, tc_i, pc_i, af_omega_i, max_it, tol=tol):
     b = sum(x_i * b_i)
     a = x_i.dot(a_ij).dot(x_i)
 
-    for i in range(max_it):
-        beta_i = b_i * p / (r * t)
-        beta = b * p / (r * t)
-        q = a / (b * r * t)
-        a_mp_i = -a + 2 * a_ij.dot(x_i)  # partielles molares a_i
-        b_mp_i = b_i  # partielles molares b_i
-        q_mp_i = q * (1 + a_mp_i / a - b_i / b)  # partielles molares q_i
+    beta_i = b_i * p / (r * t)
+    beta = b * p / (r * t)
+    q = a / (b * r * t)
+    a_mp_i = -a + 2 * a_ij.dot(x_i)  # partielles molares a_i
+    b_mp_i = b_i  # partielles molares b_i
+    q_mp_i = q * (1 + a_mp_i / a - b_i / b)  # partielles molares q_i
 
-        rho_lim = 1 / b
-        rho_small = 0.0001 * rho_lim
-        v = 1 / rho_small
-        dp_dv_at_rho_small = -r * t / (v - b) ** 2 + a / ((v + epsilon * b) * (v + sigma * b)) * (
-                1 / (v + epsilon * b) + 1 / (v + sigma * b)
-        )
-        d2p_dv2_at_rho_small = 2 * r * t / (v - b) ** 3 - a / ((v + epsilon * b) * (v + sigma * b)) * (
-                1 / (v + epsilon * b) ** 2 + 1 / (v + sigma * b) ** 2
-        ) - a / ((v + epsilon * b) * (v + sigma * b)) ** 2 * (
-                                       1 + (v + epsilon * b) / (v + sigma * b) + 1 + (v + sigma * b) / (v + epsilon * b)
-                               )
+    rho_lim = 1 / b
+    rho_small = 0.0001 * rho_lim
+    v = 1 / rho_small
+    dp_dv_at_rho_small = -r * t / (v - b) ** 2 + a / ((v + epsilon * b) * (v + sigma * b)) * (
+            1 / (v + epsilon * b) + 1 / (v + sigma * b)
+    )
+    d2p_dv2_at_rho_small = 2 * r * t / (v - b) ** 3 - a / ((v + epsilon * b) * (v + sigma * b)) * (
+            1 / (v + epsilon * b) ** 2 + 1 / (v + sigma * b) ** 2
+    ) - a / ((v + epsilon * b) * (v + sigma * b)) ** 2 * (
+                                   1 + (v + epsilon * b) / (v + sigma * b) + 1 + (v + sigma * b) / (v + epsilon * b)
+                           )
 
+    if d2p_dv2_at_rho_small > 0:
+        # no inflection point, curve is monotonic
+        pass
+    else:
+        # find inflection point
         a1 = beta * (epsilon + sigma) - beta - 1
         a2 = q * beta + epsilon * sigma * beta ** 2 \
              - beta * (epsilon + sigma) * (1 + beta)
         a3 = -(epsilon * sigma * beta ** 2 * (1 + beta) +
                q * beta ** 2)
 
-        p0 = 2 * a * b**5 * epsilon**2 + 2 * a * b**5 * epsilon * sigma + \
-            2 * a * b**5 * sigma**2 + 2 * b**6 * epsilon**3 * r * t * sigma**3
-        p1 = -3 * a * b**4 * epsilon**2 - 3 * a * b**4 * epsilon * sigma + \
-             3 * a * b**4 * epsilon - 3 * a * b**4 * sigma**2 + \
-             3 * a * b**4 * sigma + 3 * b**5 * epsilon**3 * r * t * sigma**2 + \
-             3 * b**5 * epsilon**3 * r * t * sigma**2 + \
-             3 * b**5 * epsilon**2 * r * t * sigma**3
-        p2 = 6 * a * b**3 * epsilon**2 + 6 * a * b**3 * epsilon * sigma - \
-            18 * a * b**3 * epsilon + 6 * a * b**3 * sigma**2 - \
-            18 * a * b**3 * sigma + 6 * a * b**3 + \
-             6 * b**4 * epsilon**3 * r * t * sigma + \
-            18 * b**4 * epsilon**2 * r * t * sigma**2 + \
-             6 * b**4 * epsilon * r * t * sigma**3
-        p3 = -2 * a * b**2 * epsilon**2 - 2 * a * b**2 * epsilon * sigma + \
-            18 * a * b**2 * epsilon - 2 * a * b**2 * sigma**2 + \
-            18 * a * b**2 * sigma - 18 * a * b**2 + \
-             2 * b**3 * epsilon**3 * r * t + \
-            18 * b**3 * epsilon**2 * r * t * sigma + \
-            18 * b**3 * epsilon * r * t * sigma**2 + 2 * b**3 * r * t * sigma**3
+        p0 = 2 * a * b ** 5 * epsilon ** 2 + 2 * a * b ** 5 * epsilon * sigma + \
+             2 * a * b ** 5 * sigma ** 2 + 2 * b ** 6 * epsilon ** 3 * r * t * sigma ** 3
+        p1 = -3 * a * b ** 4 * epsilon ** 2 - 3 * a * b ** 4 * epsilon * sigma + \
+             3 * a * b ** 4 * epsilon - 3 * a * b ** 4 * sigma ** 2 + \
+             3 * a * b ** 4 * sigma + 3 * b ** 5 * epsilon ** 3 * r * t * sigma ** 2 + \
+             3 * b ** 5 * epsilon ** 3 * r * t * sigma ** 2 + \
+             3 * b ** 5 * epsilon ** 2 * r * t * sigma ** 3
+        p2 = 6 * a * b ** 3 * epsilon ** 2 + 6 * a * b ** 3 * epsilon * sigma - \
+             18 * a * b ** 3 * epsilon + 6 * a * b ** 3 * sigma ** 2 - \
+             18 * a * b ** 3 * sigma + 6 * a * b ** 3 + \
+             6 * b ** 4 * epsilon ** 3 * r * t * sigma + \
+             18 * b ** 4 * epsilon ** 2 * r * t * sigma ** 2 + \
+             6 * b ** 4 * epsilon * r * t * sigma ** 3
+        p3 = -2 * a * b ** 2 * epsilon ** 2 - 2 * a * b ** 2 * epsilon * sigma + \
+             18 * a * b ** 2 * epsilon - 2 * a * b ** 2 * sigma ** 2 + \
+             18 * a * b ** 2 * sigma - 18 * a * b ** 2 + \
+             2 * b ** 3 * epsilon ** 3 * r * t + \
+             18 * b ** 3 * epsilon ** 2 * r * t * sigma + \
+             18 * b ** 3 * epsilon * r * t * sigma ** 2 + 2 * b ** 3 * r * t * sigma ** 3
         p4 = -6 * a * b * epsilon - 6 * a * b * sigma + 18 * a * b + \
-             6 * b**2 * epsilon**2 * r * t + \
-            18 * b**2 * epsilon * r * t * sigma + 6 * b**2 * r * t * sigma**2
+             6 * b ** 2 * epsilon ** 2 * r * t + \
+             18 * b ** 2 * epsilon * r * t * sigma + 6 * b ** 2 * r * t * sigma ** 2
         p5 = -6 * a + 6 * b * epsilon * r * t + 6 * b * r * t * sigma
         p6 = 2 * r * t
 
@@ -782,7 +786,7 @@ def p_est(t, p, x_i, tc_i, pc_i, af_omega_i, max_it, tol=tol):
                           1 + (v + epsilon * b) / (v + sigma * b) + 1 + (v + sigma * b) / (v + epsilon * b)
                   )
         if len(v) == 2 and all(dp_dv < 0):
-            # above pseudocritical temperature
+            # above pseudocritical temperature, no extrema
             v_inf = v[dp_dv == max(dp_dv)].item()
             d2p_dv2 = d2p_dv2[dp_dv == max(dp_dv)].item()
             dp_dv = dp_dv[dp_dv == max(dp_dv)].item()
@@ -794,59 +798,13 @@ def p_est(t, p, x_i, tc_i, pc_i, af_omega_i, max_it, tol=tol):
             d2p_dv2 = d2p_dv2.item()
             dp_dv = dp_dv.item()
         elif len(v) == 2:
-            v_inf = v[dp_dv>0].item()
+            v_inf = v[dp_dv > 0].item()
             d2p_dv2 = d2p_dv2[dp_dv > 0].item()
             dp_dv = dp_dv[dp_dv > 0].item()
 
         p_rho_inf = r * t / (v_inf - b) - a / ((v_inf + epsilon * b) * (v_inf + sigma * b))
-
-        soln = solve_cubic([1, a1, a2, a3])
-        roots, disc = soln['roots'], soln['disc']
-        p_term, q_term = 1 / 3 * soln['p'], soln['q']
-        re_roots = array([roots[0][0], roots[1][0], roots[2][0]])
-
-        # supercritical: inflection point.
-        # subcritical: condition for 3 real roots.
-        if disc <= 0:
-            # disc < 0: 3 real roots, all distinct: case III
-            # disc = 0: 3 real roots, two equal: case III also
-            z_l = min(re_roots)
-            z_v = max(re_roots)
-            if (z_v >= 1 / 3 and z_l >= 1 / 3) or z_v / z_l <= 1.2 or p_term == 0:
-                # p_term = 0: 3 real roots: all equal: neither I nor V (disc = 0 too)
-                # or max(re_roots)/min(re_roots) too close to 1
-                # action a) reduce pressure, to "separate z values", and continue
-                p = 0.9 * p
-            else:
-                stop = True
-        elif disc > 0:
-            # 2 complex, 1 real root: case IV, II, I or V
-            if p_term < 0:
-                # case IV or II
-                # action b) artificial density values
-                z_l = -a1 / 3 - sqrt(-1 / 3 * p_term)
-                z_v = -a1 / 3 + sqrt(-1 / 3 * p_term)
-                stop = True
-            elif p_term > 0:
-                # case V or I
-                # action d) conserve liquid density value
-                p, _ = p_i_sat(t, p, tc_i[i], pc_i[i], af_omega_i[i], max_it, tol)
-                p = p.item()
-                z = roots[0][0]  # real root likely like case V
-                if z <= 1 / 3:
-                    # case V, action d) conserve liquid density value and continue
-                    z_l_old = z
-                    p_old = p
-                elif z > 1 / 3:
-                    # case I, action d) conserve liquid density value
-                    z_v = z
-                    z_l = z_l_old * p / p_old
-                    stop = True
-
-
-
-        if abs((p - p_old)/p) <= -tol:
-            break
+            #if abs((p - p_old)/p) <= -tol:
+            #    break
     return p
 
 def isot_flash(t, p, x_i, y_i, z_i, tc_i, pc_i, af_omega_i):
@@ -993,34 +951,46 @@ def beispiel_svn_14_2():
             roots, disc = soln['roots'], soln['disc']
             re_roots = array([roots[0][0], roots[1][0], roots[2][0]])
 
+            a1_rho = a2 / a3 * (p / (r * t))
+            a2_rho = a1 / a3 * (p / (r * t))**2
+            a3_rho = 1 / a3 * (p / (r * t))**3
+
+            soln_rho = solve_cubic([1, a1_rho, a2_rho, a3_rho])
+            roots_rho, disc_rho = soln_rho['roots'], soln_rho['disc']
+            re_roots_rho = array([roots_rho[0][0], roots_rho[1][0], roots_rho[2][0]])
+
             if disc <= 0 and all(re_roots >= 0):
                 # 3 real roots. smallest ist liq. largest is gas.
                 z_l = re_roots[0]
                 z_mid = re_roots[1]
                 z_v = re_roots[2]
+                rho_l = re_roots_rho[0]
+                rho_mid = re_roots_rho[1]
+                rho_v = re_roots_rho[2]
                 v_l = z_l * r * t / p
                 v_mid = z_mid * r * t / p
                 v_v = z_v * r * t / p
                 p_plot += [p, p, p]
                 v_plot += [v_l, v_mid, v_v]
-                rho_plot += [1/v_l, 1/v_mid, 1/v_v]
+                rho_plot += [rho_l, rho_mid, rho_v]
             elif disc > 0:
                 # one real root, 2 complex. First root is the real one.
                 z = re_roots[0]
+                rho = re_roots_rho[0]
                 v = z * r * t / abs(p)
                 p_plot += [p]
                 v_plot += [v]
-                rho_plot += [1/v]
+                rho_plot += [rho]
 
         plt.subplot(1, 2, 1)
         plt.semilogx(v_plot, p_plot, markers[randint(0, len(markers))],
                      label=r'$z_1={:g}, z_2={:g}$'.format(z_i[0], z_i[1]),
                      fillstyle='none')
         plt.subplot(1, 2, 2)
-        plt.semilogx(rho_plot, p_plot, markers[randint(0, len(markers))],
+        plt.plot(rho_plot, p_plot, markers[randint(0, len(markers))],
                      label=r'$z_1={:g}, z_2={:g}$'.format(z_i[0], z_i[1]),
                      fillstyle='none')
-        if x >= 0.6:
+        if x >= 0.5:
             p_est(t, p, z_i, tc_i, pc_i, af_omega_i, max_it, tol)
     plt.subplot(1, 2, 1)
     plt.xlabel(r'$\frac{v}{m^3/mol}$')
