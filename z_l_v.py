@@ -815,37 +815,126 @@ def p_est(t, p, x_i, tc_i, pc_i, af_omega_i, max_it, tol=tol):
         #    break
 
         # find local min and max (extrema)
-        p0 = a*b**3*epsilon + a*b**3*sigma - b**4*epsilon**2*r*sigma**2*t
-        p1 = -2*a*b**2*epsilon - 2*a*b**2*sigma + \
-             2*a*b**2 - 2*b**3*epsilon**2*r*sigma*t - \
-             2*b**3*epsilon*r*sigma**2*t
-        p2 = a*b*epsilon + a*b*sigma - 4*a*b - b**2*epsilon**2*r*t - \
-             4*b**2*epsilon*r*sigma*t - b**2*r*sigma**2*t
-        p3 = 2*a - 2*b*epsilon*r*t - 2*b*r*sigma*t
-        p4 = -r*t
+        p0 = a * b ** 3 * epsilon + a * b ** 3 * sigma - b ** 4 * epsilon ** 2 * r * sigma ** 2 * t
+        p1 = -2 * a * b ** 2 * epsilon - 2 * a * b ** 2 * sigma + \
+             2 * a * b ** 2 - 2 * b ** 3 * epsilon ** 2 * r * sigma * t - \
+             2 * b ** 3 * epsilon * r * sigma ** 2 * t
+        p2 = a * b * epsilon + a * b * sigma - 4 * a * b - b ** 2 * epsilon ** 2 * r * t - \
+             4 * b ** 2 * epsilon * r * sigma * t - b ** 2 * r * sigma ** 2 * t
+        p3 = 2 * a - 2 * b * epsilon * r * t - 2 * b * r * sigma * t
+        p4 = -r * t
 
-        #v_roots = zroots([p0, p1, p2, p3, p4])
+        # v_roots = zroots([p0, p1, p2, p3, p4])
         soln = solve_quartic([p4, p3, p2, p1, p0])
         v_roots = array(soln['roots'])
         re_v_roots = v_roots[v_roots[:, 1] == 0][:, 0]
-        v_ex = re_v_roots[re_v_roots > b]
-        v_l_ex = min(v_ex)
-        v_v_ex = max(v_ex)
-        z_l_ex = p * v_l_ex / (r * t)
-        z_v_ex = p * v_v_ex / (r * t)
+        v = re_v_roots[re_v_roots > b]
 
-        p_min_l = r * t / (v_l_ex - b) - a / ((v_l_ex + epsilon * b) * (v_l_ex + sigma * b))
-        p_max_v = r * t / (v_v_ex - b) - a / ((v_v_ex + epsilon * b) * (v_v_ex + sigma * b))
+        # mechanical critical point
+        z_mc = -1 / 3 * ((epsilon + sigma) * omega - omega - 1)
+        p_mc = sum(x_i * pc_i)
+        t_mc = x_i.dot(sqrt(outer(tc_i, tc_i))).dot(x_i)
+        rho_mc = p_mc / (r * t_mc * z_mc)
+        v_mc = 1 / rho_mc
 
-        if p <= p_min_l:
-            p = p_min_l
-        elif p >= p_max_v:
-            p = p_max_v
-    for item in ['p_inf', 'z_inf', 'v_inf', 'p_min_l', 'p_max_v',
-                 'z_l_ex', 'z_v_ex', 'v_l_ex', 'v_v_ex']:
+        if t < t_mc and len(v) < 2:
+            pass
+        elif t > t_mc and len(v) < 2:
+            # single real root, vapor-like
+            beta = b * p / (r * t)
+            a1 = beta * (epsilon + sigma) - beta - 1
+            a2 = q * beta + epsilon * sigma * beta ** 2 \
+                 - beta * (epsilon + sigma) * (1 + beta)
+            a3 = -(epsilon * sigma * beta ** 2 * (1 + beta) +
+                   q * beta ** 2)
+            soln = solve_cubic([1, a1, a2, a3])
+            z_v = soln['roots'][0][0]
+            v_v = z_v * r * t / p
+            rho_v = 1 / v_v
+
+            # pseudo liquid density
+            dp_dv_at_rho_mc = -r * t / (v_mc - b) ** 2 + a / ((v_mc + epsilon * b) * (v_mc + sigma * b)) * (
+                    1 / (v_mc + epsilon * b) + 1 / (v_mc + sigma * b)
+            )
+            dp_drho_at_rho_mc = -v_mc**2 * dp_dv_at_rho_mc
+            c1 = dp_drho_at_rho_mc * (rho_mc - 0.7 * rho_mc)
+            c0 = p_mc - c1 * log(rho_mc - 0.7 * rho_mc)
+            rho_l = exp((p - c0)/c1) + 0.7 * rho_mc
+            v_l = 1 / rho_l
+            z_l = p * v_l / (r * t)
+
+        else:
+            v_l = min(v)
+            v_v = max(v)
+            z_l = p * v_l / (r * t)
+            z_v = p * v_v / (r * t)
+
+            p_min_l = r * t / (v_l - b) - a / ((v_l + epsilon * b) * (v_l + sigma * b))
+            p_max_v = r * t / (v_v - b) - a / ((v_v + epsilon * b) * (v_v + sigma * b))
+
+            if p <= p_min_l:
+                p = p_min_l
+            elif p >= p_max_v:
+                p = p_max_v
+    for item in ['p', 'p_inf', 'z_inf', 'v_inf', 'p_min_l', 'p_max_v',
+                 'z_l', 'z_v', 'v_l', 'v_v', 'rho_l', 'rho_v']:
         soln[item] = locals().get(item)
     return soln
-    return p
+
+def z_phase(t, p, x_i, tc_i, pc_i, af_omega_i, max_it, tol=tol):
+    tr_i = t / tc_i
+    a_i = psi * alpha(tr_i, af_omega_i) * r ** 2 * tc_i ** 2 / pc_i
+    b_i = omega * r * tc_i / pc_i
+    q_i = a_i / (b_i * r * t)
+    a_ij = sqrt(outer(a_i, a_i))
+
+    # Variablen, die von der Flüssigkeit-Zusammensetzung abhängig sind
+    b = sum(x_i * b_i)
+    a = x_i.dot(a_ij).dot(x_i)
+    q = a / (b * r * t)
+
+    # mechanical critical point
+    z_mc = -1 / 3 * ((epsilon + sigma) * omega - omega - 1)
+    p_mc = sum(x_i * pc_i)
+    t_mc = x_i.dot(sqrt(outer(tc_i, tc_i))).dot(x_i)
+    rho_mc = p_mc / (r * t_mc * z_mc)
+    v_mc = 1 / rho_mc
+
+    # solve S+U=0
+    q0 = (9 * (epsilon + sigma) * epsilon * sigma + 18 * epsilon * sigma +
+          - 2 * (epsilon + sigma) ** 3 - 3 * (epsilon + sigma) ** 2 +
+          3 * (epsilon + sigma) + 2) * (b / (r * t)) ** 3
+    q1 = (18 * epsilon * sigma - 2 * (epsilon + sigma) ** 2 +
+          6 * (epsilon + sigma) + 6) * (b / (r * t)) ** 2 + (
+                 9 * (epsilon + sigma) + 18) * a * b / (r * t) ** 3
+    q2 = (3 * (epsilon + sigma) + 6) * b / (r * t) - 9 * a / (r * t) ** 2
+    q3 = 2
+    if q0 == 0:
+        # RK for example, reduces to quadratic
+        disc = q2 ** 2 - 4 * q1 * q3
+        if disc >= 0:
+            p_roots = array([
+                [-q2 / q1 / 2 + sqrt((q2 / q1) ** 2 / 4 - q3 / q1), 0],
+                [-q2 / q1 / 2 - sqrt((q2 / q1) ** 2 / 4 - q3 / q1), 0]
+            ])
+            p_low = min(p_roots[:, 0])
+            p_cross = max(p_roots[:, 0])
+        elif disc < 0:
+            p_roots = array([
+                [-q2 / q1 / 2, sqrt((q2 / q1) ** 2 / 4 - q3 / q1)],
+                [-q2 / q1 / 2, -sqrt((q2 / q1) ** 2 / 4 - q3 / q1)]
+            ])
+            p_low = min(p_roots[:, 0])
+            p_cross = max(p_roots[:, 0])
+    else:
+        soln = solve_cubic([q0, q1, q2, q3])
+        p_roots = array(soln['roots'])
+        if all(p_roots[:, 1] == 0):
+            p_high = p_roots[0, 0]
+            p_cross = p_roots[1, 0]
+            p_low = p_roots[2, 0]
+        else:
+            p_high = p_roots[0, 0]
 
 def isot_flash(t, p, x_i, y_i, z_i, tc_i, pc_i, af_omega_i):
     soln_l = phi(t, p, x_i, tc_i, pc_i, af_omega_i, 'l')
@@ -967,6 +1056,8 @@ def beispiel_svn_14_2():
         p_plot = []
         rho_plot = []
         z_plot = []
+        z_complex = []
+        p_complex = []
         t = 310.92
         for p in p_range:
             tr_i = t / tc_i
@@ -1007,6 +1098,8 @@ def beispiel_svn_14_2():
                 v_plot += [v_l, v_mid, v_v]
                 rho_plot += [1/v_l, 1/v_mid, 1/v_v]
                 z_plot += [z_l, z_mid, z_v]
+                #z_complex += [re_roots[1]]
+                #p_complex += [p]
             elif disc > 0:
                 # one real root, 2 complex. First root is the real one.
                 z = re_roots[0]
@@ -1015,29 +1108,36 @@ def beispiel_svn_14_2():
                 v_plot += [v]
                 rho_plot += [1/v]
                 z_plot += [z]
+                z_complex += [re_roots[1]]
+                p_complex += [p]
 
         plot1.axvline(b, linestyle='--')
-        plot2.axvline(1 / b, linestyle='--')
+        if x < 0.3:
+            plot2.axvline(1 / b, linestyle='--')
         plot1.semilogx(v_plot, p_plot, markers[randint(0, len(markers))],
                      label=r'$z_1={:g}, z_2={:g}$'.format(z_i[0], z_i[1]),
                      fillstyle='none')
         plot2.plot(rho_plot, p_plot, markers[randint(0, len(markers))],
                      label=r'$z_1={:g}, z_2={:g}$'.format(z_i[0], z_i[1]),
                      fillstyle='none')
-        plot3.plot(z_plot, p_plot, markers[randint(0, len(markers))],
+        z_line = plot3.plot(z_plot, p_plot, markers[randint(0, len(markers))],
                  label=r'$z_1={:g}, z_2={:g}$'.format(z_i[0], z_i[1]),
                  fillstyle='none')
-        if x >= 0.5:
+        current_color = plt.get(z_line[0], 'color')
+        plot3.plot(z_complex, p_complex, '.', alpha=0.1,
+                   fillstyle='none', color=current_color)
+        if x in [0.4, 0.5, 0.6, 0.7]:
             p_est(t, p, z_i, tc_i, pc_i, af_omega_i, max_it, tol)
-    plot1.xlabel(r'$\frac{v}{m^3/mol}$')
-    plot1.ylabel('p / bar')
-    plot1.legend()
-    plot2.xlabel(r'$\frac{rho}{mol / m^3}$')
-    plot2.ylabel('p / bar')
-    plot3.xlabel(r'$Z$')
-    plot3.ylabel('p / bar')
+    plot1.set_xlabel(r'$\frac{v}{m^3/mol}$')
+    plot1.set_ylabel('p / bar')
+    plot2.set_xlabel(r'$\frac{rho}{mol / m^3}$')
+    plot2.set_ylabel('p / bar')
+    plot3.set_xlabel(r'$Z$')
+    plot3.set_ylabel('p / bar')
+    plot3.legend()
     plt.tight_layout()
-    plt.figure()
+    fig = plt.figure()
+    ax = plt.axes()
     x = linspace(0.0, 0.8, 50)
     y = empty_like(x)
     p_v = empty_like(x)
