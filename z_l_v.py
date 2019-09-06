@@ -964,7 +964,7 @@ def z_phase(t, p, x_i, tc_i, pc_i, af_omega_i, phase, max_it, tol=tol):
                 v = 1 / rho
                 z = p * v / (r * t)
         elif phase == 'v':
-            # single root, vapor-like
+            # single real root, vapor-like
             z = roots_z[0, 0]
             v = z * r * t / p
             rho = 1 / v
@@ -986,7 +986,7 @@ def z_phase(t, p, x_i, tc_i, pc_i, af_omega_i, phase, max_it, tol=tol):
                q * beta ** 2)
         soln = solve_cubic([1, a1, a2, a3])
         roots_z_low = array(soln['roots'])
-        if p > p_cross:
+        if p >= p_cross:
             if phase == 'l':
                 # single real root, liquid-like
                 z = roots_z[0, 0]
@@ -994,8 +994,8 @@ def z_phase(t, p, x_i, tc_i, pc_i, af_omega_i, phase, max_it, tol=tol):
                 rho = 1 / v
             elif phase == 'v':
                 # pseudo-vapor density
-                # 3 real roots, liquid-like is smallest
-                z_low = roots_z_low[-1, 0]
+                # 3 real roots, vapor-like is smallest
+                z_low = roots_z_low[0, 0]
                 v_low = z_low * r * t / p_low
                 rho_low = 1 / v_low
 
@@ -1015,7 +1015,7 @@ def z_phase(t, p, x_i, tc_i, pc_i, af_omega_i, phase, max_it, tol=tol):
                 rho = rho0 + rho1 / p + rho2 / p**2
                 v = 1 / rho
                 z = p * v / (r * t)
-        elif p <= p_cross:
+        elif p < p_cross:
             if disc_z > 0:
                 # one real root (2 complex)
                 z = roots_z[0, 0]
@@ -1028,8 +1028,8 @@ def z_phase(t, p, x_i, tc_i, pc_i, af_omega_i, phase, max_it, tol=tol):
                         rho = 1 / v
                     elif phase == 'v':
                         # pseudo-vapor density
-                        # 3 real roots, liquid-like is smallest
-                        z_low = roots_z_low[-1, 0]
+                        # 3 real roots, vapor-like is largest
+                        z_low = roots_z_low[0, 0]
                         v_low = z_low * r * t / p_low
                         rho_low = 1 / v_low
 
@@ -1104,14 +1104,14 @@ def z_phase(t, p, x_i, tc_i, pc_i, af_omega_i, phase, max_it, tol=tol):
                         rho = 1 / v
                 elif p >= p_low:
                     if phase == 'l':
-                        # single real root, liquid-like
-                        z = roots_z[0, 0]
+                        # 3 real roots, liquid-like is smallest
+                        z = roots_z[-1, 0]
                         v = z * r * t / p
                         rho = 1 / v
                     elif phase == 'v':
                         # pseudo-vapor density
-                        # 3 real roots, liquid-like is smallest
-                        z_low = roots_z_low[-1, 0]
+                        # 3 real roots, vapor-like is largest
+                        z_low = roots_z_low[0, 0]
                         v_low = z_low * r * t / p_low
                         rho_low = 1 / v_low
 
@@ -1264,8 +1264,8 @@ def beispiel_svn_14_2():
         z_complex = []
         p_complex = []
 
-        v_l_phase = []
-        v_v_phase = []
+        rho_l_phase = []
+        rho_v_phase = []
         p_v_phase = []
         t = 310.92
         for p in p_range:
@@ -1295,8 +1295,8 @@ def beispiel_svn_14_2():
             roots, disc = soln['roots'], soln['disc']
             re_roots = array([roots[0][0], roots[1][0], roots[2][0]])
 
-            v_l_phase += [z_phase(t, p, z_i, tc_i, pc_i, af_omega_i, 'l', max_it, tol)['v']]
-            v_v_phase += [z_phase(t, p, z_i, tc_i, pc_i, af_omega_i, 'v', max_it, tol)['v']]
+            rho_l_phase += [z_phase(t, p, z_i, tc_i, pc_i, af_omega_i, 'l', max_it, tol)['rho']]
+            rho_v_phase += [z_phase(t, p, z_i, tc_i, pc_i, af_omega_i, 'v', max_it, tol)['rho']]
             p_v_phase += [p]
 
             if disc <= 0 and all(re_roots >= 0):
@@ -1327,12 +1327,22 @@ def beispiel_svn_14_2():
         plot1.axvline(b, linestyle='--')
         if x < 0.3:
             plot2.axvline(1 / b, linestyle='--')
+            plot4.axvline(1 / b, linestyle='--')
         plot1.semilogx(v_plot, p_plot, markers[randint(0, len(markers))],
+                     label=r'$z_1={:g}'.format(z_i[0], z_i[1]),
+                     fillstyle='none')
+        rho_line = plot2.plot(rho_plot, p_plot, markers[randint(0, len(markers))],
                      label=r'$z_1={:g}, z_2={:g}$'.format(z_i[0], z_i[1]),
                      fillstyle='none')
-        plot2.plot(rho_plot, p_plot, markers[randint(0, len(markers))],
-                     label=r'$z_1={:g}, z_2={:g}$'.format(z_i[0], z_i[1]),
-                     fillstyle='none')
+        current_color = plt.get(rho_line[0], 'color')
+        current_marker = plt.get(rho_line[0], 'marker')
+        if round(x, 1) in [0.0, 0.3, 0.6, 0.9]:
+            plot4.plot(rho_l_phase, p_v_phase, current_marker, markeredgewidth=0.5,
+                       color=current_color, markersize=4, fillstyle='bottom', linestyle='none',
+                       label=r'$L: x_1={:g}$'.format(z_i[0]))
+            plot4.plot(rho_v_phase, p_v_phase, current_marker, markeredgewidth=0.25,
+                       color=current_color, markersize=4, fillstyle='none', linestyle='--',
+                       label=r'$V: y_1={:g}$'.format(z_i[0]))
         z_line = plot3.plot(z_plot, p_plot, markers[randint(0, len(markers))],
                  label=r'$z_1={:g}, z_2={:g}$'.format(z_i[0], z_i[1]),
                  fillstyle='none')
@@ -1340,21 +1350,20 @@ def beispiel_svn_14_2():
         current_marker = markers[randint(0, len(markers))]
         plot3.plot(z_complex, p_complex, '.', alpha=0.1,
                    fillstyle='none', color=current_color)
-        plot4.semilogx(v_l_phase, p_v_phase, current_marker,
-                   label=r'$z_1={:g}, z_2={:g}$'.format(z_i[0], z_i[1]),
-                   fillstyle='none', color=current_color)
-        #plot4.semilogx(v_v_phase, p_v_phase, current_marker,
-        #           label=r'$z_1={:g}, z_2={:g}$'.format(z_i[0], z_i[1]),
-        #           fillstyle='none', color=current_color)
         if x in [0.4, 0.5, 0.6, 0.7]:
             p_est(t, p, z_i, tc_i, pc_i, af_omega_i, max_it, tol)
     plot1.set_xlabel(r'$\frac{v}{m^3/mol}$')
     plot1.set_ylabel('p / bar')
     plot2.set_xlabel(r'$\frac{rho}{mol / m^3}$')
     plot2.set_ylabel('p / bar')
+    plot2.set_title(r'$\rho$' + ', act.')
     plot3.set_xlabel(r'$Z$')
     plot3.set_ylabel('p / bar')
-    plot3.legend()
+    plot3.legend(['real root', 'real part of complex root'], fontsize=6)
+    plot4.set_xlabel(r'$\frac{rho}{mol / m^3}$')
+    plot4.set_ylabel('p / bar')
+    plot4.set_title(r'$\rho$' + ', L/V estimation[3]')
+    plot4.legend(fontsize=6)
     plt.tight_layout()
     fig = plt.figure()
     ax = plt.axes()
