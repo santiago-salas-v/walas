@@ -996,13 +996,13 @@ def z_phase_2(t, p, x_i, tc_i, pc_i, af_omega_i, phase, max_it, tol=tol):
                 v = 1 / rho
                 z = p * v / (r * t)
         elif t >= t_mc or n_positive_roots_p <= 1:
-            p_mc = r * t / (v_mc - b) - a / ((v_mc + epsilon * b) * (v_mc + sigma * b))
-            if p > p_mc:
+            p_mc_bound = r * t / (v_mc - b) - a / ((v_mc + epsilon * b) * (v_mc + sigma * b))
+            if p > p_mc_bound:
                 # liquid density
                 z = roots_z[0, 0]
                 v = z * r * t / p
                 rho = 1 / v
-            elif p <= p_mc:
+            elif p <= p_mc_bound:
                 # pseudo liquid density - eq. 36, 38, 39
                 dp_dv_at_rho_mc = -r * t / (v_mc - b) ** 2 + a / (
                         (v_mc + epsilon * b) * (v_mc + sigma * b)) * (
@@ -1011,7 +1011,7 @@ def z_phase_2(t, p, x_i, tc_i, pc_i, af_omega_i, phase, max_it, tol=tol):
                 dp_drho_at_rho_mc = -v_mc ** 2 * dp_dv_at_rho_mc
 
                 c1 = dp_drho_at_rho_mc * (rho_mc - 0.7 * rho_mc)
-                c0 = p_mc - c1 * log(rho_mc - 0.7 * rho_mc)
+                c0 = p_mc_bound - c1 * log(rho_mc - 0.7 * rho_mc)
                 rho = 0.7 * rho_mc + exp((p - c0)/c1)
                 v = 1 / rho
                 z = p * v / (r * t)
@@ -1127,12 +1127,14 @@ def z_phase(t, p, x_i, tc_i, pc_i, af_omega_i, phase, max_it, tol=tol):
                 rho = 1 / v
             else:
                 # pseudo liquid density
-                dp_dv_at_rho_mc = -r * t / (v_mc - b) ** 2 + a / ((v_mc + epsilon * b) * (v_mc + sigma * b)) * (
+                p_mc_bound = r * t / (v_mc - b) - a / ((v_mc + epsilon * b) * (v_mc + sigma * b))
+                dp_dv_at_rho_mc = -r * t / (v_mc - b) ** 2 + a / (
+                        (v_mc + epsilon * b) * (v_mc + sigma * b)) * (
                         1 / (v_mc + epsilon * b) + 1 / (v_mc + sigma * b)
                 )
                 dp_drho_at_rho_mc = -v_mc ** 2 * dp_dv_at_rho_mc
                 c1 = dp_drho_at_rho_mc * (rho_mc - 0.7 * rho_mc)
-                c0 = p_mc - c1 * log(rho_mc - 0.7 * rho_mc)
+                c0 = p_mc_bound - c1 * log(rho_mc - 0.7 * rho_mc)
                 rho = exp((p - c0) / c1) + 0.7 * rho_mc
                 v = 1 / rho
                 z = p * v / (r * t)
@@ -1387,8 +1389,8 @@ def beispiel_zs_1998():
                 p_complex += [p]
 
         for p in linspace(1e-4, max(p_range), 30):
-            rho_l_phase += [z_phase_2(t, p, z_i, tc_i, pc_i, af_omega_i, 'l', max_it, tol)['rho']]
-            rho_v_phase += [z_phase_2(t, p, z_i, tc_i, pc_i, af_omega_i, 'v', max_it, tol)['rho']]
+            rho_l_phase += [z_phase(t, p, z_i, tc_i, pc_i, af_omega_i, 'l', max_it, tol)['rho']]
+            rho_v_phase += [z_phase(t, p, z_i, tc_i, pc_i, af_omega_i, 'v', max_it, tol)['rho']]
             p_v_phase += [p]
 
         plot1.axvline(b, linestyle='--')
