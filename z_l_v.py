@@ -881,6 +881,179 @@ def p_est(t, p, x_i, tc_i, pc_i, af_omega_i, max_it, tol=tol):
         soln[item] = locals().get(item)
     return soln
 
+def z_phase_2(t, p, x_i, tc_i, pc_i, af_omega_i, phase, max_it, tol=tol):
+    tr_i = t / tc_i
+    a_i = psi * alpha(tr_i, af_omega_i) * r ** 2 * tc_i ** 2 / pc_i
+    b_i = omega * r * tc_i / pc_i
+    q_i = a_i / (b_i * r * t)
+    a_ij = sqrt(outer(a_i, a_i))
+
+    # composition-dependent variables
+    b = sum(x_i * b_i)
+    a = x_i.dot(a_ij).dot(x_i)
+    q = a / (b * r * t)
+
+    # mechanical critical point
+    z_mc = -1 / 3 * ((epsilon + sigma) * omega - omega - 1)
+    p_mc = sum(x_i * pc_i)
+    t_mc = x_i.dot(sqrt(outer(tc_i, tc_i))).dot(x_i)
+    rho_mc = p_mc / (r * t_mc * z_mc)
+    v_mc = 1 / rho_mc
+
+    # solve f(z)=0
+    beta = b * p / (r * t)
+    a1 = beta * (epsilon + sigma) - beta - 1
+    a2 = q * beta + epsilon * sigma * beta ** 2 \
+         - beta * (epsilon + sigma) * (1 + beta)
+    a3 = -(epsilon * sigma * beta ** 2 * (1 + beta) +
+           q * beta ** 2)
+    soln = solve_cubic([1, a1, a2, a3])
+    roots_z = array(soln['roots'])
+    disc_z = soln['disc']
+
+    # solve S+U=0
+    q0 = (9 * (epsilon + sigma) * epsilon * sigma + 18 * epsilon * sigma +
+          - 2 * (epsilon + sigma) ** 3 - 3 * (epsilon + sigma) ** 2 +
+          3 * (epsilon + sigma) + 2) * (b / (r * t)) ** 3
+    q1 = (18 * epsilon * sigma - 2 * (epsilon + sigma) ** 2 +
+          6 * (epsilon + sigma) + 6) * (b / (r * t)) ** 2 + (
+                 9 * (epsilon + sigma) + 18) * a * b / (r * t) ** 3
+    q2 = (3 * (epsilon + sigma) + 6) * b / (r * t) - 9 * a / (r * t) ** 2
+    q3 = 2
+    if q0 == 0:
+        # reduces to quadratic (RK)
+        disc = q2 ** 2 - 4 * q1 * q3
+        if disc >= 0:
+            roots_p = array([
+                [-q2 / q1 / 2 + sqrt((q2 / q1) ** 2 / 4 - q3 / q1), 0],
+                [-q2 / q1 / 2 - sqrt((q2 / q1) ** 2 / 4 - q3 / q1), 0]
+            ])
+            p_low = min(roots_p[:, 0])
+            p_cross = max(roots_p[:, 0])
+        elif disc < 0:
+            roots_p = array([
+                [-q2 / q1 / 2, sqrt(-(q2 / q1) ** 2 / 4 + q3 / q1)],
+                [-q2 / q1 / 2, -sqrt(-(q2 / q1) ** 2 / 4 + q3 / q1)]
+            ])
+            p_low = min(roots_p[:, 0])
+            p_cross = max(roots_p[:, 0])
+    else:
+        soln = solve_cubic([q0, q1, q2, q3])
+        roots_p = array(soln['roots'])
+
+    re_roots_p = roots_p[roots_p[:, 1] == 0]
+    n_positive_roots_p = len(re_roots_p[re_roots_p > 0])
+
+    if n_positive_roots_p <= 1:
+        p_high = roots_p[0, 0]
+    elif n_positive_roots_p > 1:
+        if n_positive_roots_p == 3:
+            p_high = roots_p[0, 0]
+            p_cross = roots_p[1, 0]
+            p_low = roots_p[-1, 0]
+            # solve f(z_low)=0
+            beta_low = b * p_low / (r * t)
+            a1_low = beta_low * (epsilon + sigma) - beta_low - 1
+            a2_low = q * beta_low + epsilon * sigma * beta_low ** 2 \
+                     - beta_low * (epsilon + sigma) * (1 + beta_low)
+            a3_low = -(epsilon * sigma * beta_low ** 2 * (1 + beta_low) +
+                       q * beta_low ** 2)
+            soln_z_low = solve_cubic([1, a1_low, a2_low, a3_low])
+            roots_z_low = array(soln_z_low['roots'])
+        elif n_positive_roots_p == 2:
+            p_cross = roots_p[0, 0]
+            p_low = roots_p[-1, 0]
+
+    if phase == 'l':
+        if t < t_mc or n_positive_roots_p > 1:
+            if p > p_low:
+                # liquid density
+                if disc_z <= 0:
+                    z = roots_z[-1, 0]
+                elif disc_z > 0:
+                    z = roots_z[0, 0]
+                v = z * r * t / p
+                rho = 1 / v
+            elif p <= p_low:
+                # pseudo liquid density - eq. 36, 40, 41
+                z_low = roots_z_low[-1, 0]
+                v_low = z_low * r * t / p_low
+                rho_low = 1 / v_low
+                dp_dv_at_rho_low = -r * t / (v_low - b) ** 2 + a / (
+                        (v_low + epsilon * b) * (v_low + sigma * b)) * (
+                                           1 / (v_low + epsilon * b) + 1 / (v_low + sigma * b)
+                                   )
+                dp_drho_at_rho_low = -v_low ** 2 * dp_dv_at_rho_low
+                if dp_drho_at_rho_low < 0.1 * r * t:
+                    dp_drho_at_rho_low = 0.1 * r * t
+
+                c1 = dp_drho_at_rho_low * (rho_low - 0.7 * rho_mc)
+                if rho_low - 0.7 * rho_mc < 0:
+                    rho = 0.7 * rho_mc + (rho_low - 0.7 * rho_mc) * log((p - p_low)/c1)
+                else:
+                    c0 = p_low - c1 * log(rho_low - 0.7 * rho_mc)
+                    rho = 0.7 * rho_mc + exp((p - c0) / c1)
+                v = 1 / rho
+                z = p * v / (r * t)
+        elif t >= t_mc or n_positive_roots_p <= 1:
+            p_mc = r * t / (v_mc - b) - a / ((v_mc + epsilon * b) * (v_mc + sigma * b))
+            if p > p_mc:
+                # liquid density
+                z = roots_z[0, 0]
+                v = z * r * t / p
+                rho = 1 / v
+            elif p <= p_mc:
+                # pseudo liquid density - eq. 36, 38, 39
+                dp_dv_at_rho_mc = -r * t / (v_mc - b) ** 2 + a / (
+                        (v_mc + epsilon * b) * (v_mc + sigma * b)) * (
+                                           1 / (v_mc + epsilon * b) + 1 / (v_mc + sigma * b)
+                                   )
+                dp_drho_at_rho_mc = -v_mc ** 2 * dp_dv_at_rho_mc
+
+                c1 = dp_drho_at_rho_mc * (rho_mc - 0.7 * rho_mc)
+                c0 = p_mc - c1 * log(rho_mc - 0.7 * rho_mc)
+                rho = 0.7 * rho_mc + exp((p - c0)/c1)
+                v = 1 / rho
+                z = p * v / (r * t)
+    elif phase == 'v':
+        if t < t_mc or n_positive_roots_p > 1:
+            if p > p_low:
+                # pseudo vapor density - eq. 24, 28, 29, 30
+                z_low = roots_z_low[0, 0]
+                v_low = z_low * r * t / p_low
+                rho_low = 1 / v_low
+
+                dp_dv_at_rho_low = -r * t / (v_low - b) ** 2 + a / (
+                        (v_low + epsilon * b) * (v_low + sigma * b)) * (
+                                           1 / (v_low + epsilon * b) + 1 / (v_low + sigma * b)
+                                   )
+                dp_drho_at_rho_low = -v_low ** 2 * dp_dv_at_rho_low
+                if dp_drho_at_rho_low < 0.1 * r * t:
+                    dp_drho_at_rho_low = 0.1 * r * t
+                rho0 = (rho_low + 1.4 * rho_mc) / 2
+                rho1 = p_low * (
+                        (rho_low - 1.4 * rho_mc) + p_low / dp_drho_at_rho_low)
+                rho2 = -p_low ** 2 * (
+                        (rho_low - 1.4 * rho_mc) / 2 + p_low / dp_drho_at_rho_low)
+
+                rho = rho0 + rho1 / p + rho2 / p ** 2
+                v = 1 / rho
+                z = p * v / (r * t)
+            elif p <= p_low:
+                # vapor density
+                z = roots_z[0, 0]
+                v = z * r * t / p
+                rho = 1 / v
+        elif t >= t_mc or n_positive_roots_p <= 0:
+            # vapor density
+            z = roots_z[0, 0]
+            v = z * r * t / p
+            rho = 1 / v
+    soln = dict()
+    for item in ['z', 'rho', 'v']:
+        soln[item] = locals().get(item)
+    return soln
+
 def z_phase(t, p, x_i, tc_i, pc_i, af_omega_i, phase, max_it, tol=tol):
     tr_i = t / tc_i
     a_i = psi * alpha(tr_i, af_omega_i) * r ** 2 * tc_i ** 2 / pc_i
@@ -932,8 +1105,8 @@ def z_phase(t, p, x_i, tc_i, pc_i, af_omega_i, phase, max_it, tol=tol):
             p_cross = max(roots_p[:, 0])
         elif disc < 0:
             roots_p = array([
-                [-q2 / q1 / 2, sqrt((q2 / q1) ** 2 / 4 - q3 / q1)],
-                [-q2 / q1 / 2, -sqrt((q2 / q1) ** 2 / 4 - q3 / q1)]
+                [-q2 / q1 / 2, sqrt(-(q2 / q1) ** 2 / 4 + q3 / q1)],
+                [-q2 / q1 / 2, -sqrt(-(q2 / q1) ** 2 / 4 + q3 / q1)]
             ])
             p_low = min(roots_p[:, 0])
             p_cross = max(roots_p[:, 0])
@@ -1086,15 +1259,15 @@ def z_phase(t, p, x_i, tc_i, pc_i, af_omega_i, phase, max_it, tol=tol):
 
                         # pseudo liquid density
                         dp_dv_at_rho_low = -r * t / (v_low - b) ** 2 + a / (
-                                    (v_mc + epsilon * b) * (v_mc + sigma * b)) * (
-                                                   1 / (v_mc + epsilon * b) + 1 / (v_mc + sigma * b)
+                                    (v_low + epsilon * b) * (v_low + sigma * b)) * (
+                                                   1 / (v_low + epsilon * b) + 1 / (v_low + sigma * b)
                                            )
                         dp_drho_at_rho_low = -v_low ** 2 * dp_dv_at_rho_low
                         if dp_drho_at_rho_low < 0.1 * r * t:
                             dp_drho_at_rho_low = 0.1 * r * t
-                        c1 = dp_drho_at_rho_low * (rho_low - 0.7 * rho_low)
-                        c0 = p_low - c1 * log(rho_low - 0.7 * rho_low)
-                        rho = exp((p - c0) / c1) + 0.7 * rho_low
+                        c1 = dp_drho_at_rho_low * (rho_low - 0.7 * rho_mc)
+                        c0 = p_low - c1 * log(rho_low - 0.7 * rho_mc)
+                        rho = exp((p - c0) / c1) + 0.7 * rho_mc
                         v = 1 / rho
                         z = p * v / (r * t)
                     elif phase == 'v':
@@ -1136,6 +1309,129 @@ def z_phase(t, p, x_i, tc_i, pc_i, af_omega_i, phase, max_it, tol=tol):
     for item in ['z', 'rho', 'v']:
         soln[item] = locals().get(item)
     return soln
+
+
+def beispiel_zs_1998():
+    use_pr_eos()
+    tc_i = array([305.32, 540.2])
+    pc_i = array([48.71, 27.35])
+    af_omega_i = array([0.099, 0.35])
+    max_it = 100
+    markers = plt.Line2D.filled_markers
+    p_range = linspace(1e-1, 120, 300)
+    plot1 = plt.subplot2grid([2, 2], [1, 0], rowspan=1, colspan=1)
+    plot2 = plt.subplot2grid([2, 2], [1, 1], rowspan=1, colspan=1)
+    plot3 = plt.subplot2grid([2, 2], [0, 0], rowspan=1, colspan=1)
+    plot4 = plt.subplot2grid([2, 2], [0, 1], rowspan=1, colspan=1)
+    x = 0.5
+    z_i = array([x, 1 - x])
+    for t in[420, 500]:
+        v_plot = []
+        p_plot = []
+        rho_plot = []
+        z_plot = []
+        z_complex = []
+        p_complex = []
+
+        rho_l_phase = []
+        rho_v_phase = []
+        p_v_phase = []
+        for p in p_range:
+            tr_i = t / tc_i
+            a_i = psi * alpha(tr_i, af_omega_i) * r ** 2 * tc_i ** 2 / pc_i
+            b_i = omega * r * tc_i / pc_i
+            beta_i = b_i * p / (r * t)
+            q_i = a_i / (b_i * r * t)
+            a_ij = sqrt(outer(a_i, a_i))
+
+            # Variablen, die von der Flüssigkeit-Zusammensetzung abhängig sind
+            b = sum(z_i * b_i)
+            a = z_i.dot(a_ij).dot(z_i)
+            beta = b * p / (r * t)
+            q = a / (b * r * t)
+            a_mp_i = -a + 2 * a_ij.dot(z_i)  # partielles molares a_i
+            b_mp_i = b_i  # partielles molares b_i
+            q_mp_i = q * (1 + a_mp_i / a - b_i / b)  # partielles molares q_i
+
+            a1 = beta * (epsilon + sigma) - beta - 1
+            a2 = q * beta + epsilon * sigma * beta ** 2 \
+                 - beta * (epsilon + sigma) * (1 + beta)
+            a3 = -(epsilon * sigma * beta ** 2 * (1 + beta) +
+                   q * beta ** 2)
+
+            soln = solve_cubic([1, a1, a2, a3])
+            roots, disc = soln['roots'], soln['disc']
+            re_roots = array([roots[0][0], roots[1][0], roots[2][0]])
+
+            if disc <= 0 and all(re_roots >= 0):
+                # 3 real roots. smallest ist liq. largest is gas.
+                z_l = re_roots[0]
+                z_mid = re_roots[1]
+                z_v = re_roots[2]
+                v_l = z_l * r * t / p
+                v_mid = z_mid * r * t / p
+                v_v = z_v * r * t / p
+                p_plot += [p, p, p]
+                v_plot += [v_l, v_mid, v_v]
+                rho_plot += [1 / v_l, 1 / v_mid, 1 / v_v]
+                z_plot += [z_l, z_mid, z_v]
+            elif disc > 0:
+                # one real root, 2 complex. First root is the real one.
+                z = re_roots[0]
+                v = z * r * t / abs(p)
+                p_plot += [p]
+                v_plot += [v]
+                rho_plot += [1 / v]
+                z_plot += [z]
+                z_complex += [re_roots[1]]
+                p_complex += [p]
+
+        for p in linspace(1e-4, max(p_range), 30):
+            rho_l_phase += [z_phase_2(t, p, z_i, tc_i, pc_i, af_omega_i, 'l', max_it, tol)['rho']]
+            rho_v_phase += [z_phase_2(t, p, z_i, tc_i, pc_i, af_omega_i, 'v', max_it, tol)['rho']]
+            p_v_phase += [p]
+
+        plot1.axvline(b, linestyle='--')
+        if x < 0.3:
+            plot2.axvline(1 / b, linestyle='--')
+            plot4.axvline(1 / b, linestyle='--')
+        plot1.semilogx(v_plot, p_plot, markers[randint(0, len(markers))],
+                       label=r'$z_1={:g}, T={:g}K$'.format(z_i[0], t),
+                       fillstyle='none')
+        rho_line = plot2.plot(rho_plot, p_plot, markers[randint(0, len(markers))],
+                              label=r'$z_1={:g}, T={:g}K$'.format(z_i[0], t),
+                              fillstyle='none')
+        current_color = plt.get(rho_line[0], 'color')
+        current_marker = plt.get(rho_line[0], 'marker')
+        if round(x, 1) in [0.0, 0.3, 0.5, 0.9]:
+            plot4.plot(rho_l_phase, p_v_phase, current_marker, markeredgewidth=0.5,
+                       color=current_color, markersize=4, fillstyle='bottom', linestyle='none',
+                       label=r'$L: x_1={:g}$'.format(z_i[0]))
+            plot4.plot(rho_v_phase, p_v_phase, current_marker, markeredgewidth=0.25,
+                       color=current_color, markersize=4, fillstyle='none', linestyle='--',
+                       label=r'$V: y_1={:g}$'.format(z_i[0]))
+        z_line = plot3.plot(z_plot, p_plot, markers[randint(0, len(markers))],
+                            label=r'$z_1={:g}, z_2={:g}$'.format(z_i[0], z_i[1]),
+                            fillstyle='none')
+        current_color = plt.get(z_line[0], 'color')
+        current_marker = markers[randint(0, len(markers))]
+        plot3.plot(z_complex, p_complex, '.', alpha=0.1,
+                   fillstyle='none', color=current_color)
+        plot1.set_xlabel(r'$\frac{v}{m^3/mol}$')
+        plot1.set_ylabel('p / bar')
+        plot2.set_xlabel(r'$\frac{rho}{mol / m^3}$')
+        plot2.set_ylabel('p / bar')
+        plot2.set_title(r'$\rho$' + ', act.')
+        plot3.set_xlabel(r'$Z$')
+        plot3.set_ylabel('p / bar')
+        plot3.legend(['real root', 'real part of complex root'], fontsize=6)
+        plot4.set_xlabel(r'$\frac{rho}{mol / m^3}$')
+        plot4.set_ylabel('p / bar')
+        plot4.set_title(r'$\rho$' + ', L/V estimation[3]')
+        plot4.legend(fontsize=6)
+        plt.tight_layout()
+        plot1.legend(fontsize=6)
+    plt.show()
 
 
 
@@ -1336,7 +1632,7 @@ def beispiel_svn_14_2():
                      fillstyle='none')
         current_color = plt.get(rho_line[0], 'color')
         current_marker = plt.get(rho_line[0], 'marker')
-        if round(x, 1) in [0.0, 0.3, 0.6, 0.9]:
+        if round(x, 1) in [0.0, 0.3, 0.5, 0.9]:
             plot4.plot(rho_l_phase, p_v_phase, current_marker, markeredgewidth=0.5,
                        color=current_color, markersize=4, fillstyle='bottom', linestyle='none',
                        label=r'$L: x_1={:g}$'.format(z_i[0]))
@@ -1932,7 +2228,8 @@ def beispiel_pat_ue_03_vollstaendig(rlv, print_output=False):
 
 # beispiel_wdi_atlas()
 # beispiel_svn_14_1()
-beispiel_svn_14_2()
+# beispiel_svn_14_2()
+beispiel_zs_1998()
 # beispiel_pat_ue_03_flash()
 # beispiel_isot_flash_seader_4_1()
 # beispiel_pat_ue_03_vollstaendig(0.2)
