@@ -428,10 +428,6 @@ def z_non_sat(t, p, x_i, tc_i, pc_i, af_omega_i):
     return soln
 
 def phi(t, p, z_i, tc_i, pc_i, af_omega_i, lv):
-    if lv == 'l':
-        z_index = -1
-    elif lv == 'v':
-        z_index = 0
     tr_i = t / tc_i
     a_i = psi * alpha(tr_i, af_omega_i) * r ** 2 * tc_i ** 2 / pc_i
     b_i = omega * r * tc_i / pc_i
@@ -439,7 +435,7 @@ def phi(t, p, z_i, tc_i, pc_i, af_omega_i, lv):
     q_i = a_i / (b_i * r * t)
     a_ij = sqrt(outer(a_i, a_i))
 
-    # Variablen, die von der Flüssigkeit-Zusammensetzung abhängig sind
+    # composition-dependent variables
     b = sum(z_i * b_i)
     a = z_i.dot(a_ij).dot(z_i)
     beta = b * p / (r * t)
@@ -448,27 +444,10 @@ def phi(t, p, z_i, tc_i, pc_i, af_omega_i, lv):
     b_mp_i = b_i  # partielles molares b_i
     q_mp_i = q * (1 + a_mp_i / a - b_i / b)  # partielles molares q_i
 
-    a1 = beta * (epsilon + sigma) - beta - 1
-    a2 = q * beta + epsilon * sigma * beta ** 2 \
-        - beta * (epsilon + sigma) * (1 + beta)
-    a3 = -(epsilon * sigma * beta ** 2 * (1 + beta) +
-             q * beta ** 2)
-
-    soln = solve_cubic([1, a1, a2, a3])
-    z_soln = soln['roots']
-    disc = soln['disc']
-    if disc <= 0:
-        # 3 real roots. smallest ist liq. largest is gas.
-        z = array([z_soln[z_index][0]])
-        phases = 2
-    elif disc > 0:
-        # one real root, 2 complex. First root is the real one.
-        z = array([z_soln[0][0]])
-        phases = 1
+    z = z_phase(t, p, z_i, tc_i, pc_i, af_omega_i, lv, tol)['z']
     i_int = 1 / (sigma - epsilon) * \
         log((z + sigma * beta) / (z + epsilon * beta))
-    ln_phi = b_i / b * (z - 1) - log(z -
-                                              beta) - q_mp_i * i_int
+    ln_phi = b_i / b * (z - 1) - log(z - beta) - q_mp_i * i_int
     phi = exp(ln_phi)
 
     soln = dict()
@@ -479,73 +458,6 @@ def phi(t, p, z_i, tc_i, pc_i, af_omega_i, lv):
                  'phases']:
         soln[item] = locals().get(item)
     return soln
-
-def phi_pure(t, p, tc_i, pc_i, af_omega_i, lv, max_it, tol=tol):
-    phi_pure_list = zeros(len(tc_i))
-    stop = False
-    for i in range(len(tc_i)):
-        j = 0
-        while not stop and j in range(max_it):
-            j += 1
-            tr_i = t / tc_i[i]
-            a_i = psi * alpha(tr_i, af_omega_i[i]) * r ** 2 * tc_i[i] ** 2 / pc_i[i]
-            b_i = omega * r * tc_i[i] / pc_i[i]
-            beta = b_i * p / (r * t)
-            q = a_i / (b_i * r * t)
-            a1 = beta * (epsilon + sigma) - beta - 1
-            a2 = q * beta + epsilon * sigma * beta ** 2 \
-                 - beta * (epsilon + sigma) * (1 + beta)
-            a3 = -(epsilon * sigma * beta ** 2 * (1 + beta) +
-                   q * beta ** 2)
-            soln = solve_cubic([1, a1, a2, a3])
-            roots, disc = soln['roots'], soln['disc']
-            p_term, q_term = 1/3 * soln['p'], soln['q']
-            re_roots = array([roots[0][0], roots[1][0], roots[2][0]])
-
-            if disc <= 0:
-                # disc < 0: 3 real roots, all distinct: case III
-                # disc = 0: 3 real roots, two equal: case III also
-                z_l = min(re_roots)
-                z_v = max(re_roots)
-                if (z_v >= 1/3 and z_l >= 1/3) or z_v / z_l <= 1.2 or p_term == 0:
-                    # p_term = 0: 3 real roots: all equal: neither I nor V (disc = 0 too)
-                    # or max(re_roots)/min(re_roots) too close to 1
-                    # action a) reduce pressure, to "separate z values", and continue
-                    p = 0.9 * p
-                else:
-                    stop = True
-            elif disc > 0:
-                # 2 complex, 1 real root: case IV, II, I or V
-                if p_term < 0:
-                    # case IV or II
-                    # action b) artificial density values
-                    z_l = -a1 / 3 - sqrt(-1 / 3 * p_term)
-                    z_v = -a1 / 3 + sqrt(-1 / 3 * p_term)
-                    stop = True
-                elif p_term > 0:
-                    # case V or I
-                    # action d) conserve liquid density value
-                    p, _ = p_i_sat(t, p, tc_i[i], pc_i[i], af_omega_i[i], max_it, tol)
-                    p = p.item()
-                    z = roots[0][0]  # real root likely like case V
-                    if z <= 1 / 3:
-                        # case V, action d) conserve liquid density value and continue
-                        z_l_old = z
-                        p_old = p
-                    elif z > 1 / 3:
-                        # case I, action d) conserve liquid density value
-                        z_v = z
-                        z_l = z_l_old * p / p_old
-                        stop = True
-            if lv == 'l':
-                z = z_l
-            elif lv == 'v':
-                z = z_v
-        i_int = 1 / (sigma - epsilon) * log((z + sigma * beta) / (z + epsilon * beta))
-        ln_phi = z - 1 - log(z - beta) - q * i_int
-        phi_pure_list[i] = exp(ln_phi)
-        stop = False
-    return phi_pure_list
 
 
 def siedepunkt(t, p, x_i, y_i, tc_i, pc_i, af_omega_i, ant_a, ant_b, ant_c, max_it, tol=tol):
@@ -601,8 +513,8 @@ def siedepunkt(t, p, x_i, y_i, tc_i, pc_i, af_omega_i, ant_a, ant_b, ant_c, max_
 
 def bubl_p(t, p, x_i, tc_i, pc_i, af_omega_i, max_it, tol=tol):
     # read t, x, estimate p, y
-    phi_l = phi_pure(t, p, tc_i, pc_i, af_omega_i, 'l', max_it, tol)
-    phi_v = phi_pure(t, p, tc_i, pc_i, af_omega_i, 'v', max_it, tol)
+    phi_l = phi(t, p, x_i, tc_i, pc_i, af_omega_i, 'l')['phi']
+    phi_v = phi(t, p, x_i, tc_i, pc_i, af_omega_i, 'v')['phi']
     k_i = phi_l / phi_v  # est. phi_v ~ 1
     sum_ki_xi = sum(k_i * x_i)
     y_i = k_i * x_i / sum_ki_xi
@@ -881,7 +793,7 @@ def p_est(t, p, x_i, tc_i, pc_i, af_omega_i, max_it, tol=tol):
         soln[item] = locals().get(item)
     return soln
 
-def z_phase(t, p, x_i, tc_i, pc_i, af_omega_i, phase, max_it, tol=tol):
+def z_phase(t, p, z_i, tc_i, pc_i, af_omega_i, phase, tol=tol):
     tr_i = t / tc_i
     a_i = psi * alpha(tr_i, af_omega_i) * r ** 2 * tc_i ** 2 / pc_i
     b_i = omega * r * tc_i / pc_i
@@ -889,14 +801,14 @@ def z_phase(t, p, x_i, tc_i, pc_i, af_omega_i, phase, max_it, tol=tol):
     a_ij = sqrt(outer(a_i, a_i))
 
     # composition-dependent variables
-    b = sum(x_i * b_i)
-    a = x_i.dot(a_ij).dot(x_i)
+    b = sum(z_i * b_i)
+    a = z_i.dot(a_ij).dot(z_i)
     q = a / (b * r * t)
 
     # mechanical critical point
     z_mc = -1 / 3 * ((epsilon + sigma) * omega - omega - 1)
-    p_mc = sum(x_i * pc_i)
-    t_mc = x_i.dot(sqrt(outer(tc_i, tc_i))).dot(x_i)
+    p_mc = sum(z_i * pc_i)
+    t_mc = z_i.dot(sqrt(outer(tc_i, tc_i))).dot(z_i)
     rho_mc = p_mc / (r * t_mc * z_mc)
     v_mc = 1 / rho_mc
 
@@ -1130,8 +1042,8 @@ def beispiel_zs_1998():
                 p_complex += [p]
 
         for p in linspace(1e-4, max(p_range), 30):
-            rho_l_phase += [z_phase(t, p, z_i, tc_i, pc_i, af_omega_i, 'l', max_it, tol)['rho']]
-            rho_v_phase += [z_phase(t, p, z_i, tc_i, pc_i, af_omega_i, 'v', max_it, tol)['rho']]
+            rho_l_phase += [z_phase(t, p, z_i, tc_i, pc_i, af_omega_i, 'l', tol)['rho']]
+            rho_v_phase += [z_phase(t, p, z_i, tc_i, pc_i, af_omega_i, 'v', tol)['rho']]
             p_v_phase += [p]
 
         plot1.axvline(b, linestyle='--')
@@ -1360,8 +1272,8 @@ def beispiel_svn_14_2():
                 p_complex += [p]
 
         for p in linspace(1e-4, max(p_range), 30):
-            rho_l_phase += [z_phase(t, p, z_i, tc_i, pc_i, af_omega_i, 'l', max_it, tol)['rho']]
-            rho_v_phase += [z_phase(t, p, z_i, tc_i, pc_i, af_omega_i, 'v', max_it, tol)['rho']]
+            rho_l_phase += [z_phase(t, p, z_i, tc_i, pc_i, af_omega_i, 'l', tol)['rho']]
+            rho_v_phase += [z_phase(t, p, z_i, tc_i, pc_i, af_omega_i, 'v', tol)['rho']]
             p_v_phase += [p]
 
         current_marker = markers[randint(0, len(markers))]
