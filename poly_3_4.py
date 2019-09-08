@@ -71,7 +71,7 @@ def solve_cubic(abcd):
         y_real_parts[i] - b / 3 / a,
         y_imag_parts[i]
     ] for i in positions]
-    return dict([['roots', x_list], ['disc', disc]])
+    return dict([['roots', x_list], ['disc', disc], ['p', p], ['q', q]])
 
 
 def solve_quartic(abcde):
@@ -169,68 +169,3 @@ def solve_scaled(coefs):
     print('err:')
     print(p)
     print('')
-
-
-all_tests_pass = True
-for coeffs in [[1, 0, 1, -6], [1, -3, -3, -1], [1, 0, -15, -4],
-               [1, 0, -8, -3], [1, 6, 9, -2], [1, 0, 6, -20],
-               [1, 0, -6, -20], [1, 0, -15, -4], [1, 0, -13, -12],
-               [2, -24, 108, -216], [1, 0, 6, -20], [1, 0, -2, 8],
-               [1, 0, -6, 2], [1, 0, 0, 0], [1, 0, -3, 2],
-               [1, -6, 11, -6], [1, -5, 8, -4], [1, -3, 3, -1],
-               [1, 1, 1, -3], [1, 4, -1, -6], [1, -6, -6, -7],
-               [2, 3, -11, -6], [1, -3, -144, 432], [1, 5, -14, 0],
-               [1, 2, -9, -18], [1, 0, -5, 2], [1, 0, -18, 35],
-               [1, 0, -2, 4], [1, 6, 3, 18], [28, 9, 0, -1],
-               [1, 0, -2, -1], [1, 0, -7, 7], [1, 3, -2, -5],
-               [1, 1, -2, -1], [1, 4, 0, -7], [1, 0, -15, -4],
-               [1, 0, -3, 1.414213562], [1, -1, -14, 24],
-               [1, -3, 3, -5], [1, -2.999727997, 3, -1], [1, -6, 11, -6],
-               [1, 7, 49, 343], [1, 2, 3, 4], [1, -7.8693, 13.3771, -6.5353],
-               [5.7357, -15.6368, 30.315, -14.8104],
-               [1, -1.0595, 0.2215, -0.01317],
-               [1, -1, 0.089, -0.0013],
-               [1.0, -2000.001, 1000002.0, -1000.0]]:
-    print(coeffs)
-    null_werte = []
-    for soln in solve_cubic(coeffs)['roots']:
-        print(soln)
-        a, b, c, d = coeffs
-        x = soln[0] + soln[1] * 1j
-        null = a * x**3 + b * x**2 + c * x + d
-        null_wert = (null.real**2 + null.imag**2)**(1 / 2)
-        all_tests_pass = all_tests_pass and null_wert < 1e-10
-        null_werte += [null_wert]
-    print('p(x):' + str(null_werte))
-    print('')
-print('all solutions correct to 1e-10? ' + str(all_tests_pass))
-
-
-all_tests_pass = True
-for coeffs in [[1, 8, 24, -112, 52], [1, 0, 0, -8, 6], [1, 4, 2, -4, -3],
-               [1, 6, -5, -10, -3], [1, 6, 7, -7, -12],
-               [3.621535214588474e+11,
-                5.993293694242965e+11,
-                2.668263562685250e+07,
-                7.500004043464861e-01,
-                -6.855188152137764e-15],
-               [4.828378653732919e+10,
-                1.322351818687487e+11,
-                9.742783007165471e+06,
-                4.531986940512317e-01,
-                -6.855188152137764e-15],
-                [1,-4,6,-4,1]]:
-    a, b, c, d, e = coeffs
-    coeffs = [x for x in coeffs]
-    null_werte = []
-    print(coeffs)
-    for soln in solve_quartic(coeffs)['roots']:
-        print(soln)
-        x = soln[0] + soln[1] * 1j
-        null = a * x**4 + b * x**3 + c * x**2 + d * x + e
-        null_wert = (null.real**2 + null.imag**2)**(1 / 2)
-        all_tests_pass = all_tests_pass and null_wert < 1e-10
-        null_werte += [null_wert]
-    print('p(x):' + str(null_werte) + '\n')
-
-print('all solutions correct to 1e-10? ' + str(all_tests_pass))

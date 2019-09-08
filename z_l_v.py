@@ -444,11 +444,20 @@ def phi(t, p, z_i, tc_i, pc_i, af_omega_i, lv):
     b_mp_i = b_i  # partielles molares b_i
     q_mp_i = q * (1 + a_mp_i / a - b_i / b)  # partielles molares q_i
 
-    z = z_phase(t, p, z_i, tc_i, pc_i, af_omega_i, lv, tol)['z']
+    phase_soln = z_phase(t, p, z_i, tc_i, pc_i, af_omega_i, lv, tol)
+    z = phase_soln['z']
     i_int = 1 / (sigma - epsilon) * \
         log((z + sigma * beta) / (z + epsilon * beta))
     ln_phi = b_i / b * (z - 1) - log(z - beta) - q_mp_i * i_int
-    phi = exp(ln_phi)
+    phi_calc = exp(ln_phi)
+    if lv == 'l':
+        # correction for pseudoproperties in phi (Matthias et al. 1984)
+        v = phase_soln['v']
+        p_calc = r * t / (v - b) - a / ((v + epsilon * b)*(v + sigma * b))
+        phi = phi_calc * p_calc / p
+        ln_phi = log(phi)
+    else:
+        phi = phi_calc
 
     soln = dict()
     for item in ['a_i', 'b_i',
@@ -957,7 +966,7 @@ def z_phase(t, p, z_i, tc_i, pc_i, af_omega_i, phase, tol=tol):
     return soln
 
 def beispiel_zs_1998():
-    use_pr_eos()
+    use_srk_eos()
     tc_i = array([305.32, 540.2])
     pc_i = array([48.71, 27.35])
     af_omega_i = array([0.099, 0.35])
