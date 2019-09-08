@@ -850,7 +850,7 @@ def z_phase(t, p, z_i, tc_i, pc_i, af_omega_i, phase, tol=tol):
             p_low = min(roots_p[:, 0])
             p_cross = max(roots_p[:, 0])
     else:
-        # full cubic
+        # cubic
         soln = solve_cubic([q0, q1, q2, q3])
         roots_p = array(soln['roots'])
 
@@ -867,47 +867,19 @@ def z_phase(t, p, z_i, tc_i, pc_i, af_omega_i, phase, tol=tol):
         elif n_positive_roots_p == 2:
             p_cross = roots_p[0, 0]
             p_low = roots_p[-1, 0]
-
-        # find local min and max (extrema)
-        p0 = a * b ** 3 * epsilon + a * b ** 3 * sigma - b ** 4 * epsilon ** 2 * r * sigma ** 2 * t
-        p1 = -2 * a * b ** 2 * epsilon - 2 * a * b ** 2 * sigma + \
-             2 * a * b ** 2 - 2 * b ** 3 * epsilon ** 2 * r * sigma * t - \
-             2 * b ** 3 * epsilon * r * sigma ** 2 * t
-        p2 = a * b * epsilon + a * b * sigma - 4 * a * b - b ** 2 * epsilon ** 2 * r * t - \
-             4 * b ** 2 * epsilon * r * sigma * t - b ** 2 * r * sigma ** 2 * t
-        p3 = 2 * a - 2 * b * epsilon * r * t - 2 * b * r * sigma * t
-        p4 = -r * t
-
-        soln = solve_quartic([p4, p3, p2, p1, p0])
-        v_low_bound_roots = array(soln['roots'])
-        re_v_low_bound_roots = v_low_bound_roots[v_low_bound_roots[:, 1] == 0][:, 0]
-        v_low_bound_opposites = re_v_low_bound_roots[re_v_low_bound_roots > b]
+        # solve f(z_low)=0
+        beta_low = b * p_low / (r * t)
+        a1_low = beta_low * (epsilon + sigma) - beta_low - 1
+        a2_low = q * beta_low + epsilon * sigma * beta_low ** 2 \
+                 - beta_low * (epsilon + sigma) * (1 + beta_low)
+        a3_low = -(epsilon * sigma * beta_low ** 2 * (1 + beta_low) +
+                   q * beta_low ** 2)
+        soln_z_low = solve_cubic([1, a1_low, a2_low, a3_low])
+        roots_z_low = array(soln_z_low['roots'])
         if phase == 'l':
-            # set p_low as actually maximal pressure for 3 real roots
-            v_lb_op = max(v_low_bound_opposites)
+            z_low = roots_z_low[-1][0]
         elif phase == 'v':
-            # set p_low as actually maximal pressure for 3 real roots
-            v_lb_op = min(v_low_bound_opposites)
-            # solve f(z_low)=0
-            # beta_low = b * p_low / (r * t)
-            # a1_low = beta_low * (epsilon + sigma) - beta_low - 1
-            # a2_low = q * beta_low + epsilon * sigma * beta_low ** 2 \
-            #          - beta_low * (epsilon + sigma) * (1 + beta_low)
-            # a3_low = -(epsilon * sigma * beta_low ** 2 * (1 + beta_low) +
-            #            q * beta_low ** 2)
-            # soln_z_low = solve_cubic([1, a1_low, a2_low, a3_low])
-            # roots_z_low = array(soln_z_low['roots'])
-            # z_low = roots_z_low[0][0]
-        # pressure for extrapolation at extrema
-        p_low = r * t / (v_lb_op - b) - a / (
-                (v_lb_op + epsilon * b) * (v_lb_op + sigma * b))
-        z_lb_op = p_low * v_lb_op / (r * t)
-        # 3 real roots in this region, at this point two are equal
-        # get the other real (part)
-        z_low = -2 * z_lb_op - (
-                b * p_low / (r * t) * (
-                sigma + epsilon) - b * p_low / (r * t) - 1
-        )
+            z_low = roots_z_low[0][0]
         v_low = z_low * r * t / (p_low)
         rho_low = 1 / v_low
         dp_dv_at_rho_low = -r * t / (v_low - b) ** 2 + a / (
