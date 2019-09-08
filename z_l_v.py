@@ -528,20 +528,17 @@ def bubl_p(t, p, x_i, tc_i, pc_i, af_omega_i, max_it, tol=tol):
     sum_ki_xi = sum(k_i * x_i)
     y_i = k_i * x_i / sum_ki_xi
     success = True
+    it_count = 0
     for j in range(max_it):
         # loop until sum(Ki xi) = 1
-        for i in range(max_it):
-            # loop until y-convergence
-            sum_ki_xi_old = sum_ki_xi
-            # calculate k
-            phi_v = phi(t, p, y_i, tc_i, pc_i, af_omega_i, 'v')['phi']
-            k_i = phi_l / phi_v
-            sum_ki_xi = sum(k_i * x_i)
-            # calculate y
-            y_i = k_i * x_i / sum_ki_xi
-            # normalize y and compare estimated and normalized values
-            if abs((sum_ki_xi_old - sum_ki_xi) / sum_ki_xi) <= tol:
-                break
+        it_count += 1
+        sum_ki_xi_old = sum_ki_xi
+        # calculate k
+        phi_v = phi(t, p, y_i, tc_i, pc_i, af_omega_i, 'v')['phi']
+        k_i = phi_l / phi_v
+        sum_ki_xi = sum(k_i * x_i)
+        # calculate y
+        y_i = k_i * x_i / sum_ki_xi
         if abs(1 - sum_ki_xi) <= tol:
             break
         else:
@@ -554,7 +551,6 @@ def bubl_p(t, p, x_i, tc_i, pc_i, af_omega_i, max_it, tol=tol):
                     p = 0.9 * p
                 else:
                     p = 1.1 * p
-
             else:
                 inv_slope = (p - p_k_minus_1) / (- sum_ki_xi + sum_ki_xi_k_minus_1)
                 p_k_minus_1 = p
@@ -573,7 +569,7 @@ def bubl_p(t, p, x_i, tc_i, pc_i, af_omega_i, max_it, tol=tol):
                 success = False
                 break
             phi_l = phi(t, p, x_i, tc_i, pc_i, af_omega_i, 'l')['phi']
-    if j == max_it - 1 or i == max_it - 1:
+    if j == max_it - 1:
         success = False
     soln = dict()
     for item in ['soln_l', 'soln_v', 'k_i', 'y_i', 'p', 'success']:
@@ -965,7 +961,7 @@ def z_phase(t, p, z_i, tc_i, pc_i, af_omega_i, phase, tol=tol):
         soln[item] = locals().get(item)
     return soln
 
-def beispiel_zs_1998():
+def zs_1998():
     use_srk_eos()
     tc_i = array([305.32, 540.2])
     pc_i = array([48.71, 27.35])
@@ -1190,7 +1186,7 @@ def isot_flash_solve(t, p, z_i, tc_i, pc_i, af_omega_i, max_it=20,
     return soln
 
 
-def beispiel_wdi_atlas():
+def wdi_atlas():
     use_pr_eos()
     print(
         'ref. VDI Wärmeatlas H2 Dampfdruck um -256.6K: ' +
@@ -1223,7 +1219,7 @@ def beispiel_wdi_atlas():
     print(res)
 
 
-def beispiel_svn_14_1():
+def svn_14_1():
     x_i = array([0.4, 0.6])
     tc_i = array([126.2, 190.6])
     pc_i = array([34., 45.99])
@@ -1235,7 +1231,7 @@ def beispiel_svn_14_1():
 
 
 
-def beispiel_svn_14_2():
+def svn_14_2():
     use_srk_eos()
     x_i = array([0.2, 0.8])
     y_i = array([0.2, 0.8])  # Est
@@ -1258,17 +1254,51 @@ def beispiel_svn_14_2():
         max_it)['y_i']
     p_sat_all, _ = p_i_sat(310.92, 30, tc_i, pc_i, af_omega_i, max_it, tol)
     p = sum(p_sat_all * x_i)
-    print(bubl_p(310.92, p, x_i, tc_i, pc_i, af_omega_i, max_it))
 
+    fig = plt.figure()
+    ax = plt.axes()
+    x = linspace(0.0, 0.8, 50)
+    y = empty_like(x)
+    p_v = empty_like(x)
+    p_sat_all, _ = p_i_sat(310.92, 30, tc_i, pc_i, af_omega_i, max_it, tol)
+    p_v0 = sum(p_sat_all * x_i)
+    for i in range(len(x)):
+        x_i = array([x[i], 1 - x[i]])
+        soln = bubl_p(310.92, p_v0, x_i, tc_i, pc_i, af_omega_i, max_it)
+        p_v[i] = soln['p']
+        y[i] = soln['y_i'][0]
+        if soln['success']:
+            p_v0 = p_v[i]
+        else:
+            p = sum(p_sat_all * x_i)
+    plt.plot(x, p_v, label=r'$x_1(L)$')
+    plt.plot(y, p_v, label=r'$y_1(V)$')
+    plt.ylabel('p / bar')
+    plt.xlabel(r'$x_1 , y_1$')
+    plt.legend()
+    plt.show()
+
+
+def svn_fig_14_8():
     # plot fig 14.8
+    use_srk_eos()
+    x_i = array([0.2, 0.8])
+    y_i = array([0.2, 0.8])  # Est
+    tc_i = array([190.6, 425.1])
+    pc_i = array([45.99, 37.96])
+    af_omega_i = array([0.012, 0.200])
+    ant_a = array([3.7687, 3.93266])
+    ant_b = array([395.744, 935.773])
+    ant_c = array([266.681, 238.789])
+    max_it = 100
     markers = plt.Line2D.filled_markers
     p_range = linspace(0.1, 140, 40)
     plot1 = plt.subplot2grid([2, 2], [1, 0], rowspan=1, colspan=1)
     plot2 = plt.subplot2grid([2, 2], [1, 1], rowspan=1, colspan=1)
     plot3 = plt.subplot2grid([2, 2], [0, 0], rowspan=1, colspan=1)
     plot4 = plt.subplot2grid([2, 2], [0, 1], rowspan=1, colspan=1)
-    for x in linspace(0.0, 1.0, 10+1):
-        z_i = array([x, 1-x])
+    for x in linspace(0.0, 1.0, 10 + 1):
+        z_i = array([x, 1 - x])
         v_plot = []
         p_plot = []
         rho_plot = []
@@ -1317,17 +1347,17 @@ def beispiel_svn_14_2():
                 v_v = z_v * r * t / p
                 p_plot += [p, p, p]
                 v_plot += [v_l, v_mid, v_v]
-                rho_plot += [1/v_l, 1/v_mid, 1/v_v]
+                rho_plot += [1 / v_l, 1 / v_mid, 1 / v_v]
                 z_plot += [z_l, z_mid, z_v]
-                #z_complex += [re_roots[1]]
-                #p_complex += [p]
+                # z_complex += [re_roots[1]]
+                # p_complex += [p]
             elif disc > 0:
                 # one real root, 2 complex. First root is the real one.
                 z = re_roots[0]
                 v = z * r * t / abs(p)
                 p_plot += [p]
                 v_plot += [v]
-                rho_plot += [1/v]
+                rho_plot += [1 / v]
                 z_plot += [z]
                 z_complex += [re_roots[1]]
                 p_complex += [p]
@@ -1343,13 +1373,13 @@ def beispiel_svn_14_2():
             plot2.axvline(1 / b, linestyle='--')
             plot4.axvline(1 / b, linestyle='--')
         v_line = plot1.semilogx(v_plot, p_plot, current_marker,
-                     label=r'$z_1={:g}$'.format(z_i[0], z_i[1]),
-                     fillstyle='none')
+                                label=r'$z_1={:g}$'.format(z_i[0], z_i[1]),
+                                fillstyle='none')
         current_marker = plt.get(v_line[0], 'marker')
         current_color = plt.get(v_line[0], 'color')
         plot2.plot(rho_plot, p_plot, markers[randint(0, len(markers))],
-                     label=r'$z_1={:g}, z_2={:g}$'.format(z_i[0], z_i[1]),
-                     fillstyle='none')
+                   label=r'$z_1={:g}, z_2={:g}$'.format(z_i[0], z_i[1]),
+                   fillstyle='none')
         if round(x, 1) in [0.0, 0.3, 0.6, 0.9]:
             plot4.plot(rho_l_phase, p_v_phase, current_marker, markeredgewidth=0.5,
                        color=current_color, markersize=4, fillstyle='bottom', linestyle='none',
@@ -1359,8 +1389,8 @@ def beispiel_svn_14_2():
                        label=r'$V: y_1={:g}$'.format(z_i[0]))
 
         plot3.plot(z_plot, p_plot, current_marker,
-                 label=r'$z_1={:g}, z_2={:g}$'.format(z_i[0], z_i[1]),
-                 fillstyle='bottom', linestyle='none')
+                   label=r'$z_1={:g}, z_2={:g}$'.format(z_i[0], z_i[1]),
+                   fillstyle='bottom', linestyle='none')
         plot3.plot(z_complex, p_complex, current_marker, markersize=4, linestyle='--',
                    fillstyle='none', color=current_color, markeredgewidth=0.25, linewidth=0.5)
         if x in [0.4, 0.5, 0.6, 0.7]:
@@ -1379,31 +1409,9 @@ def beispiel_svn_14_2():
     plot4.set_title(r'pseudo-$\rho$' + ', L/V [3]')
     plot4.legend(fontsize=6)
     plt.tight_layout()
-    fig = plt.figure()
-    ax = plt.axes()
-    x = linspace(0.0, 0.8, 50)
-    y = empty_like(x)
-    p_v = empty_like(x)
-    p_sat_all, _ = p_i_sat(310.92, 30, tc_i, pc_i, af_omega_i, max_it, tol)
-    p_v0 = sum(p_sat_all * x_i)
-    for i in range(len(x)):
-        x_i = array([x[i], 1 - x[i]])
-        soln = bubl_p(310.92, p_v0, x_i, tc_i, pc_i, af_omega_i, max_it)
-        p_v[i] = soln['p']
-        y[i] = soln['y_i'][0]
-        if soln['success']:
-            p_v0 = p_v[i]
-        else:
-            p = sum(p_sat_all * x_i)
-    plt.plot(x, p_v, label=r'$x_1(L)$')
-    plt.plot(y, p_v, label=r'$y_1(V)$')
-    plt.ylabel('p / bar')
-    plt.xlabel(r'$x_1 , y_1$')
-    plt.legend()
-    plt.show()
 
 
-def beispiel_pat_ue_03_flash():
+def pat_ue_03_flash():
     use_pr_eos()
     n = array([
         205.66,
@@ -1439,7 +1447,7 @@ def beispiel_pat_ue_03_flash():
         print(sum(n) * (1 - v_f) * x_i + sum(n) * v_f * y_i)
 
 
-def beispiel_isot_flash_seader_4_1():
+def isot_flash_seader_4_1():
     use_pr_eos()
     n = array([
         10,
@@ -1482,7 +1490,7 @@ def beispiel_isot_flash_seader_4_1():
         print(k_i)
 
 
-def beispiel_pat_ue_03_vollstaendig(rlv, print_output=False):
+def pat_ue_03_vollstaendig(rlv, print_output=False):
     # Als Funktion des Rücklaufverhältnises.
     use_pr_eos()
 
@@ -1944,20 +1952,21 @@ def beispiel_pat_ue_03_vollstaendig(rlv, print_output=False):
     return nl[-2]  # Methanol in der Flüssigkeit
 
 
-# beispiel_wdi_atlas()
-# beispiel_svn_14_1()
-# beispiel_svn_14_2()
-beispiel_zs_1998()
-# beispiel_pat_ue_03_flash()
-# beispiel_isot_flash_seader_4_1()
-# beispiel_pat_ue_03_vollstaendig(0.2)
+# wdi_atlas()
+# svn_14_1()
+# svn_fig_14_8()
+svn_14_2()
+# zs_1998()
+# pat_ue_03_flash()
+# isot_flash_seader_4_1()
+# pat_ue_03_vollstaendig(0.2)
 # optimize.root(
-#    lambda rlv: 350.0 - beispiel_pat_ue_03_vollstaendig(rlv),
+#    lambda rlv: 350.0 - pat_ue_03_vollstaendig(rlv),
 #    0.4
 # )
-# beispiel_pat_ue_03_vollstaendig(0.64137041)
-# beispiel_pat_ue_03_vollstaendig(0.633)
+# pat_ue_03_vollstaendig(0.64137041)
+# pat_ue_03_vollstaendig(0.633)
 # Die Lösung ist zwischen 0,65 (346kmol/h) und
 # 0,70 (400kmol/h), aber in jenem Bereich entsteht ein
 # Stabilitätsproblem
-# beispiel_pat_ue_03_vollstaendig(0.65, True)
+# pat_ue_03_vollstaendig(0.65, True)
