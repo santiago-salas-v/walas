@@ -1,4 +1,5 @@
 from poly_3_4 import solve_cubic, solve_quartic
+from numerik import secant_ls_3p
 from poly_n import zroots
 from numpy import array, append, zeros, abs, ones, empty_like, empty
 from numpy import sqrt, empty, outer, sum, log, exp, multiply, diag
@@ -529,52 +530,39 @@ def bubl_p(t, p, x_i, tc_i, pc_i, af_omega_i, max_it, tol=tol):
     y_i = k_i * x_i / sum_ki_xi
     success = True
     it_count = 0
-    for j in range(max_it):
-        # loop until sum(Ki xi) = 1
-        it_count += 1
-        sum_ki_xi_old = sum_ki_xi
-        # calculate k
+    traceback_flag = False
+    soln = secant_ls_3p(lambda p_var: lee_kessler_bubl_p_step(
+        t, p_var, x_i, tc_i, pc_i, af_omega_i, max_it
+    ), p, 1.1 * p, 1e-10, restriction=lambda p_val: p_val > 0)
+    p = soln['x']
+    soln = lee_kessler_bubl_p_step(
+        t, p, x_i, tc_i, pc_i, af_omega_i, max_it, full_output=True)
+    return soln
+
+
+def lee_kessler_bubl_p_step(t, p, x_i, tc_i, pc_i, af_omega_i, max_it, full_output=False):
+    phi_l = phi(t, p, x_i, tc_i, pc_i, af_omega_i, 'l')['phi']
+    phi_v = phi(t, p, x_i, tc_i, pc_i, af_omega_i, 'v')['phi']
+    k_i = phi_l / phi_v
+    sum_ki_xi = sum(k_i * x_i)
+    y_i = k_i * x_i / sum_ki_xi
+    stop = False
+    i = 0
+    while not stop and i <= max_it:
+        sum_ki_xi_k_minus_1 = sum_ki_xi
         phi_v = phi(t, p, y_i, tc_i, pc_i, af_omega_i, 'v')['phi']
         k_i = phi_l / phi_v
         sum_ki_xi = sum(k_i * x_i)
-        # calculate y
         y_i = k_i * x_i / sum_ki_xi
-        if abs(1 - sum_ki_xi) <= tol:
-            break
-        else:
-            # reestimate p (secant), evaluate phil_l, k_i
-            if j == 0:
-                # secant needs two valid points p, sum_ki_xi
-                p_k_minus_1 = p
-                sum_ki_xi_k_minus_1 = sum_ki_xi
-                if sum_ki_xi < 1:
-                    p = 0.9 * p
-                else:
-                    p = 1.1 * p
-            else:
-                inv_slope = (p - p_k_minus_1) / (- sum_ki_xi + sum_ki_xi_k_minus_1)
-                p_k_minus_1 = p
-                sum_ki_xi_k_minus_1 = sum_ki_xi
-                p = p - (1 - sum_ki_xi) * inv_slope
-                if p < 0:
-                    # keep approaching p
-                    p = p_k_minus_1
-                    sum_ki_xi = sum_ki_xi_k_minus_1
-                    if sum_ki_xi < 1:
-                        p = 0.9 * p
-                    else:
-                        p = 1.1 * p
-            if isnan(p) or isinf(p):
-                p = p_k_minus_1
-                success = False
-                break
-            phi_l = phi(t, p, x_i, tc_i, pc_i, af_omega_i, 'l')['phi']
-    if j == max_it - 1:
-        success = False
-    soln = dict()
-    for item in ['soln_l', 'soln_v', 'k_i', 'y_i', 'p', 'success']:
-        soln[item] = locals().get(item)
-    return soln
+        if abs((sum_ki_xi - sum_ki_xi_k_minus_1) / sum_ki_xi_k_minus_1) <= tol:
+            stop = True
+    if full_output:
+        soln = dict()
+        for item in ['x_i', 'y_i', 'phi_l', 'phi_v', 'k_i', 'sum_ki_xi']:
+            soln[item] = locals().get(item)
+        return soln
+    else:
+        return 1 - sum_ki_xi
 
 def p_for_3_real_roots(t, p, x_i, tc_i, pc_i, af_omega_i, max_it, tol=tol):
     tr_i = t / tc_i

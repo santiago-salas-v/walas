@@ -538,3 +538,172 @@ def solve_ax_equal_b(factor_a, term_b):
         return gauss_elimination(factor_a, term_b)
     elif np.size(term_b) == 1:
         return 1 / factor_a * term_b
+
+
+def secant_ls_3p(y, x_0, x_1, tol, max_it=100, alpha=1e-4, restriction=None):
+    x_k = x_0
+    y_k = y(x_k)
+    g_k = 1 / 2 * y_k**2
+    g_prime_k = - y_k**2
+    # relative length of p as calculated in the stopping routine
+    # p = -0.1 * x_0
+    p = x_1 - x_0
+    rellength = abs(p / x_k)
+    lambda_min = tol / rellength
+    accum_step = 0.0
+    total_backtracks = 0
+    backtrackcount = 0
+    steps = []
+    y_list = []
+    x_list = []
+    for j in range(max_it):
+        y_list += [y_k]
+        x_list += [x_k]
+        steps += [accum_step]
+        if abs(y_k) <= tol:
+            break
+        if j == 0:
+            inv_slope = 0.1 / y_k
+            p = -inv_slope * y_k
+            x_k_minus_1 = x_k
+            y_k_minus_1 = y_k
+            g_k_minus_1 = g_k
+            g_prime_k_minus_1 = g_prime_k
+
+            print(('{:d}:\t x_k: {:0.4f}\ty_k: {:0.4f}' +
+                '\tx_k_minus_1: {:0.4f}'
+                ).format(j, x_k, y_k, x_k_minus_1))
+        elif j == 1:
+            inv_slope = (x_k - x_k_minus_1) / (y_k - y_k_minus_1)
+            # x_k_plus_1 = x_k - inv_slope * y_k
+            p = -inv_slope * y_k
+            # x_k_plus_1 = x_2
+            # p = (x_2 - x_1)
+            print(('{:d}:\t x_k: {:0.4f}\ty_k: {:0.4g}' +
+                   '\tx_k_minus_1: {:0.4f}, p: {:0.4f}'
+                   ).format(j, x_k, y_k, x_k_minus_1, p))
+
+            x_k_minus_2 = x_k_minus_1
+            x_k_minus_1 = x_k
+
+            y_k_minus_2 = y_k_minus_1
+            y_k_minus_1 = y_k
+            g_k_minus_1 = g_k
+            g_prime_k_minus_1 = g_prime_k
+        else:
+            p = (x_k_minus_2 - x_k) - y_k_minus_2 * (
+                y_k - y_k_minus_1
+                ) / ((y_k - y_k_minus_2) / (x_k - x_k_minus_2) * (
+                    y_k - y_k_minus_1) - y_k * (
+                    (y_k - y_k_minus_2) / (x_k - x_k_minus_2) -
+                    (y_k_minus_1 - y_k_minus_2) / (x_k_minus_1 - x_k_minus_2)
+                    )
+                )
+            print(('{:d}:\t x_k: {:0.4f}\ty_k: {:0.4g}' +
+                   '\tx_k_minus_1: {:0.4f}, p: {:0.4f}'
+                   ).format(j, x_k, y_k, x_k_minus_1, p))
+            x_k_minus_2 = x_k_minus_1
+            x_k_minus_1 = x_k
+
+            y_k_minus_2 = y_k_minus_1
+            y_k_minus_1 = y_k
+            g_k_minus_1 = g_k
+            g_prime_k_minus_1 = g_prime_k
+
+        stop = False
+        lambda_ls = 1.0
+        total_backtracks += backtrackcount
+        backtrackcount = 0
+        g_0 = g_k_minus_1
+        g_prime_0 = g_prime_k_minus_1
+        f_0 = y_k_minus_1
+        while not stop and j + backtrackcount <= max_it:
+            # backtracking, line search - numerical recipes 3ed
+            accum_step += lambda_ls
+            if lambda_ls <= lambda_min:
+                # opposite direction
+                p = -p
+                lambda_ls = 1.0
+                stop = False
+
+            x_2 = x_k + lambda_ls * p
+            if restriction is not None and not restriction(x_2):
+                # restriction not fulfilled - cannot evaluate func.
+                x_2 = x_k
+            else:
+                f_2 = y(x_2)
+                g_2 = 1 / 2 * f_2**2
+            descent = alpha * lambda_ls * g_prime_0
+            g_max = g_0 + descent
+
+            x_list += [x_2]
+            y_list += [f_2]
+            steps += [accum_step]
+
+            satisfactory = g_2 <= g_max
+            stop = satisfactory or lambda_ls <= lambda_min
+            print(('{:d}-{:d}:\t x_2: {:.2g}\ty_2: {:.2g}' +
+                   '\tg_0: {:.2g}\tg_2: {:.2g}\tg_max: {:.2g}\tlambda: {:.2g}\t p: {:2g}').format(
+                j, backtrackcount, x_2, f_2, g_0, g_2, g_max, lambda_ls, p))
+
+            if not stop:
+                # backtrack - reduce lambda
+                backtrackcount += 1
+                accum_step -= lambda_ls
+                if lambda_ls == 1:
+                    # first backtrack quadratic fit
+                    lambda_temp = -g_prime_0 / (
+                            2 * (g_2 - g_0 - g_prime_0)
+                        )
+                elif lambda_ls < 1:
+                    # subsequent backtracks cubic fit
+                    a, b = 1 / (lambda_ls - lambda_prev) * np.array(
+                            [[+1 / lambda_ls**2, -1 / lambda_prev**2],
+                            [-lambda_prev / lambda_ls**2,
+                             +lambda_ls / lambda_prev**2]]
+                        ).dot(np.array(
+                            [[g_2 - g_0 - g_prime_0 * lambda_ls],
+                            [ g_1 - g_0 - g_prime_0 * lambda_prev]]
+                            ))
+                    a, b = a.item(), b.item()
+                    disc = b**2 - 3 * a * g_prime_0
+                    if a == 0:
+                        # actually quadratic
+                        lambda_temp = - g_prime_0 / (2 * b)
+                    else:
+                        # legitimate cubic
+                        lambda_temp = (-b + np.sqrt(disc)) / (3 * a)
+                    if lambda_temp > 1 / 2 * lambda_ls:
+                        lambda_temp = 1 / 2 * lambda_ls
+                lambda_prev = lambda_ls
+                g_1 = g_2
+                if lambda_temp <= 0.1 * lambda_ls:
+                    lambda_ls = 0.1 * lambda_ls
+                else:
+                    lambda_ls = lambda_temp
+            x_k_plus_1 = x_2
+            y_k_plus_1 = f_2
+            g_k_plus_1 = g_2
+
+
+        x_k = x_k_plus_1
+        y_k = y_k_plus_1
+        g_k = g_k_plus_1
+        g_prime_k = - y_k ** 2
+        if abs(p) <= tol:
+            # avoid 1/0 division
+            break
+
+    print(('{:d}:\t x_k: {:0.4f}\ty_k: {:0.4g}'+
+                    '\tx_k_minus_1: {:0.4f}\tx_k_minus_2: {:0.4f}'
+                    ).format(j, x_k, y_k, x_k_minus_1, x_k_minus_2))
+
+    x = x_k
+    f = y_k
+    f_list = y_list
+    iterations = j
+    soln = dict()
+    for item in ['x', 'f', 'x_list', 'f_list',
+                 'iterations', 'total_backtracks', 'steps']:
+        soln[item] = locals().get(item)
+    return soln
