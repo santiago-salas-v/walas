@@ -522,7 +522,6 @@ def siedepunkt(t, p, x_i, y_i, tc_i, pc_i, af_omega_i, ant_a, ant_b, ant_c, max_
     return soln
 
 def bubl_p(t, p, x_i, tc_i, pc_i, af_omega_i, max_it, tol=tol):
-    # read t, x, estimate p, y
     phi_l = phi(t, p, x_i, tc_i, pc_i, af_omega_i, 'l')['phi']
     phi_v = phi(t, p, x_i, tc_i, pc_i, af_omega_i, 'v')['phi']
     k_i = phi_l / phi_v  # est. phi_v ~ 1
@@ -548,7 +547,8 @@ def lee_kessler_bubl_p_step(t, p, x_i, tc_i, pc_i, af_omega_i, max_it, full_outp
     y_i = k_i * x_i / sum_ki_xi
     stop = False
     i = 0
-    while not stop and i <= max_it:
+    success = True
+    while not stop:
         sum_ki_xi_k_minus_1 = sum_ki_xi
         phi_v = phi(t, p, y_i, tc_i, pc_i, af_omega_i, 'v')['phi']
         k_i = phi_l / phi_v
@@ -556,9 +556,13 @@ def lee_kessler_bubl_p_step(t, p, x_i, tc_i, pc_i, af_omega_i, max_it, full_outp
         y_i = k_i * x_i / sum_ki_xi
         if abs((sum_ki_xi - sum_ki_xi_k_minus_1) / sum_ki_xi_k_minus_1) <= tol:
             stop = True
+        i += 1
+        if i >= max_it:
+            stop = True
+            success = False
     if full_output:
         soln = dict()
-        for item in ['x_i', 'y_i', 'phi_l', 'phi_v', 'k_i', 'sum_ki_xi']:
+        for item in ['x_i', 'y_i', 'phi_l', 'phi_v', 'k_i', 'sum_ki_xi', 'p', 'success']:
             soln[item] = locals().get(item)
         return soln
     else:
@@ -1255,10 +1259,7 @@ def svn_14_2():
         soln = bubl_p(310.92, p_v0, x_i, tc_i, pc_i, af_omega_i, max_it)
         p_v[i] = soln['p']
         y[i] = soln['y_i'][0]
-        if soln['success']:
-            p_v0 = p_v[i]
-        else:
-            p = sum(p_sat_all * x_i)
+        p_v0 = p_v[i]
     plt.plot(x, p_v, label=r'$x_1(L)$')
     plt.plot(y, p_v, label=r'$y_1(V)$')
     plt.ylabel('p / bar')

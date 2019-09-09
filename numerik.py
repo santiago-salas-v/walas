@@ -553,6 +553,7 @@ def secant_ls_3p(y, x_0, x_1, tol, max_it=100, alpha=1e-4, restriction=None):
     accum_step = 0.0
     total_backtracks = 0
     backtrackcount = 0
+    success = True
     steps = []
     y_list = []
     x_list = []
@@ -563,24 +564,24 @@ def secant_ls_3p(y, x_0, x_1, tol, max_it=100, alpha=1e-4, restriction=None):
         if abs(y_k) <= tol:
             break
         if j == 0:
-            inv_slope = 0.1 / y_k
+            inv_slope = -(x_1 - x_0) / y_k
             p = -inv_slope * y_k
+
+            print(('{:d}:\t x_k: {:0.4f}\ty_k: {:0.4g}' +
+                   '\tp: {:0.4f}'
+                   ).format(j, x_k, y_k, p))
+
             x_k_minus_1 = x_k
             y_k_minus_1 = y_k
             g_k_minus_1 = g_k
             g_prime_k_minus_1 = g_prime_k
 
-            print(('{:d}:\t x_k: {:0.4f}\ty_k: {:0.4f}' +
-                '\tx_k_minus_1: {:0.4f}'
-                ).format(j, x_k, y_k, x_k_minus_1))
         elif j == 1:
             inv_slope = (x_k - x_k_minus_1) / (y_k - y_k_minus_1)
-            # x_k_plus_1 = x_k - inv_slope * y_k
             p = -inv_slope * y_k
-            # x_k_plus_1 = x_2
-            # p = (x_2 - x_1)
+
             print(('{:d}:\t x_k: {:0.4f}\ty_k: {:0.4g}' +
-                   '\tx_k_minus_1: {:0.4f}, p: {:0.4f}'
+                   '\tx_k_minus_1: {:0.4f}\tp: {:0.4f}'
                    ).format(j, x_k, y_k, x_k_minus_1, p))
 
             x_k_minus_2 = x_k_minus_1
@@ -599,9 +600,11 @@ def secant_ls_3p(y, x_0, x_1, tol, max_it=100, alpha=1e-4, restriction=None):
                     (y_k_minus_1 - y_k_minus_2) / (x_k_minus_1 - x_k_minus_2)
                     )
                 )
+
             print(('{:d}:\t x_k: {:0.4f}\ty_k: {:0.4g}' +
-                   '\tx_k_minus_1: {:0.4f}, p: {:0.4f}'
-                   ).format(j, x_k, y_k, x_k_minus_1, p))
+                   '\tx_k_minus_1: {:0.4f}\tx_k_minus_2: {:0.4f}\tp: {:0.4f}'
+                   ).format(j, x_k, y_k, x_k_minus_1, x_k_minus_2, p))
+
             x_k_minus_2 = x_k_minus_1
             x_k_minus_1 = x_k
 
@@ -617,7 +620,7 @@ def secant_ls_3p(y, x_0, x_1, tol, max_it=100, alpha=1e-4, restriction=None):
         g_0 = g_k_minus_1
         g_prime_0 = g_prime_k_minus_1
         f_0 = y_k_minus_1
-        while not stop and j + backtrackcount <= max_it:
+        while not stop and j + backtrackcount <= max_it + 1:
             # backtracking, line search - numerical recipes 3ed
             accum_step += lambda_ls
             if lambda_ls <= lambda_min:
@@ -642,8 +645,8 @@ def secant_ls_3p(y, x_0, x_1, tol, max_it=100, alpha=1e-4, restriction=None):
 
             satisfactory = g_2 <= g_max
             stop = satisfactory or lambda_ls <= lambda_min
-            print(('{:d}-{:d}:\t x_2: {:.2g}\ty_2: {:.2g}' +
-                   '\tg_0: {:.2g}\tg_2: {:.2g}\tg_max: {:.2g}\tlambda: {:.2g}\t p: {:2g}').format(
+            print(('{:d}-{:d}:\t x_2: {:.4f}\ty_2: {:.4g}' +
+                   '\tg_0: {:.4f}\tg_2: {:.2g}\tg_max: {:.2g}\tlambda: {:.2g}\t p: {:2g}').format(
                 j, backtrackcount, x_2, f_2, g_0, g_2, g_max, lambda_ls, p))
 
             if not stop:
@@ -692,18 +695,23 @@ def secant_ls_3p(y, x_0, x_1, tol, max_it=100, alpha=1e-4, restriction=None):
         g_prime_k = - y_k ** 2
         if abs(p) <= tol:
             # avoid 1/0 division
+            success = False
             break
+    if j == 0:
+        print(('{:d}:\t x_k: {:0.4f}\ty_k: {:0.4g}'
+               ).format(j, x_k, y_k))
+    else:
+        print(('{:d}:\t x_k: {:0.4f}\ty_k: {:0.4g}' +
+               '\tx_k_minus_1: {:0.4f}\tx_k_minus_2: {:0.4f}'
+               ).format(j, x_k, y_k, x_k_minus_1, x_k_minus_2))
 
-    print(('{:d}:\t x_k: {:0.4f}\ty_k: {:0.4g}'+
-                    '\tx_k_minus_1: {:0.4f}\tx_k_minus_2: {:0.4f}'
-                    ).format(j, x_k, y_k, x_k_minus_1, x_k_minus_2))
-
+    success = success and j + backtrackcount <= max_it - 1
     x = x_k
     f = y_k
     f_list = y_list
     iterations = j
     soln = dict()
     for item in ['x', 'f', 'x_list', 'f_list',
-                 'iterations', 'total_backtracks', 'steps']:
+                 'iterations', 'total_backtracks', 'steps', 'success']:
         soln[item] = locals().get(item)
     return soln
