@@ -99,7 +99,7 @@ class Eos:
         elif eos == 'srk_simple_alpha':
             return 1.0
 
-    def alpha(self, tr, m):
+    def alpha_tr(self, tr, m):
         eos = self.eos
         if eos == 'pr':
             return \
@@ -123,7 +123,7 @@ class Eos:
     def q(self, tr, pr, af_omega):
         psi = self.psi
         omega = self.omega
-        return psi * alpha(tr, af_omega) / (omega * tr)
+        return psi * alpha_tr(tr, af_omega) / (omega * tr)
 
     def solve(self):
         epsilon = self.epsilon
@@ -142,7 +142,7 @@ class Eos:
         n = len(z_i)
 
         m_i = self.m(omega_i)
-        alpha_i = self.alpha(tr_i, m_i)
+        alpha_i = self.alpha_tr(tr_i, m_i)
         dalphadt_i = self.dalphadt(t, tc_i, alpha_i, m_i)
 
         a_i = psi * alpha_i * r ** 2 * tc_i ** 2 / pc_i
@@ -244,14 +244,14 @@ def use_pr_eos():
     global sigma
     global omega
     global psi
-    global alpha
+    global alpha_tr
 
     epsilon = 1 - sqrt(2)
     sigma = 1 + sqrt(2)
     omega = 0.07780
     psi = 0.45724
 
-    def alpha(tr, af_omega): return \
+    def alpha_tr(tr, af_omega): return \
         (1 + (
             0.37464 + 1.54226 * af_omega - 0.26992 * af_omega ** 2
         ) * (1 - tr ** (1 / 2.))) ** 2
@@ -263,13 +263,13 @@ def use_srk_eos():
     global sigma
     global omega
     global psi
-    global alpha
+    global alpha_tr
     epsilon = 0.
     sigma = 1.
     omega = 0.08664
     psi = 0.42748
 
-    def alpha(tr, af_omega): return \
+    def alpha_tr(tr, af_omega): return \
         (1 + (
             0.480 + 1.574 * af_omega - 0.176 * af_omega ** 2
         ) * (1 - tr ** (1 / 2.))) ** 2
@@ -282,13 +282,13 @@ def use_srk_eos_simple_alpha():
     global sigma
     global omega
     global psi
-    global alpha
+    global alpha_tr
     epsilon = 0.
     sigma = 1.
     omega = 0.08664
     psi = 0.42748
 
-    def alpha(tr, af_omega): return \
+    def alpha_tr(tr, af_omega): return \
         (tr) ** (-1 / 2.)
 
 
@@ -297,7 +297,7 @@ def beta(tr, pr):
 
 
 def q(tr, pr, af_omega):
-    return psi * alpha(tr, af_omega) / (omega * tr)
+    return psi * alpha_tr(tr, af_omega) / (omega * tr)
 
 
 def z_v_func(z, beta, q):
@@ -361,10 +361,10 @@ def p_sat(t, af_omega, tc, pc):
     # Das Levenberg-Marquardt Algorithmus weist wenigere Sprunge auf.
     return optimize.root(fs, 1., method='lm')
 
-def p_i_sat_ceos(t, p0, tc_i, pc_i, af_omega_i, max_it, tol=tol):
+def p_i_sat_ceos(t, p0, tc_i, pc_i, af_omega_i, alpha_tr, max_it, tol=tol):
     p_sat_list = zeros(tc_i.size)
     tr_i = t / tc_i
-    a_i = psi * alpha(tr_i, af_omega_i) * r ** 2 * tc_i ** 2 / pc_i
+    a_i = psi * alpha_tr(tr_i, af_omega_i) * r ** 2 * tc_i ** 2 / pc_i
     b_i = omega * r * tc_i / pc_i
     p = p0 * ones(tc_i.size)
     for j in range(max_it):
@@ -400,7 +400,7 @@ def p_i_sat_ceos(t, p0, tc_i, pc_i, af_omega_i, max_it, tol=tol):
 def z_non_sat(t, p, x_i, tc_i, pc_i, af_omega_i):
     tr_i = t / tc_i
     # vorsicht: Alpha oder Tr^(-1/2)
-    a_i = psi * alpha(tr_i, af_omega_i) * r ** 2 * tc_i ** 2 / pc_i
+    a_i = psi * alpha_tr(tr_i, af_omega_i) * r ** 2 * tc_i ** 2 / pc_i
     b_i = omega * r * tc_i / pc_i
     beta_i = b_i * p / (r * t)
     q_i = a_i / (b_i * r * t)
@@ -428,9 +428,9 @@ def z_non_sat(t, p, x_i, tc_i, pc_i, af_omega_i):
         soln[item] = locals().get(item)
     return soln
 
-def phi(t, p, z_i, tc_i, pc_i, af_omega_i, lv):
+def phi(t, p, z_i, tc_i, pc_i, af_omega_i, alpha_tr, phase):
     tr_i = t / tc_i
-    a_i = psi * alpha(tr_i, af_omega_i) * r ** 2 * tc_i ** 2 / pc_i
+    a_i = psi * alpha_tr(tr_i, af_omega_i) * r ** 2 * tc_i ** 2 / pc_i
     b_i = omega * r * tc_i / pc_i
     beta_i = b_i * p / (r * t)
     q_i = a_i / (b_i * r * t)
@@ -445,13 +445,13 @@ def phi(t, p, z_i, tc_i, pc_i, af_omega_i, lv):
     b_mp_i = b_i  # partielles molares b_i
     q_mp_i = q * (1 + a_mp_i / a - b_i / b)  # partielles molares q_i
 
-    phase_soln = z_phase(t, p, z_i, tc_i, pc_i, af_omega_i, lv, tol)
+    phase_soln = z_phase(t, p, z_i, tc_i, pc_i, af_omega_i, alpha_tr, phase, tol)
     z = phase_soln['z']
     i_int = 1 / (sigma - epsilon) * \
         log((z + sigma * beta) / (z + epsilon * beta))
     ln_phi = b_i / b * (z - 1) - log(z - beta) - q_mp_i * i_int
     phi_calc = exp(ln_phi)
-    if lv == 'l':
+    if phase == 'l':
         # correction for pseudoproperties in phi (Matthias et al. 1984)
         v = phase_soln['v']
         p_calc = r * t / (v - b) - a / ((v + epsilon * b)*(v + sigma * b))
@@ -470,7 +470,7 @@ def phi(t, p, z_i, tc_i, pc_i, af_omega_i, lv):
     return soln
 
 
-def siedepunkt(t, p, x_i, y_i, tc_i, pc_i, af_omega_i, max_it, tol=tol):
+def siedepunkt(t, p, x_i, y_i, tc_i, pc_i, af_omega_i, alpha_tr, max_it, tol=tol):
     """Siedepunkt-Bestimmung
 
     Bei gegebenen Temperatur-Wert und Flüssigkeit-Zusammenstellung (mit geschätzten\
@@ -485,6 +485,7 @@ def siedepunkt(t, p, x_i, y_i, tc_i, pc_i, af_omega_i, max_it, tol=tol):
     Introduction to chemical engineering thermodynamics. New York: McGraw-Hill, 2005.\
     (Fig. 14.9)
 
+    :param alpha_tr:
     :param t: Temperatur / °K
     :param p: Druck / bar
     :param x_i: Flüssigkeit-Zusammenstellung
@@ -496,10 +497,10 @@ def siedepunkt(t, p, x_i, y_i, tc_i, pc_i, af_omega_i, max_it, tol=tol):
     :param tol: Fehlertoleranz
     :return: soln (dict)
     """
-    psat_i, success = p_i_sat_ceos(310.92, 30, tc_i, pc_i, af_omega_i, max_it, tol)
+    psat_i, success = p_i_sat_ceos(310.92, 30, tc_i, pc_i, af_omega_i, alpha_tr, max_it, tol)
     k_i = psat_i / p # Ideal K-value estimate
     k_i = exp(log(pc_i/p)+5.373*(1+af_omega_i)*(1-tc_i/t))  # Wilson K-Value estimates
-    soln_l = phi(t, p, x_i, tc_i, pc_i, af_omega_i, 'l')
+    soln_l = phi(t, p, x_i, tc_i, pc_i, af_omega_i, alpha_tr, 'l')
     sum_k_i_n = sum(k_i * x_i)
     y_i = k_i * x_i / sum_k_i_n
     stop = False
@@ -507,7 +508,7 @@ def siedepunkt(t, p, x_i, y_i, tc_i, pc_i, af_omega_i, max_it, tol=tol):
     while i < max_it and not stop:
         sum_k_i_n_min_1 = sum_k_i_n
         i = i + 1
-        soln_v = phi(t, p, y_i, tc_i, pc_i, af_omega_i, 'v')
+        soln_v = phi(t, p, y_i, tc_i, pc_i, af_omega_i, alpha_tr, 'v')
         k_i = soln_l['phi'] / soln_v['phi']
         sum_k_i_n = sum(k_i * x_i)
         y_i = k_i * x_i / sum_k_i_n
@@ -532,11 +533,11 @@ def bubl_p(t, p, x_i, tc_i, pc_i, af_omega_i, max_it, tol=tol, y_i_est=None):
 
 
 def bubl_p_step_l_k(t, p, x_i, tc_i, pc_i, af_omega_i, max_it, full_output=False, y_i_est=None):
-    phi_l = phi(t, p, x_i, tc_i, pc_i, af_omega_i, 'l')['phi']
+    phi_l = phi(t, p, x_i, tc_i, pc_i, af_omega_i, alpha_tr, 'l')['phi']
     if y_i_est is not None:
-        phi_v = phi(t, p, y_i_est, tc_i, pc_i, af_omega_i, 'v')['phi']
+        phi_v = phi(t, p, y_i_est, tc_i, pc_i, af_omega_i, alpha_tr, 'v')['phi']
     else:
-        phi_v = phi(t, p, x_i, tc_i, pc_i, af_omega_i, 'v')['phi']
+        phi_v = phi(t, p, x_i, tc_i, pc_i, af_omega_i, alpha_tr, 'v')['phi']
     k_i = phi_l / phi_v
     sum_ki_xi = sum(k_i * x_i)
     y_i = k_i * x_i / sum_ki_xi
@@ -545,7 +546,7 @@ def bubl_p_step_l_k(t, p, x_i, tc_i, pc_i, af_omega_i, max_it, full_output=False
     success = True
     while not stop:
         sum_ki_xi_k_minus_1 = sum_ki_xi
-        phi_v = phi(t, p, y_i, tc_i, pc_i, af_omega_i, 'v')['phi']
+        phi_v = phi(t, p, y_i, tc_i, pc_i, af_omega_i, alpha_tr, 'v')['phi']
         k_i = phi_l / phi_v
         sum_ki_xi = sum(k_i * x_i)
         y_i = k_i * x_i / sum_ki_xi
@@ -565,7 +566,7 @@ def bubl_p_step_l_k(t, p, x_i, tc_i, pc_i, af_omega_i, max_it, full_output=False
 
 def p_for_3_real_roots(t, p, x_i, tc_i, pc_i, af_omega_i, max_it, tol=tol):
     tr_i = t / tc_i
-    a_i = psi * alpha(tr_i, af_omega_i) * r ** 2 * tc_i ** 2 / pc_i
+    a_i = psi * alpha_tr(tr_i, af_omega_i) * r ** 2 * tc_i ** 2 / pc_i
     b_i = omega * r * tc_i / pc_i
     q_i = a_i / (b_i * r * t)
     a_ij = sqrt(outer(a_i, a_i))
@@ -614,7 +615,7 @@ def p_for_3_real_roots(t, p, x_i, tc_i, pc_i, af_omega_i, max_it, tol=tol):
 
 def p_est(t, p, x_i, tc_i, pc_i, af_omega_i, max_it, tol=tol):
     tr_i = t / tc_i
-    a_i = psi * alpha(tr_i, af_omega_i) * r ** 2 * tc_i ** 2 / pc_i
+    a_i = psi * alpha_tr(tr_i, af_omega_i) * r ** 2 * tc_i ** 2 / pc_i
     b_i = omega * r * tc_i / pc_i
     q_i = a_i / (b_i * r * t)
     a_ij = sqrt(outer(a_i, a_i))
@@ -785,9 +786,9 @@ def p_est(t, p, x_i, tc_i, pc_i, af_omega_i, max_it, tol=tol):
         soln[item] = locals().get(item)
     return soln
 
-def z_phase(t, p, z_i, tc_i, pc_i, af_omega_i, phase, tol=tol):
+def z_phase(t, p, z_i, tc_i, pc_i, af_omega_i, alpha_tr, phase, tol=tol):
     tr_i = t / tc_i
-    a_i = psi * alpha(tr_i, af_omega_i) * r ** 2 * tc_i ** 2 / pc_i
+    a_i = psi * alpha_tr(tr_i, af_omega_i) * r ** 2 * tc_i ** 2 / pc_i
     b_i = omega * r * tc_i / pc_i
     q_i = a_i / (b_i * r * t)
     a_ij = sqrt(outer(a_i, a_i))
@@ -949,13 +950,15 @@ def z_phase(t, p, z_i, tc_i, pc_i, af_omega_i, phase, tol=tol):
     return soln
 
 def zs_1998():
-    use_srk_eos()
+    use_pr_eos()
+    global r
+    r = 8.3145 # Pa m^3 / (mol K)
     tc_i = array([305.32, 540.2])
-    pc_i = array([48.71, 27.35])
+    pc_i = array([48.71, 27.35]) * 1e5 # Pa
     af_omega_i = array([0.099, 0.35])
     max_it = 100
     markers = plt.Line2D.filled_markers
-    p_range = linspace(1e-1, 140, 100)
+    p_range = linspace(1e-1, 140, 100) * 1e5
     plot1 = plt.subplot2grid([2, 2], [1, 0], rowspan=1, colspan=1)
     plot2 = plt.subplot2grid([2, 2], [1, 1], rowspan=1, colspan=1)
     plot3 = plt.subplot2grid([2, 2], [0, 0], rowspan=1, colspan=1)
@@ -975,7 +978,7 @@ def zs_1998():
         p_v_phase = []
         for p in p_range:
             tr_i = t / tc_i
-            a_i = psi * alpha(tr_i, af_omega_i) * r ** 2 * tc_i ** 2 / pc_i
+            a_i = psi * alpha_tr(tr_i, af_omega_i) * r ** 2 * tc_i ** 2 / pc_i
             b_i = omega * r * tc_i / pc_i
             beta_i = b_i * p / (r * t)
             q_i = a_i / (b_i * r * t)
@@ -1024,8 +1027,8 @@ def zs_1998():
                 p_complex += [p]
 
         for p in linspace(1e-4, max(p_range), 30):
-            rho_l_phase += [z_phase(t, p, z_i, tc_i, pc_i, af_omega_i, 'l', tol)['rho']]
-            rho_v_phase += [z_phase(t, p, z_i, tc_i, pc_i, af_omega_i, 'v', tol)['rho']]
+            rho_l_phase += [z_phase(t, p, z_i, tc_i, pc_i, af_omega_i, alpha_tr, 'l', tol)['rho']]
+            rho_v_phase += [z_phase(t, p, z_i, tc_i, pc_i, af_omega_i, alpha_tr, 'v', tol)['rho']]
             p_v_phase += [p]
 
         plot1.semilogx(v_plot, p_plot, markers[randint(0, len(markers))],
@@ -1062,7 +1065,7 @@ def zs_1998():
             data += [[float(x) for x in line.replace(',', '.').replace('\n', '').split(';')]]
     f.close()
     a_data = array(data)
-    plot2.plot(a_data[:,0]/1e6, a_data[:, 1]/1e5, '-', color='black', label='article')
+    plot2.plot(a_data[:,0], a_data[:, 1], '-', color='black', label='article')
     for filename in ['pseudo_vapor_density.csv', 'pseudo_liquid_density_420.csv',
                      'pseudo_liquid_density_500.csv', 'actual_density_2.csv']:
         f = open('./data/'+filename)
@@ -1073,45 +1076,46 @@ def zs_1998():
                 data += [[float(x) for x in line.replace(',', '.').replace('\n', '').split(';')]]
         f.close()
         a_data = array(data)
-        plot2.plot(a_data[:, 0] / 1e6, a_data[:, 1] / 1e5, ':', color='black')
+        plot2.plot(a_data[:, 0], a_data[:, 1], ':', color='black')
 
 
     plot1.axvline(b, linestyle='-')
     plot2.axvline(1 / b, linestyle='-')
     plot4.axvline(1 / b, linestyle='-')
-    p_low = z_phase(420, p, z_i, tc_i, pc_i, af_omega_i, 'l', tol)['p_low']
+    p_low = z_phase(420, p, z_i, tc_i, pc_i, af_omega_i, alpha_tr, 'l', tol)['p_low']
     plot2.axhline(p_low, linestyle='-.', color='gray', linewidth=0.5, label='$P_{low}$')
     plot4.axhline(p_low, linestyle='-.', color='gray', linewidth=0.5, label='$P_{low}$')
     plot1.set_xlabel(r'$\frac{v}{m^3/mol}$')
-    plot1.set_ylabel('p / bar')
-    plot1.set_ylim(0, 80)
+    plot1.set_ylabel('p / Pa')
     plot2.set_xlabel(r'$\frac{rho}{mol / m^3}$')
-    plot2.set_ylabel('p / bar')
+    plot2.set_ylabel('p / Pa')
     plot2.set_title(r'$\rho$' + ', act.')
-    plot2.set_ylim(0, 80)
+    plot2.set_ylim(0, max(a_data[:, 1]))
+    plot2.ticklabel_format(axis='y', scilimits=[-4,4])
     plot2.legend(fontsize=6)
     plot3.set_xlabel(r'$Z$')
-    plot3.set_ylabel('p / bar')
+    plot3.set_ylabel('p / Pa')
     plot3.legend(['real root', 'real part of complex root'], fontsize=6)
     plot4.set_xlabel(r'$\frac{rho}{mol / m^3}$')
-    plot4.set_ylabel('p / bar')
+    plot4.set_ylabel('p / Pa')
     plot4.set_title(r'pseudo-$\rho$' + ', L/V [3]')
     plot4.legend(fontsize=6)
-    plot4.set_ylim(0, 80)
+    plot4.set_ylim(0, max(a_data[:, 1]))
+    plot4.ticklabel_format(axis='y', scilimits=[-4, 4])
     plt.tight_layout()
     plot1.legend(fontsize=6)
 
 
     fig2 = plt.figure()
     ax = plt.axes()
-    p_list = linspace(1e-4, 80, 30)
+    p_list = linspace(1e-4, 80, 30) * 1e5
     j = 1
     for t in [420, 500]:
         phi_list_l = empty([len(p_list), 2])
         phi_list_v = empty([len(p_list), 2])
         for i, p in enumerate(p_list):
-            phi_list_l[i] = phi(t, p, z_i, tc_i, pc_i, af_omega_i, 'l')['phi']
-            phi_list_v[i] = phi(t, p, z_i, tc_i, pc_i, af_omega_i, 'v')['phi']
+            phi_list_l[i] = phi(t, p, z_i, tc_i, pc_i, af_omega_i, alpha_tr, 'l')['phi']
+            phi_list_v[i] = phi(t, p, z_i, tc_i, pc_i, af_omega_i, alpha_tr, 'v')['phi']
 
         plt.subplot(1, 2, j)
         current_marker = markers[randint(0, len(markers))]
@@ -1120,24 +1124,26 @@ def zs_1998():
         current_marker = markers[randint(0, len(markers))]
         plt.plot(p_list, log(phi_list_l[:, 1]), current_marker + '-', label=r'$\phi_{C7}^L$')
         plt.plot(p_list, log(phi_list_v[:, 1]), current_marker+'-', label=r'$\phi_{C7}^V$')
-        plt.xlabel('p / bar')
+        plt.xlabel('p / Pa')
         plt.ylabel(r'$log \phi$')
         plt.title('T={:g}K'.format(t))
         if j == 1:
-            plt.axvline(z_phase(t, p, z_i, tc_i, pc_i, af_omega_i, 'l')['p_low'],
+            plt.axvline(z_phase(t, p, z_i, tc_i, pc_i, af_omega_i, alpha_tr, 'l')['p_low'],
                         linestyle='--', label='$P_{low}$')
             plt.ylim(-3, 3)
         else:
             plt.ylim(-2, 4)
         plt.legend()
         j += 1
+        ax = plt.gca().ticklabel_format(axis='x', scilimits=[-4,4])
+    plt.tight_layout()
     plt.show()
 
 
 
 def isot_flash(t, p, x_i, y_i, z_i, tc_i, pc_i, af_omega_i):
-    soln_l = phi(t, p, x_i, tc_i, pc_i, af_omega_i, 'l')
-    soln_v = phi(t, p, y_i, tc_i, pc_i, af_omega_i, 'v')
+    soln_l = phi(t, p, x_i, tc_i, pc_i, af_omega_i, alpha_tr, 'l')
+    soln_v = phi(t, p, y_i, tc_i, pc_i, af_omega_i, alpha_tr, 'v')
     k_i = soln_l['phi'] / soln_v['phi']
     soln_v_f = optimize.root(
         lambda v_f: sum(
@@ -1229,16 +1235,8 @@ def svn_14_2():
     ant_b = array([395.744, 935.773])
     ant_c = array([266.681, 238.789])
     max_it = 100
-    print(siedepunkt(310.92, 30, x_i, y_i, tc_i, pc_i, af_omega_i, max_it))
-    y_i = siedepunkt(
-        310.92,
-        30,
-        x_i,
-        y_i,
-        tc_i,
-        pc_i,
-        af_omega_i,
-        max_it)['y_i']
+    print(siedepunkt(310.92, 30, x_i, y_i, tc_i, pc_i, af_omega_i, alpha_tr, max_it))
+    y_i = siedepunkt(310.92, 30, x_i, y_i, tc_i, pc_i, af_omega_i, alpha_tr, max_it)['y_i']
     print('\n===\n')
     print(bubl_p(310.92, 30, x_i, tc_i, pc_i, af_omega_i, max_it))
     print('\n===\n')
@@ -1252,7 +1250,7 @@ def svn_14_2():
     x_i = array([x[0], 1 - x[0]])
     x_i = array([0.2, 1 - 0.2])
     y_i_est = array([x[0], 1 - x[0]])
-    p_sat_all, _ = p_i_sat_ceos(310.92, 30, tc_i, pc_i, af_omega_i, max_it, tol)
+    p_sat_all, _ = p_i_sat_ceos(310.92, 30, tc_i, pc_i, af_omega_i, alpha_tr, max_it, tol)
     p_v0 = sum(p_sat_all * x_i)
     for i in range(len(x)):
         x_i = array([x[i], 1 - x[i]])
@@ -1302,7 +1300,7 @@ def svn_fig_14_8():
         t = 310.92
         for p in p_range:
             tr_i = t / tc_i
-            a_i = psi * alpha(tr_i, af_omega_i) * r ** 2 * tc_i ** 2 / pc_i
+            a_i = psi * alpha_tr(tr_i, af_omega_i) * r ** 2 * tc_i ** 2 / pc_i
             b_i = omega * r * tc_i / pc_i
             beta_i = b_i * p / (r * t)
             q_i = a_i / (b_i * r * t)
@@ -1353,8 +1351,8 @@ def svn_fig_14_8():
                 p_complex += [p]
 
         for p in linspace(1e-4, max(p_range), 30):
-            rho_l_phase += [z_phase(t, p, z_i, tc_i, pc_i, af_omega_i, 'l', tol)['rho']]
-            rho_v_phase += [z_phase(t, p, z_i, tc_i, pc_i, af_omega_i, 'v', tol)['rho']]
+            rho_l_phase += [z_phase(t, p, z_i, tc_i, pc_i, af_omega_i, alpha_tr, 'l', tol)['rho']]
+            rho_v_phase += [z_phase(t, p, z_i, tc_i, pc_i, af_omega_i, alpha_tr, 'v', tol)['rho']]
             p_v_phase += [p]
 
         current_marker = markers[randint(0, len(markers))]
@@ -1385,20 +1383,21 @@ def svn_fig_14_8():
                    fillstyle='none', color=current_color, markeredgewidth=0.25, linewidth=0.5)
         if x in [0.4, 0.5, 0.6, 0.7]:
             p_est(t, p, z_i, tc_i, pc_i, af_omega_i, max_it, tol)
-    plot1.set_xlabel(r'$\frac{v}{m^3/mol}$')
+    plot1.set_xlabel(r'$\frac{v}{cm^3/mol}$')
     plot1.set_ylabel('p / bar')
     plot1.legend(fontsize=6)
-    plot2.set_xlabel(r'$\frac{rho}{mol / m^3}$')
+    plot2.set_xlabel(r'$\frac{rho}{mol / cm^3}$')
     plot2.set_ylabel('p / bar')
     plot2.set_title(r'$\rho$' + ', act.')
     plot3.set_xlabel(r'$Z$')
     plot3.set_ylabel('p / bar')
     plot3.legend(['real root', 'real part of complex root'], fontsize=6)
-    plot4.set_xlabel(r'$\frac{rho}{mol / m^3}$')
+    plot4.set_xlabel(r'$\frac{rho}{mol / cm^3}$')
     plot4.set_ylabel('p / bar')
     plot4.set_title(r'pseudo-$\rho$' + ', L/V [3]')
     plot4.legend(fontsize=6)
     plt.tight_layout()
+    plt.show()
 
 
 def pat_ue_03_flash():
