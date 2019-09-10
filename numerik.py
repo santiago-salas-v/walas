@@ -602,7 +602,7 @@ def secant_ls_3p(y, x_0, x_1, tol, max_it=100, alpha=1e-4, restriction=None):
                 )
 
             print(('{:d}:\t x_k: {:0.4f}\ty_k: {:0.4g}' +
-                   '\tx_k_minus_1: {:0.4f}\tx_k_minus_2: {:0.4f}\tp: {:0.4f}'
+                   '\tx_k_minus_1: {:0.4f}\tx_k_minus_2: {:0.4f}\tp: {:0.4g}'
                    ).format(j, x_k, y_k, x_k_minus_1, x_k_minus_2, p))
 
             x_k_minus_2 = x_k_minus_1
@@ -621,6 +621,8 @@ def secant_ls_3p(y, x_0, x_1, tol, max_it=100, alpha=1e-4, restriction=None):
         g_prime_0 = g_prime_k_minus_1
         f_0 = y_k_minus_1
         while not stop and j + backtrackcount <= max_it + 1:
+            if j + backtrackcount + 1 >= max_it:
+                success = False
             # backtracking, line search - numerical recipes 3ed
             accum_step += lambda_ls
             if lambda_ls <= lambda_min:
@@ -646,7 +648,7 @@ def secant_ls_3p(y, x_0, x_1, tol, max_it=100, alpha=1e-4, restriction=None):
             satisfactory = g_2 <= g_max
             stop = satisfactory or lambda_ls <= lambda_min
             print(('{:d}-{:d}:\t x_2: {:.4f}\ty_2: {:.4g}' +
-                   '\tg_0: {:.4f}\tg_2: {:.2g}\tg_max: {:.2g}\tlambda: {:.2g}\t p: {:2g}').format(
+                   '\tg_0: {:.4g}\tg_2: {:.2g}\tg_max: {:.2g}\tlambda: {:.2g}\t p: {:2g}').format(
                 j, backtrackcount, x_2, f_2, g_0, g_2, g_max, lambda_ls, p))
 
             if not stop:
@@ -693,7 +695,7 @@ def secant_ls_3p(y, x_0, x_1, tol, max_it=100, alpha=1e-4, restriction=None):
         y_k = y_k_plus_1
         g_k = g_k_plus_1
         g_prime_k = - y_k ** 2
-        if abs(p) <= tol:
+        if abs(p) <= tol or np.isnan(p):
             # avoid 1/0 division
             success = False
             break

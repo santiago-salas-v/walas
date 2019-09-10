@@ -361,7 +361,7 @@ def p_sat(t, af_omega, tc, pc):
     # Das Levenberg-Marquardt Algorithmus weist wenigere Sprunge auf.
     return optimize.root(fs, 1., method='lm')
 
-def p_i_sat(t, p0, tc_i, pc_i, af_omega_i, max_it, tol=tol):
+def p_i_sat_ceos(t, p0, tc_i, pc_i, af_omega_i, max_it, tol=tol):
     p_sat_list = zeros(tc_i.size)
     tr_i = t / tc_i
     a_i = psi * alpha(tr_i, af_omega_i) * r ** 2 * tc_i ** 2 / pc_i
@@ -470,7 +470,7 @@ def phi(t, p, z_i, tc_i, pc_i, af_omega_i, lv):
     return soln
 
 
-def siedepunkt(t, p, x_i, y_i, tc_i, pc_i, af_omega_i, ant_a, ant_b, ant_c, max_it, tol=tol):
+def siedepunkt(t, p, x_i, y_i, tc_i, pc_i, af_omega_i, max_it, tol=tol):
     """Siedepunkt-Bestimmung
 
     Bei gegebenen Temperatur-Wert und Flüssigkeit-Zusammenstellung (mit geschätzten\
@@ -496,7 +496,7 @@ def siedepunkt(t, p, x_i, y_i, tc_i, pc_i, af_omega_i, ant_a, ant_b, ant_c, max_
     :param tol: Fehlertoleranz
     :return: soln (dict)
     """
-    psat_i = 10**(ant_a - ant_b/(ant_c + t - 273.15))  # bar
+    psat_i, success = p_i_sat_ceos(310.92, 30, tc_i, pc_i, af_omega_i, max_it, tol)
     k_i = psat_i / p # Ideal K-value estimate
     k_i = exp(log(pc_i/p)+5.373*(1+af_omega_i)*(1-tc_i/t))  # Wilson K-Value estimates
     soln_l = phi(t, p, x_i, tc_i, pc_i, af_omega_i, 'l')
@@ -521,27 +521,22 @@ def siedepunkt(t, p, x_i, y_i, tc_i, pc_i, af_omega_i, ant_a, ant_b, ant_c, max_
         soln[item] = locals().get(item)
     return soln
 
-def bubl_p(t, p, x_i, tc_i, pc_i, af_omega_i, max_it, tol=tol):
-    phi_l = phi(t, p, x_i, tc_i, pc_i, af_omega_i, 'l')['phi']
-    phi_v = phi(t, p, x_i, tc_i, pc_i, af_omega_i, 'v')['phi']
-    k_i = phi_l / phi_v  # est. phi_v ~ 1
-    sum_ki_xi = sum(k_i * x_i)
-    y_i = k_i * x_i / sum_ki_xi
-    success = True
-    it_count = 0
-    traceback_flag = False
-    soln = secant_ls_3p(lambda p_var: lee_kessler_bubl_p_step(
-        t, p_var, x_i, tc_i, pc_i, af_omega_i, max_it
-    ), p, 1.1 * p, 1e-10, restriction=lambda p_val: p_val > 0)
+def bubl_p(t, p, x_i, tc_i, pc_i, af_omega_i, max_it, tol=tol, y_i_est=None):
+    soln = secant_ls_3p(lambda p_var: bubl_p_step_l_k(
+        t, p_var, x_i, tc_i, pc_i, af_omega_i, max_it, y_i_est=y_i_est
+    ), p, 1.0001 * p, 1e-10, restriction=lambda p_val: p_val > 0)
     p = soln['x']
-    soln = lee_kessler_bubl_p_step(
-        t, p, x_i, tc_i, pc_i, af_omega_i, max_it, full_output=True)
+    soln = bubl_p_step_l_k(
+        t, p, x_i, tc_i, pc_i, af_omega_i, max_it, full_output=True, y_i_est=y_i_est)
     return soln
 
 
-def lee_kessler_bubl_p_step(t, p, x_i, tc_i, pc_i, af_omega_i, max_it, full_output=False):
+def bubl_p_step_l_k(t, p, x_i, tc_i, pc_i, af_omega_i, max_it, full_output=False, y_i_est=None):
     phi_l = phi(t, p, x_i, tc_i, pc_i, af_omega_i, 'l')['phi']
-    phi_v = phi(t, p, x_i, tc_i, pc_i, af_omega_i, 'v')['phi']
+    if y_i_est is not None:
+        phi_v = phi(t, p, y_i_est, tc_i, pc_i, af_omega_i, 'v')['phi']
+    else:
+        phi_v = phi(t, p, x_i, tc_i, pc_i, af_omega_i, 'v')['phi']
     k_i = phi_l / phi_v
     sum_ki_xi = sum(k_i * x_i)
     y_i = k_i * x_i / sum_ki_xi
@@ -1234,7 +1229,7 @@ def svn_14_2():
     ant_b = array([395.744, 935.773])
     ant_c = array([266.681, 238.789])
     max_it = 100
-    print(siedepunkt(310.92, 30, x_i, y_i, tc_i, pc_i, af_omega_i, ant_a, ant_b, ant_c, max_it))
+    print(siedepunkt(310.92, 30, x_i, y_i, tc_i, pc_i, af_omega_i, max_it))
     y_i = siedepunkt(
         310.92,
         30,
@@ -1242,24 +1237,27 @@ def svn_14_2():
         y_i,
         tc_i,
         pc_i,
-        af_omega_i, ant_a, ant_b, ant_c,
+        af_omega_i,
         max_it)['y_i']
-    p_sat_all, _ = p_i_sat(310.92, 30, tc_i, pc_i, af_omega_i, max_it, tol)
+    p_sat_all, _ = p_i_sat_ceos(310.92, 30, tc_i, pc_i, af_omega_i, max_it, tol)
     p = sum(p_sat_all * x_i)
 
     fig = plt.figure()
     ax = plt.axes()
-    x = linspace(0.0, 0.8, 50)
+    x = linspace(0.0, 0.8, 150)
     y = empty_like(x)
     p_v = empty_like(x)
-    p_sat_all, _ = p_i_sat(310.92, 30, tc_i, pc_i, af_omega_i, max_it, tol)
+    p_sat_all, _ = p_i_sat_ceos(310.92, 30, tc_i, pc_i, af_omega_i, max_it, tol)
     p_v0 = sum(p_sat_all * x_i)
+    y_i_est = array([x[0], 1 - x[0]])
+    print(bubl_p(310.92, p_v0, array([x[10], 1-x[10]]), tc_i, pc_i, af_omega_i, max_it))
     for i in range(len(x)):
         x_i = array([x[i], 1 - x[i]])
-        soln = bubl_p(310.92, p_v0, x_i, tc_i, pc_i, af_omega_i, max_it)
+        soln = bubl_p(310.92, p_v0, x_i, tc_i, pc_i, af_omega_i, max_it, y_i_est=y_i_est)
         p_v[i] = soln['p']
         y[i] = soln['y_i'][0]
         p_v0 = p_v[i]
+        y_i_est = soln['y_i']
     plt.plot(x, p_v, label=r'$x_1(L)$')
     plt.plot(y, p_v, label=r'$y_1(V)$')
     plt.ylabel('p / bar')
