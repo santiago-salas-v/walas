@@ -471,10 +471,10 @@ def phi(t, p, z_i, tc_i, pc_i, af_omega_i, alpha_tr, phase):
     return soln
 
 
-def bubl_p(t, p, x_i, tc_i, pc_i, af_omega_i, max_it, tol=tol, y_i_est=None):
+def bubl_p(t, p, x_i, tc_i, pc_i, af_omega_i, max_it, tol=tol, y_i_est=None, print_iterations=False):
     """Bubble pressure determination
 
-        Determines bubble pressure at given temperature and liquid composition
+        Determines bubble pressure at given temperature and liquid composition. Lee-Kessler method.
 
         ref. Smith, Joseph Mauk ; Ness, Hendrick C. Van ; Abbott, Michael M.: \
         Introduction to chemical engineering thermodynamics. New York: McGraw-Hill, 2005.\
@@ -491,18 +491,21 @@ def bubl_p(t, p, x_i, tc_i, pc_i, af_omega_i, max_it, tol=tol, y_i_est=None):
         :param af_omega_i: Pitzer-factors
         :param max_it: maximum iterations
         :param tol: tolerance of method
+        :param y_i_est: optional vapor composition (estimate)
+        :param print_iterations: optionally print Lee-Kessler iterations
         :return: dictionary with 'x_i', 'y_i', 'phi_l', 'phi_v', 'k_i', 'sum_ki_xi', 'p', 'success'
         """
     soln = secant_ls_3p(lambda p_var: bubl_p_step_l_k(
-        t, p_var, x_i, tc_i, pc_i, af_omega_i, max_it, y_i_est=y_i_est
-    ), p, 1.001 * p, tol=1e-10, restriction=lambda p_val: p_val > 0, print_iterations=True)
+        t, p_var, x_i, tc_i, pc_i, af_omega_i, max_it, tol=tol, y_i_est=y_i_est
+    ), p, 1.001 * p, tol=tol, restriction=lambda p_val: p_val > 0, print_iterations=print_iterations)
     p = soln['x']
     soln = bubl_p_step_l_k(
         t, p, x_i, tc_i, pc_i, af_omega_i, max_it, full_output=True, y_i_est=y_i_est)
     return soln
 
 
-def bubl_p_step_l_k(t, p, x_i, tc_i, pc_i, af_omega_i, max_it, full_output=False, y_i_est=None):
+def bubl_p_step_l_k(t, p, x_i, tc_i, pc_i, af_omega_i, max_it,
+                    tol=tol, full_output=False, y_i_est=None):
     phi_l = phi(t, p, x_i, tc_i, pc_i, af_omega_i, alpha_tr, 'l')['phi']
     if y_i_est is not None:
         phi_v = phi(t, p, y_i_est, tc_i, pc_i, af_omega_i, alpha_tr, 'v')['phi']
@@ -520,7 +523,8 @@ def bubl_p_step_l_k(t, p, x_i, tc_i, pc_i, af_omega_i, max_it, full_output=False
         k_i = phi_l / phi_v
         sum_ki_xi = sum(k_i * x_i)
         y_i = k_i * x_i / sum_ki_xi
-        if abs((sum_ki_xi - sum_ki_xi_k_minus_1) / sum_ki_xi_k_minus_1) <= tol:
+        if abs((sum_ki_xi - sum_ki_xi_k_minus_1) /
+               sum_ki_xi_k_minus_1) <= tol:
             stop = True
         i += 1
         if i >= max_it:
@@ -533,6 +537,75 @@ def bubl_p_step_l_k(t, p, x_i, tc_i, pc_i, af_omega_i, max_it, full_output=False
         return soln
     else:
         return 1 - sum_ki_xi
+
+
+def dew_p(t, p, y_i, tc_i, pc_i, af_omega_i, max_it, tol=tol, x_i_est=None, print_iterations=False):
+    """Dew pressure determination
+
+        Determines dew pressure at given temperature and vapor composition. Lee Kessler method.
+
+        ref. Smith, Joseph Mauk ; Ness, Hendrick C. Van ; Abbott, Michael M.: \
+        Introduction to chemical engineering thermodynamics. New York: McGraw-Hill, 2005.\
+        (Fig. 14.9)
+
+        ref. e.V., VDI: VDI-Wärmeatlas. Wiesbaden: Springer Berlin Heidelberg, 2013. \
+        (D5.1. Abb.6.)
+
+        :param t: temperature / K
+        :param p: pressure / bar
+        :param y_i: vapor composition (known)
+        :param tc_i: critical temperatures / K
+        :param pc_i: critical pressures / bar
+        :param af_omega_i: Pitzer-factors
+        :param max_it: maximum iterations
+        :param tol: tolerance of method
+        :param x_i_est: optional liquid composition (estimate)
+        :param print_iterations: optionally print Lee-Kessler iterations
+        :return: dictionary with 'x_i', 'y_i', 'phi_l', 'phi_v', 'k_i', 'sum_ki_xi', 'p', 'success'
+        """
+    soln = secant_ls_3p(lambda p_var: dew_p_step_l_k(
+        t, p_var, y_i, tc_i, pc_i, af_omega_i, max_it, tol=tol, x_i_est=x_i_est
+    ), p, 1.001 * p, tol=tol, restriction=lambda p_val: p_val > 0, print_iterations=print_iterations)
+    p = soln['x']
+    soln = dew_p_step_l_k(
+        t, p, y_i, tc_i, pc_i, af_omega_i, max_it, full_output=True, x_i_est=x_i_est)
+    return soln
+
+
+def dew_p_step_l_k(t, p, y_i, tc_i, pc_i, af_omega_i, max_it,
+                   tol=tol, full_output=False, x_i_est=None):
+    phi_v = phi(t, p, y_i, tc_i, pc_i, af_omega_i, alpha_tr, 'v')['phi']
+    if x_i_est is not None:
+        phi_l = phi(t, p, x_i_est, tc_i, pc_i, af_omega_i, alpha_tr, 'l')['phi']
+    else:
+        phi_l = phi(t, p, y_i, tc_i, pc_i, af_omega_i, alpha_tr, 'l')['phi']
+    k_i = phi_l / phi_v
+    sum_yi_over_ki = sum(y_i / k_i)
+    x_i = y_i / k_i / sum_yi_over_ki
+    stop = False
+    i = 0
+    success = True
+    while not stop:
+        sum_yi_over_ki_k_minus_1 = sum_yi_over_ki
+        phi_l = phi(t, p, x_i, tc_i, pc_i, af_omega_i, alpha_tr, 'l')['phi']
+        k_i = phi_l / phi_v
+        sum_yi_over_ki = sum(y_i / k_i)
+        x_i = y_i / k_i / sum_yi_over_ki
+        if abs((sum_yi_over_ki - sum_yi_over_ki_k_minus_1) /
+               sum_yi_over_ki_k_minus_1) <= tol:
+            stop = True
+        i += 1
+        if i >= max_it:
+            stop = True
+            success = False
+    if full_output:
+        soln = dict()
+        for item in ['x_i', 'y_i', 'phi_l', 'phi_v', 'k_i', 'sum_yi_over_ki', 'p', 'success']:
+            soln[item] = locals().get(item)
+        return soln
+    else:
+        return 1 - sum_yi_over_ki
+
 
 def p_for_3_real_roots(t, p, x_i, tc_i, pc_i, af_omega_i, max_it, tol=tol):
     tr_i = t / tc_i
@@ -1195,7 +1268,7 @@ def svn_14_1():
 
 
 def svn_14_2():
-    use_srk_eos()
+    use_pr_eos()
     x_i = array([0.2, 0.8])
     y_i = array([0.2, 0.8])  # Est
     tc_i = array([190.6, 425.1])
@@ -1220,27 +1293,55 @@ def svn_14_2():
         print(y_i)
         print(1 - sum(y_i))
         print(sum(k_i * x_i))
-    soln = bubl_p(310.92, 1., x_i, tc_i, pc_i, af_omega_i, max_it, y_i_est=y_i)
+    soln = bubl_p(310.92, 1., x_i,
+                  tc_i, pc_i, af_omega_i, max_it, tol=1e-10, y_i_est=y_i)
     print(soln)
+    print(dew_p_step_l_k(310.92, soln['p'], soln['y_i'],
+                         tc_i, pc_i, af_omega_i, max_it))
+    print(dew_p(310.92, 30, soln['y_i'],
+                tc_i, pc_i, af_omega_i, max_it, tol=1e-10, x_i_est=x_i, print_iterations=True))
     print(bubl_p_step_l_k(
-        310.92, soln['p'], x_i, tc_i, pc_i, af_omega_i, max_it, full_output=True, y_i_est=y_i))
+        310.92, soln['p'], x_i,
+        tc_i, pc_i, af_omega_i, max_it, full_output=True, y_i_est=y_i))
 
     x = linspace(0.0, 0.8, 50)
     y = empty_like(x)
     p_v = empty_like(x)
 
+    y_dew = linspace(0.0, 0.8789, 50)
+    x_dew = y.copy()
+    p_v_dew = p_v.copy()
+
     x_i = array([x[0], 1 - x[0]])
     y_i_est = array([x[0], 1 - x[0]])
+
+    y_i_dew = array([y_dew[0], 1 - y_dew[0]])
+    x_i_est_dew = array([y_dew[0], 1 - y_dew[0]])
+
     p_v0 = 1.0
+    p_v_0_dew = 1.0
     for i in range(len(x)):
         x_i = array([x[i], 1 - x[i]])
-        soln = bubl_p(310.92, p_v0, x_i, tc_i, pc_i, af_omega_i, max_it, y_i_est=y_i_est)
+        soln = bubl_p(310.92, p_v0, x_i, tc_i, pc_i, af_omega_i, max_it, tol=1e-10, y_i_est=y_i_est)
         p_v[i] = soln['p']
         y[i] = soln['y_i'][0]
         p_v0 = p_v[i]
         y_i_est = soln['y_i']
-    plt.plot(x, p_v, label=r'$x_1(L)$')
-    plt.plot(y, p_v, label=r'$y_1(V)$')
+
+
+        y_i_dew = array([y_dew[i], 1 - y_dew[i]])
+        soln_dew = dew_p(310.92, p_v_0_dew, y_i_dew, tc_i, pc_i, af_omega_i, max_it, tol=1e-10,
+                         x_i_est=x_i_est_dew)
+        p_v_dew[i] = soln_dew['p']
+        x_dew[i] = soln_dew['x_i'][0]
+        p_v_0_dew = p_v_dew[i]
+        x_i_est_dew = soln_dew['x_i']
+    line1 = plt.plot(x, p_v, label=r'$x_1(L)$ bubl_p')
+    line2 = plt.plot(y, p_v, label=r'$y_1(V)$ bubl_p')
+    plt.plot(x_dew, p_v_dew, 'o', fillstyle='none',
+             color=line1[0].get_color(), label=r'$x_1(L)$ dew_p')
+    plt.plot(y_dew, p_v_dew, 'o', fillstyle='none',
+             color=line2[0].get_color(), label=r'$y_1(L)$ dew_p')
     plt.ylabel('p / bar')
     plt.xlabel(r'$x_1 , y_1$')
     plt.legend()

@@ -664,7 +664,7 @@ def secant_ls_3p(y, x_0, x_1, tol, max_it=100, alpha=1e-4,
                 print(
                     ('{:d}-{:d}:\t x_2: {:.4f}\ty_2: {:.4g}' +
                      '\tx_1: {:.4g}' +
-                     '\tg_0: {:.4g}\tg_2: {:.4g}\tg_max: {:.4g}\tlambda: {:.2g}\t p: {:2g}').format(
+                     '\tg_0: {:.4e}\tg_2: {:.4e}\tg_max: {:.4e}\tlambda: {:.2g}\t p: {:2g}').format(
                         j, backtrackcount, x_2, f_2, x_k_minus_1, g_0, g_2, g_max, lambda_ls, p
                     )
                 )
