@@ -1,4 +1,5 @@
-import numpy as np
+from numpy import array, zeros, ones, eye, argmax, finfo, copy, empty_like, zeros_like, empty
+from numpy import sqrt, log, exp, nan, isnan, isinf, size, asarray
 
 
 def lrpd(a):
@@ -13,18 +14,18 @@ def lrpd(a):
     """
     n = a.shape[0]
     m = a.shape[1]
-    p = np.eye(n, dtype=float)
-    d = np.eye(n, dtype=float)
-    dlr = np.zeros([n, m], dtype=float)
-    l = np.eye(n, m, dtype=float)
-    r = np.zeros([n, m], dtype=float)
+    p = eye(n, dtype=float)
+    d = eye(n, dtype=float)
+    dlr = zeros([n, m], dtype=float)
+    l = eye(n, m, dtype=float)
+    r = zeros([n, m], dtype=float)
     indexes_r = list([item for item in range(n)])
     for i in range(n):
         d[i, i] = 1 / sum(abs(a[i, :m]))
         # scaling
         dlr[i] = d[i, i] * a[i]  # dlr is just for storage of both l and r
     for j in range(n):
-        indexes_r[j] = j + np.argmax(abs(dlr[j:, j]))
+        indexes_r[j] = j + argmax(abs(dlr[j:, j]))
         # columns pivoting
         dlr[[j, indexes_r[j]]] = dlr[[indexes_r[j], j]]
         p[[j, indexes_r[j]]] = p[[indexes_r[j], j]]
@@ -50,12 +51,12 @@ def rref(r):
     """
     n = r.shape[0]
     m = r.shape[1]
-    r_form = np.copy(r)
+    r_form = copy(r)
     # denominators for diagonal 1
     den = [0.0] * n
     for i in range(n - 1, 0 - 1, -1):
         for j in range(m):
-            if i > 0 and den[i] == 0.0 and abs(r[i, j]) > np.finfo(float).eps:
+            if i > 0 and den[i] == 0.0 and abs(r[i, j]) > finfo(float).eps:
                 # first non-zero element in last rows
                 den[i] = r[i, j]
                 for k in range(i - 1, 0 - 1, -1):
@@ -64,7 +65,7 @@ def rref(r):
             elif i == 0 and j == 0:
                 den[i] = r[i, j]
             if abs(r_form[i, j]) > 0 and abs(
-                    r_form[i, j]) <= np.finfo(float).eps:
+                    r_form[i, j]) <= finfo(float).eps:
                 # Either way make eps 0, avoid propagation of error.
                 r_form[i, j] = 0.0
     for i in range(n):
@@ -81,10 +82,10 @@ def ref(a):
     """
     n = a.shape[0]
     m = a.shape[1]
-    p = np.eye(n, dtype=float)
-    d = np.eye(n, dtype=float)
-    dr = np.zeros([n, m], dtype=float)
-    r = np.zeros([n, m], dtype=float)
+    p = eye(n, dtype=float)
+    d = eye(n, dtype=float)
+    dr = zeros([n, m], dtype=float)
+    r = zeros([n, m], dtype=float)
     indexes_r = list([item for item in range(n)])
     shift = 0  # diagonal !=0, no shift
     for i in range(n):
@@ -98,7 +99,7 @@ def ref(a):
         if j + shift >= dr.shape[1] - 1:
             # rows below all 0
             break
-        indexes_r[j] = j + np.argmax(abs(dr[j:, j + shift]))
+        indexes_r[j] = j + argmax(abs(dr[j:, j + shift]))
         # columns pivoting
         dr[[j, indexes_r[j]]] = dr[[indexes_r[j], j]]
         p[[j, indexes_r[j]]] = p[[indexes_r[j], j]]
@@ -127,8 +128,8 @@ def gauss_elimination(a, b):
     :param b: array n X 1
     """
     n = a.shape[0]
-    x = np.zeros_like(b, dtype=float)
-    y = np.zeros_like(b, dtype=float)
+    x = zeros_like(b, dtype=float)
+    y = zeros_like(b, dtype=float)
     l, r, p, d, da = lrpd(a)
     pdb = (p.dot(d).dot(b))
     sum_lik_xk = 0.
@@ -173,27 +174,27 @@ def nr_ls(x0, f, j, tol, max_it, inner_loop_condition,
     inner_it_j = 0
     j_val = j(x)
     f_val = f(x)
-    y = np.empty_like(f_val)
-    magnitude_f = np.sqrt(f_val**2)
-    diff = np.nan
-    if np.size(x) > 1:
-        y = np.ones(len(x)).T * tol / (np.sqrt(len(x)) * tol)
-        magnitude_f = np.sqrt((f_val.dot(f_val)).item())
-        diff = np.empty(len(x))
-        diff.fill(np.nan)
-    elif np.size(x) == 1:
+    y = empty_like(f_val)
+    magnitude_f = sqrt(f_val**2)
+    diff = nan
+    if size(x) > 1:
+        y = ones(len(x)).T * tol / (sqrt(len(x)) * tol)
+        magnitude_f = sqrt((f_val.dot(f_val)).item())
+        diff = empty(len(x))
+        diff.fill(nan)
+    elif size(x) == 1:
         pass  # defined above
     # Line search variable lambda
     lambda_ls = 1.0
     accum_step = 0.0
     # Machine precision
-    machine_eps = np.finfo(float).eps
+    machine_eps = finfo(float).eps
     # For progress bar, use exp scale to compensate for quadratic convergence
     progress_factor = 1 / (1 - 10. ** (5 * (2 - 1))) * \
-        np.log(0.1)  # prog=0.1, x=10^-5 & tol=10^-10
-    progress_k = np.exp((-magnitude_f + tol) / tol * progress_factor) * 100.
+        log(0.1)  # prog=0.1, x=10^-5 & tol=10^-10
+    progress_k = exp((-magnitude_f + tol) / tol * progress_factor) * 100.
     stop = magnitude_f < tol  # stop if already fulfilling condition
-    stop = stop or np.any(np.isnan(j_val)) or np.any(np.isnan(f_val))
+    stop = stop or any(isnan(j_val)) or any(isnan(f_val))
     divergent = False
     no_gradient_change_once = False
     # Non-functional status notification
@@ -228,10 +229,10 @@ def nr_ls(x0, f, j, tol, max_it, inner_loop_condition,
         else:
             # For progress use exp scale to compensate for quadratic
             # convergence
-            progress_k = np.exp(
+            progress_k = exp(
                 (-magnitude_f + tol) / tol * progress_factor) * 100.
             # continue if gradient still changing
-            gradient_change = abs(g_val - g_max) > np.finfo(float).eps
+            gradient_change = abs(g_val - g_max) > finfo(float).eps
             no_gradient_change_twice = no_gradient_change_once and not gradient_change
             no_gradient_change_once = no_gradient_change_once or not gradient_change
             min_g_reached = g_val <= machine_eps
@@ -240,7 +241,7 @@ def nr_ls(x0, f, j, tol, max_it, inner_loop_condition,
             premature_stop = progress_k == progress_k_m_1 and \
                 no_gradient_change_twice or \
                 min_g_reached
-            if np.isnan(magnitude_f) or np.isinf(magnitude_f):
+            if isnan(magnitude_f) or isinf(magnitude_f):
                 stop = True  # Divergent method
                 divergent = True
                 progress_k = 0.0
@@ -277,7 +278,7 @@ def sdm(x0, f, j, tol, notify_status_func, inner_loop_condition=None):
     :return: x, array with reduced gradient to tol level.
     """
     def g(x_var):
-        f_val = np.asarray(f(x_var))
+        f_val = asarray(f(x_var))
         return f_val.T.dot(f_val)
     x = x0
     k = 1
@@ -285,10 +286,10 @@ def sdm(x0, f, j, tol, notify_status_func, inner_loop_condition=None):
     max_it = 1000
     while k < max_it and not stop:
         x_n_m_1 = x
-        f_x = np.asarray(f(x))
-        j_x = np.asarray(j(x))
-        z = np.asarray(2 * j_x.dot(f_x))
-        z0 = np.asarray(np.sqrt(z.T.dot(z)))
+        f_x = asarray(f(x))
+        j_x = asarray(j(x))
+        z = asarray(2 * j_x.dot(f_x))
+        z0 = asarray(sqrt(z.T.dot(z)))
         if z0 == 0:
             # Zero gradient
             # stop = True
@@ -335,12 +336,12 @@ def sdm(x0, f, j, tol, notify_status_func, inner_loop_condition=None):
         # Non-functional status notification
         diff = x - x_n_m_1
         outer_it_k = k
-        inner_it_j, accum_step, lambda_ls = k, k, np.nan
+        inner_it_j, accum_step, lambda_ls = k, k, nan
         progress_k = (-g_min_minus_g1 / tol) * 100.
         notify_status_func(progress_k, stop, outer_it_k,
                            inner_it_j, lambda_ls, accum_step,
                            x, diff, f_x, j_x, z,
-                           np.nan, g_min=g_min, g1=g1)
+                           nan, g_min=g_min, g1=g1)
         # End non-functional notification
 
         k += 1
@@ -386,14 +387,14 @@ def line_search(fun, jac, x_c, known_f_c=None, known_j_c=None,
     # p in the Newton-direction: $s_N = -J(x_c)^{-1} F(x_c)$
     s_0_n = solve_ax_equal_b(j_0, -f_0)
     # relative length of p as calculated in the stopping routine
-    if np.size(x_c) == 1:
+    if size(x_c) == 1:
         rellength = abs(s_0_n / x_c)
     else:
         rellength = max(abs(s_0_n) / max(abs(x_c)))
     # minimum allowable step length
     lambda_min = tol / rellength
     # FIXME: lambda_min can sometimes be lower than tol / rellength
-    lambda_min = np.finfo(float).eps * lambda_min
+    lambda_min = finfo(float).eps * lambda_min
     # $\nabla f(x_c)^T s^N = -F(x_c)^T F(x_c)$
     # initslope: expressed (p344) $g^T p$ as gradient . direction
     g_0 = 1 / 2. * scalar_prod(f_0, f_0)
@@ -406,14 +407,14 @@ def line_search(fun, jac, x_c, known_f_c=None, known_j_c=None,
     backtrack_count = 0
     lambda_temp = lambda_ls
     lambda_prev = lambda_ls
-    x_2 = np.empty_like(x_c)
-    f_2 = np.empty_like(f_0)
-    g_2 = np.empty_like(g_0)
-    g_1 = np.empty_like(g_0)
-    magnitude_f = np.empty_like(lambda_ls)
-    g_max = np.empty_like(lambda_ls)
+    x_2 = empty_like(x_c)
+    f_2 = empty_like(f_0)
+    g_2 = empty_like(g_0)
+    g_1 = empty_like(g_0)
+    magnitude_f = empty_like(lambda_ls)
+    g_max = empty_like(lambda_ls)
     progress_factor = 1 / (1 - 10. ** (5 * (2 - 1))) * \
-        np.log(0.1)  # prog=0.1, x=10^-5 & tol=10^-10
+        log(0.1)  # prog=0.1, x=10^-5 & tol=10^-10
     stop = False
     outer_it_stop = False
     while backtrack_count < max_iter and not stop:
@@ -422,7 +423,7 @@ def line_search(fun, jac, x_c, known_f_c=None, known_j_c=None,
         g_2 = 1 / 2. * scalar_prod(f_2, f_2)
         descent = alpha * lambda_ls * g_prime_t_s
         g_max = g_0 + descent
-        nan_result = np.any(np.isnan(f_2))
+        nan_result = any(isnan(f_2))
         # add current lambda to accumulated steps
         accum_step += lambda_ls
         while nan_result and lambda_ls >= lambda_min:
@@ -431,8 +432,8 @@ def line_search(fun, jac, x_c, known_f_c=None, known_j_c=None,
             if notify_status_func is not None:
                 diff = (lambda_ls - lambda_prev) * s_0_n
                 inner_it_j = backtrack_count
-                magnitude_f = np.sqrt(2 * g_2)
-                progress_k = np.exp(
+                magnitude_f = sqrt(2 * g_2)
+                progress_k = exp(
                     (-magnitude_f + tol) / tol * progress_factor) * 100.
                 notify_status_func(
                     progress_k,
@@ -460,12 +461,12 @@ def line_search(fun, jac, x_c, known_f_c=None, known_j_c=None,
             x_2 = x_c + lambda_ls * s_0_n
             f_2 = fun(x_2)
             g_2 = 1 / 2. * scalar_prod(f_2, f_2)
-            nan_result = np.any(np.isnan(f_1)) or \
-                np.any(np.isnan(f_2))
+            nan_result = any(isnan(f_1)) or \
+                any(isnan(f_2))
             accum_step += lambda_ls
         satisfactory = g_2 <= g_max
         stop = satisfactory
-        magnitude_f = np.sqrt(2 * g_2)
+        magnitude_f = sqrt(2 * g_2)
         outer_it_stop = magnitude_f < tol
         if additional_restrictions is not None:
             stop = satisfactory and additional_restrictions(x_2)
@@ -478,7 +479,7 @@ def line_search(fun, jac, x_c, known_f_c=None, known_j_c=None,
         if notify_status_func is not None:
             diff = (lambda_ls - lambda_prev) * s_0_n
             inner_it_j = backtrack_count
-            progress_k = np.exp(
+            progress_k = exp(
                 (-magnitude_f + tol) / tol * progress_factor) * 100.
             notify_status_func(progress_k, outer_it_stop and stop, outer_it,
                                inner_it_j, lambda_ls, accum_step,
@@ -498,10 +499,10 @@ def line_search(fun, jac, x_c, known_f_c=None, known_j_c=None,
                 )
             elif lambda_ls < 1:
                 # subsequent backtracks: cubic fit
-                a, b = 1 / (lambda_ls - lambda_prev) * np.array(
+                a, b = 1 / (lambda_ls - lambda_prev) * array(
                     [[+1 / lambda_ls ** 2, - 1 / lambda_prev ** 2],
                      [- lambda_prev / lambda_ls ** 2, +lambda_ls / lambda_prev ** 2]]
-                ).dot(np.array(
+                ).dot(array(
                     [[g_2 - g_0 - g_prime_t_s * lambda_ls],
                      [g_1 - g_0 - g_prime_t_s * lambda_prev]]))
                 a = a.item()
@@ -512,7 +513,7 @@ def line_search(fun, jac, x_c, known_f_c=None, known_j_c=None,
                     lambda_temp = -g_prime_t_s / (2 * b)
                 else:
                     # legitimate cubic
-                    lambda_temp = (-b + np.sqrt(disc)) / (3 * a)
+                    lambda_temp = (-b + sqrt(disc)) / (3 * a)
                 if lambda_temp > 1 / 2 * lambda_ls:
                     lambda_temp = 1 / 2 * lambda_ls
             lambda_prev = lambda_ls
@@ -527,25 +528,53 @@ def line_search(fun, jac, x_c, known_f_c=None, known_j_c=None,
 
 
 def scalar_prod(factor_a, factor_b):
-    if np.size(factor_b) > 1:
+    if size(factor_b) > 1:
         return factor_a.dot(factor_b)
-    elif np.size(factor_b) == 1:
+    elif size(factor_b) == 1:
         return factor_a * factor_b
 
 
 def solve_ax_equal_b(factor_a, term_b):
-    if np.size(term_b) > 1:
+    if size(term_b) > 1:
         return gauss_elimination(factor_a, term_b)
-    elif np.size(term_b) == 1:
+    elif size(term_b) == 1:
         return 1 / factor_a * term_b
+
+# noinspection PyUnboundLocalVariable
 
 
 def secant_ls_3p(y, x_0, x_1, tol, max_it=100, alpha=1e-4,
                  restriction=None, print_iterations=False):
+    """3 point secant method with line search algorithm (single dimension)
+
+        Tiruneh, Ababu Teklemariam. "A modified three-point Secant method with improved rate and
+        characteristics of convergence." arXiv preprint arXiv:1902.09058 (2019).
+
+        solves f(x) = 0 using the 3 point secant method (quadratic order), with additional line
+        search for improved convergence. Function is evaluated in x_0 and x_1.
+        First step is ordinary secant method, subsequent steps are 3-point secant method.
+        Backtracking ("line search") ensures that the step decreases the optimization function.
+
+        :param y: function
+        :param x_0: point 1 for evaluation
+        :param x_1: point 2 for evaluation
+        :param tol: tolerance for method
+        :param max_it: maximum iterations
+        :param alpha: stringency constant in (0,1/2)
+        :param restriction: optional restrictions imposed on x. Line search when False.
+        :param print_iterations: optionally print iteration results
+        :return: dict with keys: ['x', 'f', 'x_list', 'f_list',
+                 'iterations', 'total_backtracks', 'steps', 'success']
+        """
     x_k = x_0
     y_k = y(x_k)
     g_k = 1 / 2 * y_k**2
     g_prime_k = - y_k**2
+    # initialize to prevent
+    x_k_minus_1 = 0
+    x_k_minus_2 = 0
+    y_k_minus_1 = 0
+    y_k_minus_2 = 0
     # relative length of p as calculated in the stopping routine
     p = x_1 - x_0
     rellength = abs(p / x_k)
@@ -586,12 +615,12 @@ def secant_ls_3p(y, x_0, x_1, tol, max_it=100, alpha=1e-4,
         else:
             p = (x_k_minus_2 - x_k) - y_k_minus_2 * (
                 y_k - y_k_minus_1
-                ) / ((y_k - y_k_minus_2) / (x_k - x_k_minus_2) * (
-                    y_k - y_k_minus_1) - y_k * (
-                    (y_k - y_k_minus_2) / (x_k - x_k_minus_2) -
+            ) / ((y_k - y_k_minus_2) / (x_k - x_k_minus_2) * (
+                y_k - y_k_minus_1) - y_k * (
+                (y_k - y_k_minus_2) / (x_k - x_k_minus_2) -
                     (y_k_minus_1 - y_k_minus_2) / (x_k_minus_1 - x_k_minus_2)
-                    )
-                )
+            )
+            )
 
             x_k_minus_2 = x_k_minus_1
             x_k_minus_1 = x_k
@@ -632,10 +661,13 @@ def secant_ls_3p(y, x_0, x_1, tol, max_it=100, alpha=1e-4,
             satisfactory = g_2 <= g_max
             stop = satisfactory or lambda_ls <= lambda_min
             if print_iterations:
-                print(('{:d}-{:d}:\t x_2: {:.4f}\ty_2: {:.4g}' +
-                        '\tx_1: {:.4g}'+
-                       '\tg_0: {:.4g}\tg_2: {:.4g}\tg_max: {:.4g}\tlambda: {:.2g}\t p: {:2g}').format(
-                    j, backtrackcount, x_2, f_2, x_k_minus_1, g_0, g_2, g_max, lambda_ls, p))
+                print(
+                    ('{:d}-{:d}:\t x_2: {:.4f}\ty_2: {:.4g}' +
+                     '\tx_1: {:.4g}' +
+                     '\tg_0: {:.4g}\tg_2: {:.4g}\tg_max: {:.4g}\tlambda: {:.2g}\t p: {:2g}').format(
+                        j, backtrackcount, x_2, f_2, x_k_minus_1, g_0, g_2, g_max, lambda_ls, p
+                    )
+                )
 
             if not stop:
                 # backtrack - reduce lambda
@@ -647,18 +679,18 @@ def secant_ls_3p(y, x_0, x_1, tol, max_it=100, alpha=1e-4,
                 if lambda_ls == 1:
                     # first backtrack quadratic fit
                     lambda_temp = -g_prime_0 / (
-                            2 * (g_2 - g_0 - g_prime_0)
-                        )
+                        2 * (g_2 - g_0 - g_prime_0)
+                    )
                 elif lambda_ls < 1:
                     # subsequent backtracks cubic fit
-                    a, b = 1 / (lambda_ls - lambda_prev) * np.array(
-                            [[+1 / lambda_ls**2, -1 / lambda_prev**2],
-                            [-lambda_prev / lambda_ls**2,
-                             +lambda_ls / lambda_prev**2]]
-                        ).dot(np.array(
-                            [[g_2 - g_0 - g_prime_0 * lambda_ls],
-                            [ g_1 - g_0 - g_prime_0 * lambda_prev]]
-                            ))
+                    a, b = 1 / (lambda_ls - lambda_prev) * array(
+                        [[+1 / lambda_ls**2, -1 / lambda_prev**2],
+                         [-lambda_prev / lambda_ls**2,
+                          +lambda_ls / lambda_prev**2]]
+                    ).dot(array(
+                        [[g_2 - g_0 - g_prime_0 * lambda_ls],
+                         [g_1 - g_0 - g_prime_0 * lambda_prev]]
+                    ))
                     a, b = a.item(), b.item()
                     disc = b**2 - 3 * a * g_prime_0
                     if a == 0:
@@ -666,7 +698,7 @@ def secant_ls_3p(y, x_0, x_1, tol, max_it=100, alpha=1e-4,
                         lambda_temp = - g_prime_0 / (2 * b)
                     else:
                         # legitimate cubic
-                        lambda_temp = (-b + np.sqrt(disc)) / (3 * a)
+                        lambda_temp = (-b + sqrt(disc)) / (3 * a)
                     if lambda_temp > 1 / 2 * lambda_ls:
                         lambda_temp = 1 / 2 * lambda_ls
                 lambda_prev = lambda_ls
@@ -679,12 +711,11 @@ def secant_ls_3p(y, x_0, x_1, tol, max_it=100, alpha=1e-4,
             y_k_plus_1 = f_2
             g_k_plus_1 = g_2
 
-
         x_k = x_k_plus_1
         y_k = y_k_plus_1
         g_k = g_k_plus_1
         g_prime_k = - y_k ** 2
-        if abs(p) <= tol or np.isnan(p):
+        if abs(p) <= tol or isnan(p):
             # avoid 1/0 division
             success = False
             break

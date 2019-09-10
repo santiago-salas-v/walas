@@ -99,8 +99,9 @@ class Eos:
         elif eos == 'srk_simple_alpha':
             return 1.0
 
-    def alpha_tr(self, tr, m):
+    def alpha_tr(self, tr, af_omega):
         eos = self.eos
+        m = self.m(af_omega)
         if eos == 'pr':
             return \
                 (1 + m * (1 - tr ** (1 / 2.))) ** 2
@@ -109,7 +110,7 @@ class Eos:
                 (1 + m * (1 - tr ** (1 / 2.))) ** 2
         elif eos == 'srk_simple_alpha':
             return \
-                (tr) ** (-1 / 2.)
+                tr ** (-1 / 2.)
 
     def dalphadt(self, t, tc, alpha_i, m):
         eos = self.eos
@@ -470,62 +471,31 @@ def phi(t, p, z_i, tc_i, pc_i, af_omega_i, alpha_tr, phase):
     return soln
 
 
-def siedepunkt(t, p, x_i, y_i, tc_i, pc_i, af_omega_i, alpha_tr, max_it, tol=tol):
-    """Siedepunkt-Bestimmung
-
-    Bei gegebenen Temperatur-Wert und Flüssigkeit-Zusammenstellung (mit geschätzten\
-    Druck-Wert und Dampf-Zusammenstellung) werden phi, K und neue Zusammenstellung y \
-    berechnet. Diese sollen wiederum optimiert werden, bis opt_fun niedrig genug ist. \
-    ( Summe(K_i x_i -1 = 0) )
-
-    ref. e.V., VDI: VDI-Wärmeatlas. Wiesbaden: Springer Berlin Heidelberg, 2013. \
-    (D5.1. Abb.6.)
-
-    ref. Smith, Joseph Mauk ; Ness, Hendrick C. Van ; Abbott, Michael M.: \
-    Introduction to chemical engineering thermodynamics. New York: McGraw-Hill, 2005.\
-    (Fig. 14.9)
-
-    :param alpha_tr:
-    :param t: Temperatur / °K
-    :param p: Druck / bar
-    :param x_i: Flüssigkeit-Zusammenstellung
-    :param y_i: Dampf-Zusammenstellung
-    :param tc_i: Kritische Temperatur-Werte
-    :param pc_i: Kritische Druck-Werte
-    :param af_omega_i: Pitzer-Faktoren
-    :param max_it: Maximale Iterationen
-    :param tol: Fehlertoleranz
-    :return: soln (dict)
-    """
-    psat_i, success = p_i_sat_ceos(310.92, 30, tc_i, pc_i, af_omega_i, alpha_tr, max_it, tol)
-    k_i = psat_i / p # Ideal K-value estimate
-    k_i = exp(log(pc_i/p)+5.373*(1+af_omega_i)*(1-tc_i/t))  # Wilson K-Value estimates
-    soln_l = phi(t, p, x_i, tc_i, pc_i, af_omega_i, alpha_tr, 'l')
-    sum_k_i_n = sum(k_i * x_i)
-    y_i = k_i * x_i / sum_k_i_n
-    stop = False
-    i = 0
-    while i < max_it and not stop:
-        sum_k_i_n_min_1 = sum_k_i_n
-        i = i + 1
-        soln_v = phi(t, p, y_i, tc_i, pc_i, af_omega_i, alpha_tr, 'v')
-        k_i = soln_l['phi'] / soln_v['phi']
-        sum_k_i_n = sum(k_i * x_i)
-        y_i = k_i * x_i / sum_k_i_n
-        stop = abs((sum_k_i_n_min_1 - sum_k_i_n) / sum_k_i_n) <= tol
-        # print('i='+str(i))
-
-    opt_func = 1 - sum(k_i * x_i)
-
-    soln = dict()
-    for item in ['soln_l', 'soln_v', 'k_i', 'y_i', 'opt_func']:
-        soln[item] = locals().get(item)
-    return soln
-
 def bubl_p(t, p, x_i, tc_i, pc_i, af_omega_i, max_it, tol=tol, y_i_est=None):
+    """Bubble pressure determination
+
+        Determines bubble pressure at given temperature and liquid composition
+
+        ref. Smith, Joseph Mauk ; Ness, Hendrick C. Van ; Abbott, Michael M.: \
+        Introduction to chemical engineering thermodynamics. New York: McGraw-Hill, 2005.\
+        (Fig. 14.9)
+
+        ref. e.V., VDI: VDI-Wärmeatlas. Wiesbaden: Springer Berlin Heidelberg, 2013. \
+        (D5.1. Abb.6.)
+
+        :param t: temperature / K
+        :param p: pressure / bar
+        :param x_i: liquid composition (known)
+        :param tc_i: critical temperatures / K
+        :param pc_i: critical pressures / bar
+        :param af_omega_i: Pitzer-factors
+        :param max_it: maximum iterations
+        :param tol: tolerance of method
+        :return: dictionary with 'x_i', 'y_i', 'phi_l', 'phi_v', 'k_i', 'sum_ki_xi', 'p', 'success'
+        """
     soln = secant_ls_3p(lambda p_var: bubl_p_step_l_k(
         t, p_var, x_i, tc_i, pc_i, af_omega_i, max_it, y_i_est=y_i_est
-    ), p, 1.001 * p, tol=1e-10, restriction=lambda p_val: p_val > 0)
+    ), p, 1.001 * p, tol=1e-10, restriction=lambda p_val: p_val > 0, print_iterations=True)
     p = soln['x']
     soln = bubl_p_step_l_k(
         t, p, x_i, tc_i, pc_i, af_omega_i, max_it, full_output=True, y_i_est=y_i_est)
@@ -1235,23 +1205,33 @@ def svn_14_2():
     ant_b = array([395.744, 935.773])
     ant_c = array([266.681, 238.789])
     max_it = 100
-    print(siedepunkt(310.92, 30, x_i, y_i, tc_i, pc_i, af_omega_i, alpha_tr, max_it))
-    y_i = siedepunkt(310.92, 30, x_i, y_i, tc_i, pc_i, af_omega_i, alpha_tr, max_it)['y_i']
-    print('\n===\n')
-    print(bubl_p(310.92, 30, x_i, tc_i, pc_i, af_omega_i, max_it))
-    print('\n===\n')
+    print(bubl_p_step_l_k(
+        310.92, 30, x_i, tc_i, pc_i, af_omega_i, max_it, full_output=True, y_i_est=y_i)
+    )
+    y_i = bubl_p_step_l_k(
+        310.92, 30, x_i, tc_i, pc_i, af_omega_i, max_it, full_output=True, y_i_est=y_i
+    )['y_i']
+    for i in range(5):
+        soln = bubl_p_step_l_k(
+        310.92, 30, x_i, tc_i, pc_i, af_omega_i, max_it, full_output=True, y_i_est=y_i
+        )
+        y_i = soln['y_i']
+        k_i = soln['k_i']
+        print(y_i)
+        print(1 - sum(y_i))
+        print(sum(k_i * x_i))
+    soln = bubl_p(310.92, 1., x_i, tc_i, pc_i, af_omega_i, max_it, y_i_est=y_i)
+    print(soln)
+    print(bubl_p_step_l_k(
+        310.92, soln['p'], x_i, tc_i, pc_i, af_omega_i, max_it, full_output=True, y_i_est=y_i))
 
-    fig = plt.figure()
-    ax = plt.axes()
-    x = linspace(0.0, 0.8, 40)
+    x = linspace(0.0, 0.8, 50)
     y = empty_like(x)
     p_v = empty_like(x)
 
     x_i = array([x[0], 1 - x[0]])
-    x_i = array([0.2, 1 - 0.2])
     y_i_est = array([x[0], 1 - x[0]])
-    p_sat_all, _ = p_i_sat_ceos(310.92, 30, tc_i, pc_i, af_omega_i, alpha_tr, max_it, tol)
-    p_v0 = sum(p_sat_all * x_i)
+    p_v0 = 1.0
     for i in range(len(x)):
         x_i = array([x[i], 1 - x[i]])
         soln = bubl_p(310.92, p_v0, x_i, tc_i, pc_i, af_omega_i, max_it, y_i_est=y_i_est)
