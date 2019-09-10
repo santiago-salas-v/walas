@@ -540,13 +540,13 @@ def solve_ax_equal_b(factor_a, term_b):
         return 1 / factor_a * term_b
 
 
-def secant_ls_3p(y, x_0, x_1, tol, max_it=100, alpha=1e-4, restriction=None):
+def secant_ls_3p(y, x_0, x_1, tol, max_it=100, alpha=1e-4,
+                 restriction=None, print_iterations=False):
     x_k = x_0
     y_k = y(x_k)
     g_k = 1 / 2 * y_k**2
     g_prime_k = - y_k**2
     # relative length of p as calculated in the stopping routine
-    # p = -0.1 * x_0
     p = x_1 - x_0
     rellength = abs(p / x_k)
     lambda_min = tol / rellength
@@ -567,10 +567,6 @@ def secant_ls_3p(y, x_0, x_1, tol, max_it=100, alpha=1e-4, restriction=None):
             inv_slope = -(x_1 - x_0) / y_k
             p = -inv_slope * y_k
 
-            print(('{:d}:\t x_k: {:0.4f}\ty_k: {:0.4g}' +
-                   '\tp: {:0.4f}'
-                   ).format(j, x_k, y_k, p))
-
             x_k_minus_1 = x_k
             y_k_minus_1 = y_k
             g_k_minus_1 = g_k
@@ -579,10 +575,6 @@ def secant_ls_3p(y, x_0, x_1, tol, max_it=100, alpha=1e-4, restriction=None):
         elif j == 1:
             inv_slope = (x_k - x_k_minus_1) / (y_k - y_k_minus_1)
             p = -inv_slope * y_k
-
-            print(('{:d}:\t x_k: {:0.4f}\ty_k: {:0.4g}' +
-                   '\tx_k_minus_1: {:0.4f}\tp: {:0.4f}'
-                   ).format(j, x_k, y_k, x_k_minus_1, p))
 
             x_k_minus_2 = x_k_minus_1
             x_k_minus_1 = x_k
@@ -600,10 +592,6 @@ def secant_ls_3p(y, x_0, x_1, tol, max_it=100, alpha=1e-4, restriction=None):
                     (y_k_minus_1 - y_k_minus_2) / (x_k_minus_1 - x_k_minus_2)
                     )
                 )
-
-            print(('{:d}:\t x_k: {:0.4f}\ty_k: {:0.4g}' +
-                   '\tx_k_minus_1: {:0.4f}\tx_k_minus_2: {:0.4f}\tp: {:0.4g}'
-                   ).format(j, x_k, y_k, x_k_minus_1, x_k_minus_2, p))
 
             x_k_minus_2 = x_k_minus_1
             x_k_minus_1 = x_k
@@ -641,18 +629,19 @@ def secant_ls_3p(y, x_0, x_1, tol, max_it=100, alpha=1e-4, restriction=None):
             descent = alpha * lambda_ls * g_prime_0
             g_max = g_0 + descent
 
-            x_list += [x_2]
-            y_list += [f_2]
-            steps += [accum_step]
-
             satisfactory = g_2 <= g_max
             stop = satisfactory or lambda_ls <= lambda_min
-            print(('{:d}-{:d}:\t x_2: {:.4f}\ty_2: {:.4g}' +
-                   '\tg_0: {:.4g}\tg_2: {:.2g}\tg_max: {:.2g}\tlambda: {:.2g}\t p: {:2g}').format(
-                j, backtrackcount, x_2, f_2, g_0, g_2, g_max, lambda_ls, p))
+            if print_iterations:
+                print(('{:d}-{:d}:\t x_2: {:.4f}\ty_2: {:.4g}' +
+                        '\tx_1: {:.4g}'+
+                       '\tg_0: {:.4g}\tg_2: {:.4g}\tg_max: {:.4g}\tlambda: {:.2g}\t p: {:2g}').format(
+                    j, backtrackcount, x_2, f_2, x_k_minus_1, g_0, g_2, g_max, lambda_ls, p))
 
             if not stop:
                 # backtrack - reduce lambda
+                x_list += [x_2]
+                y_list += [f_2]
+                steps += [accum_step]
                 backtrackcount += 1
                 accum_step -= lambda_ls
                 if lambda_ls == 1:
@@ -699,15 +688,7 @@ def secant_ls_3p(y, x_0, x_1, tol, max_it=100, alpha=1e-4, restriction=None):
             # avoid 1/0 division
             success = False
             break
-    if j == 0:
-        print(('{:d}:\t x_k: {:0.4f}\ty_k: {:0.4g}'
-               ).format(j, x_k, y_k))
-    else:
-        print(('{:d}:\t x_k: {:0.4f}\ty_k: {:0.4g}' +
-               '\tx_k_minus_1: {:0.4f}\tx_k_minus_2: {:0.4f}'
-               ).format(j, x_k, y_k, x_k_minus_1, x_k_minus_2))
-
-    success = success and j + backtrackcount <= max_it - 1
+    success = success and j <= max_it - 1
     x = x_k
     f = y_k
     f_list = y_list

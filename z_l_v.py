@@ -524,7 +524,7 @@ def siedepunkt(t, p, x_i, y_i, tc_i, pc_i, af_omega_i, max_it, tol=tol):
 def bubl_p(t, p, x_i, tc_i, pc_i, af_omega_i, max_it, tol=tol, y_i_est=None):
     soln = secant_ls_3p(lambda p_var: bubl_p_step_l_k(
         t, p_var, x_i, tc_i, pc_i, af_omega_i, max_it, y_i_est=y_i_est
-    ), p, 1.0001 * p, 1e-10, restriction=lambda p_val: p_val > 0)
+    ), p, 1.001 * p, tol=1e-10, restriction=lambda p_val: p_val > 0)
     p = soln['x']
     soln = bubl_p_step_l_k(
         t, p, x_i, tc_i, pc_i, af_omega_i, max_it, full_output=True, y_i_est=y_i_est)
@@ -1239,18 +1239,21 @@ def svn_14_2():
         pc_i,
         af_omega_i,
         max_it)['y_i']
-    p_sat_all, _ = p_i_sat_ceos(310.92, 30, tc_i, pc_i, af_omega_i, max_it, tol)
-    p = sum(p_sat_all * x_i)
+    print('\n===\n')
+    print(bubl_p(310.92, 30, x_i, tc_i, pc_i, af_omega_i, max_it))
+    print('\n===\n')
 
     fig = plt.figure()
     ax = plt.axes()
-    x = linspace(0.0, 0.8, 150)
+    x = linspace(0.0, 0.8, 40)
     y = empty_like(x)
     p_v = empty_like(x)
+
+    x_i = array([x[0], 1 - x[0]])
+    x_i = array([0.2, 1 - 0.2])
+    y_i_est = array([x[0], 1 - x[0]])
     p_sat_all, _ = p_i_sat_ceos(310.92, 30, tc_i, pc_i, af_omega_i, max_it, tol)
     p_v0 = sum(p_sat_all * x_i)
-    y_i_est = array([x[0], 1 - x[0]])
-    print(bubl_p(310.92, p_v0, array([x[10], 1-x[10]]), tc_i, pc_i, af_omega_i, max_it))
     for i in range(len(x)):
         x_i = array([x[i], 1 - x[i]])
         soln = bubl_p(310.92, p_v0, x_i, tc_i, pc_i, af_omega_i, max_it, y_i_est=y_i_est)
