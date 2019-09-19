@@ -1,7 +1,7 @@
 from poly_3_4 import solve_cubic, solve_quartic
 from numerik import secant_ls_3p
 from poly_n import zroots
-from numpy import array, append, zeros, abs, ones, empty_like, empty, argwhere, unique
+from numpy import array, append, zeros, abs, ones, empty_like, empty, argwhere, unique, asarray
 from numpy import sqrt, outer, sum, log, exp, multiply, diag
 from numpy import linspace, dot, nan, finfo, isnan, isinf
 from numpy.random import randint
@@ -383,13 +383,15 @@ def p_sat(t, af_omega, tc, pc):
     # Das Levenberg-Marquardt Algorithmus weist wenigere Sprunge auf.
     return optimize.root(fs, 1., method='lm')
 
-def p_i_sat_ceos(t, p0, tc_i, pc_i, af_omega_i, alpha_tr, max_it, tol=tol):
-    p_sat_list = zeros(tc_i.size)
+def p_i_sat_ceos(t, p0, tc_i, pc_i, af_omega_i,
+                 alpha_tr, epsilon, sigma, psi, omega,
+                 max_it, tol=tol):
+    p_sat_list = zeros(asarray(tc_i).size)
     tr_i = t / tc_i
     a_i = psi * alpha_tr(tr_i, af_omega_i) * r ** 2 * tc_i ** 2 / pc_i
     b_i = omega * r * tc_i / pc_i
-    p = p0 * ones(tc_i.size)
-    for j in range(max_it):
+    p = p0 * ones(asarray(tc_i).size)
+    for n_fev in range(max_it):
         beta = b_i * p / (r * t)
         q = a_i / (b_i * r * t)
         a1 = beta * (epsilon + sigma) - beta - 1
@@ -409,15 +411,19 @@ def p_i_sat_ceos(t, p0, tc_i, pc_i, af_omega_i, alpha_tr, max_it, tol=tol):
                 1 / 2 * (2 / 27 * a1 ** 3 - 1 / 3 * a1 * a2 + a3) * (
                     2 / 9 * a1**2 * da1_dp
                     - 1 / 3 * (a1 * da2_dp + a2 * da1_dp) + da3_dp)
-        f = disc + tol
+        f = disc
         df_dp = ddisc_dp
         inv_slope = 1 / df_dp
         p_old = p
         p = p_old - inv_slope * f
-        success = disc <= -tol
+        success = abs(disc) <= tol
         if all(success):
             break
-    return p, success
+
+    soln = dict()
+    for item in ['p', 'success', 'n_fev']:
+        soln[item] = locals().get(item)
+    return soln
 
 def z_non_sat(t, p, x_i, tc_i, pc_i, af_omega_i):
     tr_i = t / tc_i
@@ -451,6 +457,7 @@ def z_non_sat(t, p, x_i, tc_i, pc_i, af_omega_i):
     return soln
 
 def phi(t, p, z_i, tc_i, pc_i, af_omega_i, phase, alpha_tr, epsilon, sigma, psi, omega):
+    z_i = asarray(z_i)
     tr_i = t / tc_i
     a_i = psi * alpha_tr(tr_i, af_omega_i) * r ** 2 * tc_i ** 2 / pc_i
     b_i = omega * r * tc_i / pc_i
@@ -460,7 +467,7 @@ def phi(t, p, z_i, tc_i, pc_i, af_omega_i, phase, alpha_tr, epsilon, sigma, psi,
 
     # composition-dependent variables
     b = sum(z_i * b_i)
-    a = z_i.dot(a_ij).dot(z_i)
+    a = z_i.dot(a_ij).dot(z_i).item()
     beta = b * p / (r * t)
     q = a / (b * r * t)
     a_mp_i = -a + 2 * a_ij.dot(z_i) # partielles molares a_i
@@ -538,14 +545,16 @@ def bubl_p(t, p, x_i, tc_i, pc_i, af_omega_i,
 
 def bubl_t(t, p, x_i, tc_i, pc_i, af_omega_i,
            alpha_tr, epsilon, sigma, psi, omega,
-           max_it, tol=tol, y_i_est=None, print_iterations=False):
+           sec_j=None, nu_ij=None,
+           max_it=100, tol=tol, y_i_est=None, print_iterations=False):
     """Bubble temperature determination
 
         Determines bubble temperature at given pressure and liquid composition. Lee-Kessler method.
+        If sec_j and nu_ij are provided, gamma-phi approach is used, otherwise phi-phi.
 
         ref. Smith, Joseph Mauk ; Ness, Hendrick C. Van ; Abbott, Michael M.: \
         Introduction to chemical engineering thermodynamics. New York: McGraw-Hill, 2005.\
-        (Fig. 14.9)
+        (Fig. 14.5 gama-phi; 14.9 phi-phi)
 
         ref. e.V., VDI: VDI-Wärmeatlas. Wiesbaden: Springer Berlin Heidelberg, 2013. \
         (D5.1. Abb.6.)
@@ -561,16 +570,26 @@ def bubl_t(t, p, x_i, tc_i, pc_i, af_omega_i,
         :param sigma: CEOS sigma
         :param psi: CEOS psi
         :param omega: CEOS omega
+        :param sec_j: unifac secondary group / subgroup
+        :param nu_ij: coefficients in unifac subgroups per component
         :param max_it: maximum iterations
         :param tol: tolerance of method
         :param y_i_est: optional vapor composition (estimate)
         :param print_iterations: optionally print Lee-Kessler iterations
         :return: dictionary with 'x_i', 'y_i', 'phi_l', 'phi_v', 'k_i', 'sum_ki_xi', 'p', 'success'
         """
-    soln = secant_ls_3p(lambda t_var: bubl_point_step_l_k(
-        t_var, p, x_i, tc_i, pc_i, af_omega_i,
-        alpha_tr, epsilon, sigma, psi, omega,
-        max_it, tol=tol, y_i_est=y_i_est), t, tol=tol, x_1=1.001 * t,
+    if sec_j is None:
+        obj_fun = lambda t_var: bubl_point_step_l_k(
+            t_var, p, x_i, tc_i, pc_i, af_omega_i,
+            alpha_tr, epsilon, sigma, psi, omega,
+            max_it, tol=tol, y_i_est=y_i_est)
+    else:
+        obj_fun = lambda t_var: bubl_point_step_l_k_gamma_phi(
+            t_var, p, x_i, tc_i, pc_i, af_omega_i,
+            alpha_tr, epsilon, sigma, psi, omega,
+            sec_j, nu_ij,
+            max_it, tol=tol, y_i_est=y_i_est)
+    soln = secant_ls_3p(obj_fun, t, tol=tol, x_1=1.001 * t,
                         restriction=lambda t_val: t_val > 0,
                         print_iterations=print_iterations)
     t = soln['x']
@@ -618,6 +637,19 @@ def bubl_point_step_l_k(t, p, x_i, tc_i, pc_i, af_omega_i,
         return soln
     else:
         return 1 - sum_ki_xi
+
+
+def bubl_point_step_l_k_gamma_phi(t, p, x_i, tc_i, pc_i, af_omega_i,
+                        alpha_tr, epsilon, sigma, psi, omega,
+                        sec_j, nu_ij,
+                        max_it, tol=tol, full_output=False, y_i_est=None):
+    gamma_i = gamma_u(t, x_i, sec_j, nu_ij)
+    p_i_sat = p_i_sat_ceos(t, p, tc_i, pc_i, af_omega_i,
+                          alpha_tr, epsilon, sigma, psi, omega,
+                          max_it, tol=tol)['p']
+    phi_v = phi(t, p, x_i, tc_i, pc_i, af_omega_i, 'v',
+                alpha_tr, epsilon, sigma, psi, omega)
+    return 0
 
 
 def dew_p(t, p, y_i, tc_i, pc_i, af_omega_i,
@@ -979,13 +1011,13 @@ def z_phase(t, p, z_i, tc_i, pc_i, af_omega_i, phase, alpha_tr, epsilon, sigma, 
 
     # composition-dependent variables
     b = sum(z_i * b_i)
-    a = z_i.dot(a_ij).dot(z_i)
+    a = z_i.dot(a_ij).dot(z_i).item()
     q = a / (b * r * t)
 
     # mechanical critical point
     z_mc = -1 / 3 * ((epsilon + sigma) * omega - omega - 1)
     p_mc = sum(z_i * pc_i)
-    t_mc = z_i.dot(sqrt(outer(tc_i, tc_i))).dot(z_i)
+    t_mc = z_i.dot(sqrt(outer(tc_i, tc_i))).dot(z_i).item()
     rho_mc = p_mc / (r * t_mc * z_mc)
     v_mc = 1 / rho_mc
 
@@ -1415,6 +1447,17 @@ def vdi_atlas():
             p_sat(-256.6 + 273.15, -0.216, 33.19, 13.13).x.item() * 1000
         ) + ' mbar. (Literaturwert 250mbar)'
     )
+    p_new = p_i_sat_ceos(-256.6 + 273.15, 1, 33.19, 13.13,  -0.216,
+                 alpha_tr, epsilon, sigma, psi, omega,
+                 max_it=100, tol=tol)
+    soln = secant_ls_3p(lambda p_var:
+                 phi(-256.6 + 273.15, p_var, 1, 33.19, 13.13, -0.216, 'l',
+                     alpha_tr, epsilon, sigma, psi, omega
+                     )['phi'].item() - phi(-256.6 + 273.15, p_var, 1, 33.19, 13.13, -0.216, 'v',
+                             alpha_tr, epsilon, sigma, psi, omega)['phi'].item()
+                 , 0.7, tol=tol, x_1=1.001 * 0.7,
+                 restriction=lambda p_val: p_val > 0,
+                 print_iterations=True)
     t = 273.15 + linspace(-200, 500, 30)
     res = empty_like(t)
     success = True
@@ -1681,13 +1724,14 @@ def svn_tab_14_1_2():
     nu_ji = array([[2, 4, 0, 0, 0], [1, 1, 0, 0, 1], [1, 4, 1, 0, 0], [0, 0, 0, 6, 0]])
 
     soln = bubl_t(273.15, p, z_i, tc_i, pc_i, af_omega_i,
-           alpha_tr, epsilon, sigma, psi, omega,
-           max_it, tol, print_iterations=True)
+                  alpha_tr, epsilon, sigma, psi, omega,
+                  sec_i, nu_ji,
+                  max_it, tol, print_iterations=True)
     y_i = soln['y_i']
     k_i = soln['k_i']
     t = soln['t']
 
-    gamma_j = gamma_unifac(t, z_i, sec_i, nu_ji)
+    gamma_j = gamma_u(t, z_i, sec_i, nu_ji)
     print('\n')
     print('SVN Table 14.1 - n-hexane (1) / ethanol (2) / methylcyclopentane (3) /' +
           'benzene (4) at {:0.2f} K'.format(t))
@@ -2264,7 +2308,7 @@ def ppo_ex_8_12():
     x_j = array([0.047, 1 - 0.047])
     sec_j = array([1, 2, 19])
     nu_ij = array([[1, 0, 1], [2, 3, 0]])
-    gamma_j = gamma_unifac(t, x_j, sec_j, nu_ij)
+    gamma_j = gamma_u(t, x_j, sec_j, nu_ij)
     print('PPO example 8-12 - acetone (1) / n-pentane (2) at 307K')
     print('gamma_1: {:0.4f}\tgamma_2: {:0.4f}'.format(*gamma_j))
     print('\n')
@@ -2275,7 +2319,7 @@ def svn_h_1():
     x_j = array([0.4, 1 - 0.4])
     sec_j = array([1, 2, 33])
     nu_ij = array([[2, 1, 1], [2, 5, 0]])
-    gamma_j = gamma_unifac(t, x_j, sec_j, nu_ij)
+    gamma_j = gamma_u(t, x_j, sec_j, nu_ij)
     print('SVN Example H.1 - diethylamine (1) / n-heptane (2) at 308.15K')
     print('gamma_1: {:0.4f}\tgamma_2: {:0.4f}'.format(*gamma_j))
     print('\n')
@@ -2286,21 +2330,21 @@ def fredenslund_t_6():
     x_j = array([0.8869, 0.0991, 1 - 0.8869 - 0.0991])
     sec_j = array([1, 2, 10, 41])
     nu_ij = array([[0, 0, 0, 1], [0, 0, 6, 0], [2, 5, 0, 0]])
-    gamma_j = gamma_unifac(t, x_j, sec_j, nu_ij)
+    gamma_j = gamma_u(t, x_j, sec_j, nu_ij)
     print('Fredenslund 1975 Table 6 - acetonitrile (1) / benzene (2) / n-heptane (3) at 318K')
     print('x_1: {:0.4f}\tx_2: {:0.4f}\tx_3: {:0.4f}'.format(*x_j))
     print('gamma_1: {:0.4f}\tgamma_2: {:0.4f}\tgamma_3: {:0.4f}'.format(*gamma_j))
     print('\n')
 
 
-def gamma_unifac(t, x_j, sec_j, nu_ij):
+def gamma_u(t, x_j, sec_j, nu_ij):
     """Activity coefficients by UNIFAC
 
     Determines gamma_j(T) at temperature T by UNIFAC method.
 
     :param t: temperature / K
     :param x_j: composition
-    :param sec_j: secondary groups
+    :param sec_j: secondary groups / subgroups
     :param nu_ij: coefficients in secondary groups per component
     :return: gamma_j
 
@@ -2401,7 +2445,7 @@ def gamma_unifac(t, x_j, sec_j, nu_ij):
     return gamma_j
 
 
-# vdi_atlas()
+vdi_atlas()
 # svn_14_1()
 # svn_fig_14_8()
 # svn_14_2()
