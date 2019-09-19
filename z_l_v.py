@@ -1676,12 +1676,25 @@ def svn_tab_14_1_2():
     pc_i = array([30.35, 61.32, 37.84, 48.98])
     af_omega_i = array([0.3  , 0.649, 0.227, 0.21 ])
     z_i = array([0.162, 0.068, 0.656, 0.114])
+    # unifac secondary groups and coefficients by component
+    sec_i = array([1, 2, 3, 10, 15])
+    nu_ji = array([[2, 4, 0, 0, 0], [1, 1, 0, 0, 1], [1, 4, 1, 0, 0], [0, 0, 0, 6, 0]])
+
     soln = bubl_t(273.15, p, z_i, tc_i, pc_i, af_omega_i,
            alpha_tr, epsilon, sigma, psi, omega,
            max_it, tol, print_iterations=True)
     y_i = soln['y_i']
     k_i = soln['k_i']
     t = soln['t']
+
+    gamma_j = gamma_unifac(t, z_i, sec_i, nu_ji)
+    print('\n')
+    print('SVN Table 14.1 - n-hexane (1) / ethanol (2) / methylcyclopentane (3) /' +
+          'benzene (4) at {:0.2f} K'.format(t))
+    print(*['x_{:d}:\t {:0.4f}\t'.format(i, y_i[i]) for i in range(len(y_i))])
+    print(*['gamma_{:d}:\t {:0.4f}\t'.format(i, gamma_j[i]) for i in range(len(gamma_j))])
+    print('\n')
+
 
     print('i\tx_i\t\ty_i\t\tk_i')
     for i in range(len(z_i)):
@@ -2268,7 +2281,48 @@ def svn_h_1():
     print('\n')
 
 
+def fredenslund_t_6():
+    t = 318
+    x_j = array([0.8869, 0.0991, 1 - 0.8869 - 0.0991])
+    sec_j = array([1, 2, 10, 41])
+    nu_ij = array([[0, 0, 0, 1], [0, 0, 6, 0], [2, 5, 0, 0]])
+    gamma_j = gamma_unifac(t, x_j, sec_j, nu_ij)
+    print('Fredenslund 1975 Table 6 - acetonitrile (1) / benzene (2) / n-heptane (3) at 318K')
+    print('x_1: {:0.4f}\tx_2: {:0.4f}\tx_3: {:0.4f}'.format(*x_j))
+    print('gamma_1: {:0.4f}\tgamma_2: {:0.4f}\tgamma_3: {:0.4f}'.format(*gamma_j))
+    print('\n')
+
+
 def gamma_unifac(t, x_j, sec_j, nu_ij):
+    """Activity coefficients by UNIFAC
+
+    Determines gamma_j(T) at temperature T by UNIFAC method.
+
+    :param t: temperature / K
+    :param x_j: composition
+    :param sec_j: secondary groups
+    :param nu_ij: coefficients in secondary groups per component
+    :return: gamma_j
+
+    Example
+    --------
+
+    Fredenslund 1975 Table 6 - acetonitrile (1) / benzene (2) / n-heptane (3) at 318K
+
+    >> t = 318
+
+    >> x_j = array([0.8869, 0.0991, 1 - 0.8869 - 0.0991])
+
+    >> sec_j = array([1, 2, 10, 41])
+
+    >> nu_ij = array([[0, 0, 0, 1], [0, 0, 6, 0], [2, 5, 0, 0]])
+
+    >> gamma_j = gamma_unifac(t, x_j, sec_j, nu_ij)
+
+    >> print(gamma_j)
+
+    [ 1.01793099  2.27445733 17.53230898]
+    """
     data = []
     f = open('./data/unifac_interaction_parameters.csv')
     sep_char = f.readline().split('=')[-1]
@@ -2354,6 +2408,7 @@ def gamma_unifac(t, x_j, sec_j, nu_ij):
 # zs_1998()
 ppo_ex_8_12()
 svn_h_1()
+fredenslund_t_6()
 svn_tab_14_1_2()
 # pat_ue_03_flash()
 # isot_flash_seader_4_1()
