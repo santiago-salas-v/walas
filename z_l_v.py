@@ -2249,6 +2249,26 @@ def interaction_pairs(list, i=0, j=0, perms=[]):
 def ppo_ex_8_12():
     t = 307
     x_j = array([0.047, 1 - 0.047])
+    sec_j = array([1, 2, 19])
+    nu_ij = array([[1, 0, 1], [2, 3, 0]])
+    gamma_j = gamma_unifac(t, x_j, sec_j, nu_ij)
+    print('PPO example 8-12 - acetone (1) / n-pentane (2) at 307K')
+    print('gamma_1: {:0.4f}\tgamma_2: {:0.4f}'.format(*gamma_j))
+    print('\n')
+
+
+def svn_h_1():
+    t = 308.15
+    x_j = array([0.4, 1 - 0.4])
+    sec_j = array([1, 2, 33])
+    nu_ij = array([[2, 1, 1], [2, 5, 0]])
+    gamma_j = gamma_unifac(t, x_j, sec_j, nu_ij)
+    print('SVN Example H.1 - diethylamine (1) / n-heptane (2) at 308.15K')
+    print('gamma_1: {:0.4f}\tgamma_2: {:0.4f}'.format(*gamma_j))
+    print('\n')
+
+
+def gamma_unifac(t, x_j, sec_j, nu_ij):
     data = []
     f = open('./data/unifac_interaction_parameters.csv')
     sep_char = f.readline().split('=')[-1]
@@ -2282,10 +2302,7 @@ def ppo_ex_8_12():
     example = array(example, dtype=str)
     f.close()
 
-    sec_j = array([1, 2, 19])
-    nu_ij = array([[1, 0, 1], [2, 3, 0]])
     indexes_j = [argwhere(x == secondary_group_k).item() for x in sec_j]
-    q_k[indexes_j[-1]] = 1.488  # temp. accr
     q_m = q_k[indexes_j]
     r_m = r_k[indexes_j]
     r_j = nu_ij.dot(r_m)
@@ -2327,7 +2344,6 @@ def ppo_ex_8_12():
     )
     ln_gamma_r_j = sum(nu_ij * (ln_gamma_k - ln_gamma_k_i), 1)
     gamma_j = exp(ln_gamma_c_j + ln_gamma_r_j)
-    print('gamma_1: {:0.4e}\tgamma_2: {:0.4e}'.format(*gamma_j))
     return gamma_j
 
 
@@ -2337,6 +2353,7 @@ def ppo_ex_8_12():
 # svn_14_2()
 # zs_1998()
 ppo_ex_8_12()
+svn_h_1()
 svn_tab_14_1_2()
 # pat_ue_03_flash()
 # isot_flash_seader_4_1()
