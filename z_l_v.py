@@ -1,8 +1,8 @@
 from poly_3_4 import solve_cubic, solve_quartic
 from numerik import secant_ls_3p
 from poly_n import zroots
-from numpy import array, append, zeros, abs, ones, empty_like, empty
-from numpy import sqrt, empty, outer, sum, log, exp, multiply, diag
+from numpy import array, append, zeros, abs, ones, empty_like, empty, argwhere, unique
+from numpy import sqrt, outer, sum, log, exp, multiply, diag
 from numpy import linspace, dot, nan, finfo, isnan, isinf
 from numpy.random import randint
 from scipy import optimize
@@ -487,8 +487,7 @@ def phi(t, p, z_i, tc_i, pc_i, af_omega_i, phase, alpha_tr, epsilon, sigma, psi,
     for item in ['a_i', 'b_i',
                  'b', 'a', 'q',
                  'a_mp_i', 'b_mp_i', 'q_mp_i',
-                 'beta', 'z', 'i_int', 'ln_phi', 'phi',
-                 'phases']:
+                 'beta', 'z', 'i_int', 'ln_phi', 'phi']:
         soln[item] = locals().get(item)
     return soln
 
@@ -507,8 +506,8 @@ def bubl_p(t, p, x_i, tc_i, pc_i, af_omega_i,
         ref. e.V., VDI: VDI-Wärmeatlas. Wiesbaden: Springer Berlin Heidelberg, 2013. \
         (D5.1. Abb.6.)
 
-        :param t: temperature / K
-        :param p: pressure / bar
+        :param t: temperature (known) / K
+        :param p: pressure (estimate) / bar
         :param x_i: liquid composition (known)
         :param tc_i: critical temperatures / K
         :param pc_i: critical pressures / bar
@@ -524,23 +523,66 @@ def bubl_p(t, p, x_i, tc_i, pc_i, af_omega_i,
         :param print_iterations: optionally print Lee-Kessler iterations
         :return: dictionary with 'x_i', 'y_i', 'phi_l', 'phi_v', 'k_i', 'sum_ki_xi', 'p', 'success'
         """
-    soln = secant_ls_3p(lambda p_var: bubl_p_step_l_k(
+    soln = secant_ls_3p(lambda p_var: bubl_point_step_l_k(
         t, p_var, x_i, tc_i, pc_i, af_omega_i,
         alpha_tr, epsilon, sigma, psi, omega,
-        max_it, tol=tol, y_i_est=y_i_est),
-                        p, 1.001 * p, tol=tol,
+        max_it, tol=tol, y_i_est=y_i_est), p, tol=tol, x_1=1.001 * p,
                         restriction=lambda p_val: p_val > 0,
                         print_iterations=print_iterations)
     p = soln['x']
-    soln = bubl_p_step_l_k(t, p, x_i, tc_i, pc_i, af_omega_i,
-                           alpha_tr, epsilon, sigma, psi, omega, max_it,
-                           full_output=True, y_i_est=y_i_est)
+    soln = bubl_point_step_l_k(t, p, x_i, tc_i, pc_i, af_omega_i,
+                               alpha_tr, epsilon, sigma, psi, omega, max_it,
+                               full_output=True, y_i_est=y_i_est)
     return soln
 
 
-def bubl_p_step_l_k(t, p, x_i, tc_i, pc_i, af_omega_i,
-                    alpha_tr, epsilon, sigma, psi, omega,
-                    max_it, tol=tol, full_output=False, y_i_est=None):
+def bubl_t(t, p, x_i, tc_i, pc_i, af_omega_i,
+           alpha_tr, epsilon, sigma, psi, omega,
+           max_it, tol=tol, y_i_est=None, print_iterations=False):
+    """Bubble temperature determination
+
+        Determines bubble temperature at given pressure and liquid composition. Lee-Kessler method.
+
+        ref. Smith, Joseph Mauk ; Ness, Hendrick C. Van ; Abbott, Michael M.: \
+        Introduction to chemical engineering thermodynamics. New York: McGraw-Hill, 2005.\
+        (Fig. 14.9)
+
+        ref. e.V., VDI: VDI-Wärmeatlas. Wiesbaden: Springer Berlin Heidelberg, 2013. \
+        (D5.1. Abb.6.)
+
+        :param t: temperature (estimate) / K
+        :param p: pressure (known) / bar
+        :param x_i: liquid composition (known)
+        :param tc_i: critical temperatures / K
+        :param pc_i: critical pressures / bar
+        :param af_omega_i: Pitzer-factors
+        :param alpha_tr: CEOS alpha(Tr_i, af_omega_i) function
+        :param epsilon: CEOS epsilon
+        :param sigma: CEOS sigma
+        :param psi: CEOS psi
+        :param omega: CEOS omega
+        :param max_it: maximum iterations
+        :param tol: tolerance of method
+        :param y_i_est: optional vapor composition (estimate)
+        :param print_iterations: optionally print Lee-Kessler iterations
+        :return: dictionary with 'x_i', 'y_i', 'phi_l', 'phi_v', 'k_i', 'sum_ki_xi', 'p', 'success'
+        """
+    soln = secant_ls_3p(lambda t_var: bubl_point_step_l_k(
+        t_var, p, x_i, tc_i, pc_i, af_omega_i,
+        alpha_tr, epsilon, sigma, psi, omega,
+        max_it, tol=tol, y_i_est=y_i_est), t, tol=tol, x_1=1.001 * t,
+                        restriction=lambda t_val: t_val > 0,
+                        print_iterations=print_iterations)
+    t = soln['x']
+    soln = bubl_point_step_l_k(t, p, x_i, tc_i, pc_i, af_omega_i,
+                               alpha_tr, epsilon, sigma, psi, omega, max_it,
+                               full_output=True, y_i_est=y_i_est)
+    return soln
+
+
+def bubl_point_step_l_k(t, p, x_i, tc_i, pc_i, af_omega_i,
+                        alpha_tr, epsilon, sigma, psi, omega,
+                        max_it, tol=tol, full_output=False, y_i_est=None):
     phi_l = phi(t, p, x_i, tc_i, pc_i, af_omega_i, 'l',
                 alpha_tr, epsilon, sigma, psi, omega)['phi']
     if y_i_est is not None:
@@ -571,7 +613,7 @@ def bubl_p_step_l_k(t, p, x_i, tc_i, pc_i, af_omega_i,
             success = False
     if full_output:
         soln = dict()
-        for item in ['x_i', 'y_i', 'phi_l', 'phi_v', 'k_i', 'sum_ki_xi', 'p', 'success']:
+        for item in ['x_i', 'y_i', 'phi_l', 'phi_v', 'k_i', 'sum_ki_xi', 'p', 't', 'success']:
             soln[item] = locals().get(item)
         return soln
     else:
@@ -592,8 +634,8 @@ def dew_p(t, p, y_i, tc_i, pc_i, af_omega_i,
         ref. e.V., VDI: VDI-Wärmeatlas. Wiesbaden: Springer Berlin Heidelberg, 2013. \
         (D5.1. Abb.6.)
 
-        :param t: temperature / K
-        :param p: pressure / bar
+        :param t: temperature / K (known)
+        :param p: pressure / bar (estimated)
         :param y_i: vapor composition (known)
         :param tc_i: critical temperatures / K
         :param pc_i: critical pressures / bar
@@ -609,22 +651,66 @@ def dew_p(t, p, y_i, tc_i, pc_i, af_omega_i,
         :param print_iterations: optionally print Lee-Kessler iterations
         :return: dictionary with 'x_i', 'y_i', 'phi_l', 'phi_v', 'k_i', 'sum_ki_xi', 'p', 'success'
         """
-    soln = secant_ls_3p(lambda p_var: dew_p_step_l_k(
+    soln = secant_ls_3p(lambda p_var: dew_point_step_l_k(
         t, p_var, y_i, tc_i, pc_i, af_omega_i,
         alpha_tr, epsilon, sigma, psi, omega,
-        max_it, tol=tol, x_i_est=x_i_est),
-                        p, 1.001 * p, tol=tol, restriction=lambda p_val: p_val > 0,
+        max_it, tol=tol, x_i_est=x_i_est), p, tol=tol, x_1=1.001 * p,
+                        restriction=lambda p_val: p_val > 0,
                         print_iterations=print_iterations)
     p = soln['x']
-    soln = dew_p_step_l_k(t, p, y_i, tc_i, pc_i, af_omega_i,
-                          alpha_tr, epsilon, sigma, psi, omega, max_it,
-                          full_output=True, x_i_est=x_i_est)
+    soln = dew_point_step_l_k(t, p, y_i, tc_i, pc_i, af_omega_i,
+                              alpha_tr, epsilon, sigma, psi, omega, max_it,
+                              full_output=True, x_i_est=x_i_est)
     return soln
 
 
-def dew_p_step_l_k(t, p, y_i, tc_i, pc_i, af_omega_i,
-                   alpha_tr, epsilon, sigma, psi, omega,
-                   max_it, tol=tol, full_output=False, x_i_est=None):
+def dew_t(t, p, y_i, tc_i, pc_i, af_omega_i,
+          alpha_tr, epsilon, sigma, psi, omega,
+          max_it, tol=tol, x_i_est=None, print_iterations=False):
+    """Dew temperature determination
+
+        Determines dew temperature at given pressure and vapor composition. Lee Kessler method.
+
+        ref. Smith, Joseph Mauk ; Ness, Hendrick C. Van ; Abbott, Michael M.: \
+        Introduction to chemical engineering thermodynamics. New York: McGraw-Hill, 2005.\
+        (Fig. 14.9)
+
+        ref. e.V., VDI: VDI-Wärmeatlas. Wiesbaden: Springer Berlin Heidelberg, 2013. \
+        (D5.1. Abb.6.)
+
+        :param t: temperature / K (known)
+        :param p: pressure / bar (estimate)
+        :param y_i: vapor composition (known)
+        :param tc_i: critical temperatures / K
+        :param pc_i: critical pressures / bar
+        :param af_omega_i: Pitzer-factors
+        :param alpha_tr: CEOS alpha(Tr_i, af_omega_i) function
+        :param epsilon: CEOS epsilon
+        :param sigma: CEOS sigma
+        :param psi: CEOS psi
+        :param omega: CEOS omega
+        :param max_it: maximum iterations
+        :param tol: tolerance of method
+        :param x_i_est: optional liquid composition (estimate)
+        :param print_iterations: optionally print Lee-Kessler iterations
+        :return: dictionary with 'x_i', 'y_i', 'phi_l', 'phi_v', 'k_i', 'sum_ki_xi', 'p', 'success'
+        """
+    soln = secant_ls_3p(lambda p_var: dew_point_step_l_k(
+        t, p_var, y_i, tc_i, pc_i, af_omega_i,
+        alpha_tr, epsilon, sigma, psi, omega,
+        max_it, tol=tol, x_i_est=x_i_est), p, tol=tol, x_1=1.001 * p,
+                        restriction=lambda p_val: p_val > 0,
+                        print_iterations=print_iterations)
+    p = soln['x']
+    soln = dew_point_step_l_k(t, p, y_i, tc_i, pc_i, af_omega_i,
+                              alpha_tr, epsilon, sigma, psi, omega, max_it,
+                              full_output=True, x_i_est=x_i_est)
+    return soln
+
+
+def dew_point_step_l_k(t, p, y_i, tc_i, pc_i, af_omega_i,
+                       alpha_tr, epsilon, sigma, psi, omega,
+                       max_it, tol=tol, full_output=False, x_i_est=None):
     phi_v = phi(t, p, y_i, tc_i, pc_i, af_omega_i, 'v',
                 alpha_tr, epsilon, sigma, psi, omega)['phi']
     if x_i_est is not None:
@@ -655,7 +741,7 @@ def dew_p_step_l_k(t, p, y_i, tc_i, pc_i, af_omega_i,
             success = False
     if full_output:
         soln = dict()
-        for item in ['x_i', 'y_i', 'phi_l', 'phi_v', 'k_i', 'sum_yi_over_ki', 'p', 'success']:
+        for item in ['x_i', 'y_i', 'phi_l', 'phi_v', 'k_i', 'sum_yi_over_ki', 'p', 't', 'success']:
             soln[item] = locals().get(item)
         return soln
     else:
@@ -1247,10 +1333,9 @@ def isot_flash(t, p, x_i, y_i, z_i, tc_i, pc_i, af_omega_i,
     soln_v = phi(t, p, y_i, tc_i, pc_i, af_omega_i, 'v', alpha_tr, epsilon, sigma, psi, omega)
     k_i = soln_l['phi'] / soln_v['phi']
     soln_v_f = secant_ls_3p(lambda v_f: sum(
-        z_i * (1 - k_i) / (1 + v_f * (k_i - 1))),
-                 0.5, 0.4, tol=1e-10,
-                 restriction=lambda v_f_val: v_f_val >= 0,
-                 print_iterations=False)
+        z_i * (1 - k_i) / (1 + v_f * (k_i - 1))), 0.5, tol=1e-10, x_1=0.4,
+                            restriction=lambda v_f_val: v_f_val >= 0,
+                            print_iterations=False)
     v_f = soln_v_f['x']
     x_i = z_i / (1 + v_f * (k_i - 1))
     y_i = x_i * k_i / sum(x_i * k_i)
@@ -1280,7 +1365,49 @@ def isot_flash_solve(t, p, z_i, tc_i, pc_i, af_omega_i, max_it=20,
     return soln
 
 
-def wdi_atlas():
+def pt_flash(t, p, z_i, tc_i, pc_i, af_omega_i,
+               alpha_tr, epsilon, sigma, psi, omega, max_it, tol):
+    bubl_p_soln = bubl_p(t, p, z_i, tc_i, pc_i, af_omega_i,
+               alpha_tr, epsilon, sigma, psi, omega, max_it, tol)
+    dew_p_soln = dew_p(t, p, z_i, tc_i, pc_i, af_omega_i,
+               alpha_tr, epsilon, sigma, psi, omega, max_it, tol)
+    p_bubl, p_dew = bubl_p_soln['p'], dew_p_soln['p']
+    phi_bubl, phi_dew = bubl_p_soln['phi_v'], dew_p_soln['phi_v']
+    if  p_dew < p and p < p_bubl:
+        # 0 < v_f < 1
+        # gamma-phi-formulation - svn eq. 14.1
+        # $y_i \Phi_i P = x_i \gamma_i P_i^{sat}$
+        gamma_i = ones(phi_dew.size)
+        phi_i_v = phi_dew + (phi_bubl - phi_dew) * (p - p_dew) / (p_bubl - p_dew)
+        phi_i_sat = phi_dew
+        poynting = 1.0
+        phi_i = phi_i_v / phi_i_sat * poynting
+        p_i_sat = p_bubl
+        v_f = 1 + (0 - 1) * (p - p_dew) / (p_bubl - p_dew)
+        k_i = gamma_i * p_i_sat / (phi_i * p)
+        soln_v_f = secant_ls_3p(lambda v_f: sum(
+            z_i * (1 - k_i) / (1 + v_f * (k_i - 1))), 0.5, tol=1e-10, x_1=0.4,
+                                restriction=lambda v_f_val: v_f_val >= 0,
+                                print_iterations=False)
+        v_f = soln_v_f['x']
+        x_i = z_i / (1 + v_f * (k_i - 1))
+        y_i = k_i * x_i
+    elif p_dew >= p:
+        v_f = 1.0
+        soln_l = bubl_p_soln
+        soln_v = bubl_p_soln
+    elif p_bubl <= p:
+        v_f = 0.0
+        soln_l = dew_p_soln
+        soln_v = dew_p_soln
+    soln = dict()
+    for item in ['soln_l', 'soln_v', 'soln_v_f',
+                 'k_i', 'v_f', 'x_i', 'y_i']:
+        soln[item] = locals().get(item)
+    return soln
+
+
+def vdi_atlas():
     use_pr_eos()
     print(
         'ref. VDI Wärmeatlas H2 Dampfdruck um -256.6K: ' +
@@ -1336,14 +1463,14 @@ def svn_14_2():
     ant_b = array([395.744, 935.773])
     ant_c = array([266.681, 238.789])
     max_it = 100
-    print(bubl_p_step_l_k(310.92, 30, x_i, tc_i, pc_i, af_omega_i, alpha_tr, epsilon, sigma, psi, omega, max_it,
-                          full_output=True, y_i_est=y_i)
+    print(bubl_point_step_l_k(310.92, 30, x_i, tc_i, pc_i, af_omega_i, alpha_tr, epsilon, sigma, psi, omega, max_it,
+                              full_output=True, y_i_est=y_i)
           )
-    y_i = bubl_p_step_l_k(310.92, 30, x_i, tc_i, pc_i, af_omega_i, alpha_tr, epsilon, sigma, psi, omega, max_it,
-                          full_output=True, y_i_est=y_i)['y_i']
+    y_i = bubl_point_step_l_k(310.92, 30, x_i, tc_i, pc_i, af_omega_i, alpha_tr, epsilon, sigma, psi, omega, max_it,
+                              full_output=True, y_i_est=y_i)['y_i']
     for i in range(5):
-        soln = bubl_p_step_l_k(310.92, 30, x_i, tc_i, pc_i, af_omega_i, alpha_tr, epsilon, sigma, psi, omega, max_it,
-                               full_output=True, y_i_est=y_i)
+        soln = bubl_point_step_l_k(310.92, 30, x_i, tc_i, pc_i, af_omega_i, alpha_tr, epsilon, sigma, psi, omega, max_it,
+                                   full_output=True, y_i_est=y_i)
         y_i = soln['y_i']
         k_i = soln['k_i']
         print(y_i)
@@ -1352,13 +1479,13 @@ def svn_14_2():
     soln = bubl_p(310.92, 1., x_i, tc_i, pc_i, af_omega_i, alpha_tr, epsilon, sigma, psi, omega, max_it, tol=1e-10,
                   y_i_est=y_i)
     print(soln)
-    print(dew_p_step_l_k(310.92, soln['p'], soln['y_i'], tc_i, pc_i, af_omega_i, alpha_tr, epsilon, sigma, psi, omega,
-                         max_it))
+    print(dew_point_step_l_k(310.92, soln['p'], soln['y_i'], tc_i, pc_i, af_omega_i, alpha_tr, epsilon, sigma, psi, omega,
+                             max_it))
     print(
         dew_p(310.92, 30, soln['y_i'], tc_i, pc_i, af_omega_i, alpha_tr, epsilon, sigma, psi, omega, max_it, tol=1e-10,
               x_i_est=x_i, print_iterations=True))
-    print(bubl_p_step_l_k(310.92, soln['p'], x_i, tc_i, pc_i, af_omega_i, alpha_tr, epsilon, sigma, psi, omega, max_it,
-                          full_output=True, y_i_est=y_i))
+    print(bubl_point_step_l_k(310.92, soln['p'], x_i, tc_i, pc_i, af_omega_i, alpha_tr, epsilon, sigma, psi, omega, max_it,
+                              full_output=True, y_i_est=y_i))
 
     x = linspace(0.0, 0.8, 50)
     y = empty_like(x)
@@ -1540,6 +1667,37 @@ def svn_fig_14_8():
     plt.show()
 
 
+def svn_tab_14_1_2():
+    use_pr_eos()
+    p = 1.01325 # bar
+    max_it = 100
+    tol = 1e-10
+    tc_i = array([507.6 , 513.92, 532.79, 562.05])
+    pc_i = array([30.35, 61.32, 37.84, 48.98])
+    af_omega_i = array([0.3  , 0.649, 0.227, 0.21 ])
+    z_i = array([0.162, 0.068, 0.656, 0.114])
+    soln = bubl_t(273.15, p, z_i, tc_i, pc_i, af_omega_i,
+           alpha_tr, epsilon, sigma, psi, omega,
+           max_it, tol, print_iterations=True)
+    y_i = soln['y_i']
+    k_i = soln['k_i']
+    t = soln['t']
+
+    print('i\tx_i\t\ty_i\t\tk_i')
+    for i in range(len(z_i)):
+        print('{:d}\t{:.3f}\t{:.4g}\t{:.4g}'.format(
+            i, z_i[i], y_i[i], k_i[i]))
+    print('p: {:0.3f} bar\tT(calc): {:0.3f} K'.format(p, t))
+
+    z_i = array([0.250, 0.400, 0.200, 0.150])
+    t = bubl_t(273.15, p, z_i, tc_i, pc_i, af_omega_i,
+           alpha_tr, epsilon, sigma, psi, omega,
+           max_it, tol, print_iterations=True)['t']
+    t = 341.1
+    soln = pt_flash(t, p, z_i, tc_i, pc_i, af_omega_i,
+               alpha_tr, epsilon, sigma, psi, omega, max_it, tol)
+    print(soln)
+
 def pat_ue_03_flash():
     use_pr_eos()
     n = array([
@@ -1627,7 +1785,7 @@ def pat_ue_03_vollstaendig(rlv, print_output=False):
     # log
     old_stdout = sys.stdout
     log_file = open('output.log', 'w')
-    sys.stdout = log_file
+    # sys.stdout = log_file
 
     p = 50.  # bar
     temp = 273.15 + 220.  # K
@@ -2078,14 +2236,111 @@ def pat_ue_03_vollstaendig(rlv, print_output=False):
     return nl[-2]  # Methanol in der Flüssigkeit
 
 
-# wdi_atlas()
+def interaction_pairs(list, i=0, j=0, perms=[]):
+    # recursively produce pairs of indexes for interaction parameters
+    if i + 1 >= len(list) and j + 1 >= len(list):
+        return perms + [[list[i], list[j]]]
+    elif j + 1 < len(list):
+        return interaction_pairs(list, i, j + 1, perms + [[list[i], list[j]]])
+    elif i + 1 < len(list):
+        return interaction_pairs(list, i + 1, 0, perms + [[list[i], list[j]]])
+
+
+def ppo_ex_8_12():
+    t = 307
+    x_j = array([0.047, 1 - 0.047])
+    data = []
+    f = open('./data/unifac_interaction_parameters.csv')
+    sep_char = f.readline().split('=')[-1]
+    for line in f:
+        if len(line) > 0:
+            data += [[float(x) for x in line.split(',')]]
+    f.close()
+    interaction_params = array(data)
+
+    f = open('./data/unifac_subgroup_parameters.csv')
+    sep_char = f.readline().split('=')[-1]
+    col_names = f.readline().split('|')
+    main_group, main_group_names = [], []
+    secondary_group_k, group_symbol = [], []
+    r_k, q_k = [], []
+    example = []
+    for line in f:
+        cols = line.split('|')
+        main_group += [cols[0]]
+        main_group_names += [cols[1]]
+        secondary_group_k += [cols[2]]
+        group_symbol += [cols[3]]
+        r_k += [cols[4]]
+        q_k += [cols[5]]
+        example += [cols[6]]
+    main_group = array(main_group, dtype=int)
+    main_group_names = array(main_group_names, dtype=str)
+    secondary_group_k = array(secondary_group_k, dtype=int)
+    r_k = array(r_k, dtype=float)
+    q_k = array(q_k, dtype=float)
+    example = array(example, dtype=str)
+    f.close()
+
+    sec_j = array([1, 2, 19])
+    nu_ij = array([[1, 0, 1], [2, 3, 0]])
+    indexes_j = [argwhere(x == secondary_group_k).item() for x in sec_j]
+    q_k[indexes_j[-1]] = 1.488  # temp. accr
+    q_m = q_k[indexes_j]
+    r_m = r_k[indexes_j]
+    r_j = nu_ij.dot(r_m)
+    q_j = nu_ij.dot(q_m)
+    phi_j = r_j * x_j / r_j.dot(x_j)
+    theta_j = q_j * x_j / q_j.dot(x_j)
+    z = 10
+    i_j = z / 2 * (r_j - q_j) - (r_j - 1)
+    ln_gamma_c_j = log(phi_j / x_j) + z / 2 * q_j * log(
+        theta_j / phi_j) + i_j - phi_j / x_j * x_j.dot(i_j)
+    unique_groups = unique(main_group[indexes_j])
+    groups = main_group[indexes_j]
+    pairs = interaction_pairs(groups-1)
+    a_mn = zeros([len(groups), len(groups)])
+    counter = 0
+    for i in range(len(groups)):
+        for j in range(len(groups)):
+            a_mn[i, j] = interaction_params[
+                pairs[counter][0], pairs[counter][1]
+            ]
+            counter += 1
+    psi_mn = exp(-a_mn / t)
+    sum_nu_ij = sum(nu_ij, 1).reshape(len(nu_ij), 1)
+    # residual activity coefficients in reference solution: molecules of type i only
+    x_m = nu_ij / sum_nu_ij
+    sum_x_m_q_m = sum(x_m * q_m, 1).reshape(len(nu_ij), 1)
+    theta_m = x_m * q_m / sum_x_m_q_m
+    theta_m.dot(psi_mn)
+    ln_gamma_k_i = q_m * (
+            1 - log(theta_m.dot(psi_mn)) - (
+                theta_m / theta_m.dot(psi_mn)).dot(psi_mn.T)
+    )
+    # group residual activity coefficients
+    x_k = x_j.dot(nu_ij)/x_j.dot(sum(nu_ij, 1))
+    theta_k = x_k * q_m / x_k.dot(q_m)
+    ln_gamma_k = q_m * (
+            1 - log(theta_k.dot(psi_mn)) - (
+                theta_k / theta_k.dot(psi_mn)).dot(psi_mn.T)
+    )
+    ln_gamma_r_j = sum(nu_ij * (ln_gamma_k - ln_gamma_k_i), 1)
+    gamma_j = exp(ln_gamma_c_j + ln_gamma_r_j)
+    print('gamma_1: {:0.4e}\tgamma_2: {:0.4e}'.format(*gamma_j))
+    return gamma_j
+
+
+# vdi_atlas()
 # svn_14_1()
 # svn_fig_14_8()
 # svn_14_2()
 # zs_1998()
+ppo_ex_8_12()
+svn_tab_14_1_2()
 # pat_ue_03_flash()
 # isot_flash_seader_4_1()
-pat_ue_03_vollstaendig(0.2)
+# pat_ue_03_vollstaendig(0.2)
 # optimize.root(
 #    lambda rlv: 350.0 - pat_ue_03_vollstaendig(rlv),
 #    0.4
