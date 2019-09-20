@@ -13,7 +13,7 @@ np.set_printoptions(linewidth=200)
 setup_log_file('log_bsp_pat_ue_03_2.log', with_console=False)
 
 # Modell feststellen
-z_l_v.use_pr_eos()
+alpha_tr, epsilon, sigma, psi, omega = z_l_v.use_pr_eos()
 
 p = 35.  # bar
 temp = 273.15 + 220.  # K
@@ -792,9 +792,7 @@ y_i = 1 / len(n_2) * np.ones(len(n_2))
 v_f = 1.
 for i in range(10):
     v_f_temp = v_f
-    soln = z_l_v.isot_flash(
-        t_aus_tkuehler, p, x_i, y_i, z_i, tc, pc, omega_af
-    )
+    soln = z_l_v.isot_flash(t_aus_tkuehler, p, x_i, y_i, z_i, tc, pc, omega_af, alpha_tr, epsilon, sigma, psi, omega)
     y_i = soln['y_i']
     x_i = soln['x_i']
     v_f = soln['v_f']
@@ -1398,9 +1396,7 @@ y_i = z_i
 v_f = 1.
 for i in range(10):
     v_f_temp = v_f
-    soln = z_l_v.isot_flash(
-        t_aus_tkuehler, p, x_i, y_i, z_i, tc, pc, omega_af
-    )
+    soln = z_l_v.isot_flash(t_aus_tkuehler, p, x_i, y_i, z_i, tc, pc, omega_af, alpha_tr, epsilon, sigma, psi, omega)
     y_i = soln['y_i']
     x_i = soln['x_i']
     v_f = soln['v_f']
@@ -1781,9 +1777,8 @@ for it_n in range(1, 25):
     v_f = 1.
     for i in range(10):
         v_f_temp = v_f
-        soln = z_l_v.isot_flash(
-            t_aus_tkuehler, p, x_i, y_i, z_i, tc, pc, omega_af
-        )
+        soln = z_l_v.isot_flash(t_aus_tkuehler, p, x_i, y_i, z_i, tc, pc, omega_af, alpha_tr, epsilon, sigma, psi,
+                                omega)
         y_i = soln['y_i']
         x_i = soln['x_i']
         v_f = soln['v_f']

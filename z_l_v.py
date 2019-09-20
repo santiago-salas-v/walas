@@ -1,7 +1,7 @@
 from poly_3_4 import solve_cubic, solve_quartic
 from numerik import secant_ls_3p
 from poly_n import zroots
-from numpy import array, append, zeros, abs, ones, empty_like, empty, argwhere, unique, asarray
+from numpy import array, append, zeros, abs, ones, empty_like, empty, argwhere, unique, asarray, concatenate
 from numpy import sqrt, outer, sum, log, exp, multiply, diag
 from numpy import linspace, dot, nan, finfo, isnan, isinf
 from numpy.random import randint
@@ -17,18 +17,12 @@ tol = finfo(float).eps
 # Nach unten hin: CO, H2, CO2, H2O, CH3OH, N2, CH4
 
 # Kritische Parameter Tc, Pc, omega(azentrischer Faktor)
-tc = array([
-    132.86, 33.19, 304.13, 647.10, 513.38, 126.19
-])  # K
-
-pc = array([
-    34.98, 13.15, 73.77, 220.64, 82.16, 33.96
-])  # bar
-
-omega_af = array([
-    0.050, -0.219, 0.224, 0.344, 0.563, 0.037
-])
-
+tc = array([132.85, 32.98, 304.12, 647.14, 512.64, 126.2, 190.56])  # K
+pc = array([34.94, 12.93, 73.74, 220.64, 80.92, 34.0, 45.992])  # bar
+omega_af = array([0.045, -0.217, 0.225, 0.344, 0.565, 0.037, 0.011])
+ant_a = array([6.72828, 6.14858, 9.81367, 8.05573, 8.08404, 6.72531, 6.84377])
+ant_b = array([295.2279, 80.948, 1340.9768, 1723.6425, 1580.4585, 285.5727, 435.4534])
+ant_c = array([268.243, 277.53, 271.883, 233.08, 239.096, 270.09, 271.361])
 
 class State:
     def __init__(self, t, p, z_i, mm_i, tc_i, pc_i, af_omega_i, eos_name='pr',
@@ -279,6 +273,9 @@ def use_pr_eos():
         ) * (1 - tr ** (1 / 2.))) ** 2
 
 
+    return alpha_tr, epsilon, sigma, psi, omega
+
+
 def use_srk_eos():
     # SRK (1972) params
     global epsilon
@@ -297,6 +294,9 @@ def use_srk_eos():
         ) * (1 - tr ** (1 / 2.))) ** 2
 
 
+    return alpha_tr, epsilon, sigma, psi, omega
+
+
 def use_srk_eos_simple_alpha():
     # SRK (1972) params
     # SRK without acentric factor alpha(Tr) = Tr^(-1/2)
@@ -312,6 +312,9 @@ def use_srk_eos_simple_alpha():
 
     def alpha_tr(tr, af_omega): return \
         (tr) ** (-1 / 2.)
+
+
+    return alpha_tr, epsilon, sigma, psi, omega
 
 
 def beta(tr, pr):
@@ -386,12 +389,49 @@ def p_sat(t, af_omega, tc, pc):
 def p_i_sat_ceos(t, p0, tc_i, pc_i, af_omega_i,
                  alpha_tr, epsilon, sigma, psi, omega,
                  max_it, tol=tol):
-    p_sat_list = zeros(asarray(tc_i).size)
+    n_comps = asarray(tc_i).size
+    p_sat_list = empty(n_comps)
+    success = True
+    for i in range(n_comps):
+        if n_comps > 1:
+            tc, pc, af_omega = tc_i[i], pc_i[i], af_omega_i[i]
+        else:
+            tc, pc, af_omega = tc_i, pc_i, af_omega_i
+        if tc < t:
+            # no p_sat if supercritical
+            p_sat_list[i] = nan
+        else:
+            # approach saturation if possible
+            first_step_soln = p_i_sat_ceos_step(
+                t, p0, tc, pc, af_omega,
+                alpha_tr, epsilon, sigma, psi, omega, max_it, tol
+            )
+            p0_it = first_step_soln['p']
+            p_sat_list[i] = secant_ls_3p(
+                lambda p_var: p_i_sat_ceos_step(
+                    t, p_var, tc, pc, af_omega,
+                    alpha_tr, epsilon, sigma, psi, omega, max_it, tol
+                )['zero_fun'], p0_it, tol, x_1=0.9 * p0_it, restriction=lambda p_var: p_var > 0,
+                print_iterations=True
+            )['x']
+            soln = p_i_sat_ceos_step(
+                    t, p_sat_list[i], tc, pc, af_omega,
+                    alpha_tr, epsilon, sigma, psi, omega, max_it, tol
+            )
+            success = success and soln['success']
+    return p_sat_list
+
+def p_i_sat_ceos_step(t, p0, tc_i, pc_i, af_omega_i,
+                 alpha_tr, epsilon, sigma, psi, omega,
+                 max_it, tol=tol):
     tr_i = t / tc_i
     a_i = psi * alpha_tr(tr_i, af_omega_i) * r ** 2 * tc_i ** 2 / pc_i
     b_i = omega * r * tc_i / pc_i
-    p = p0 * ones(asarray(tc_i).size)
-    for n_fev in range(max_it):
+    p = p0
+    n_fev = 0
+    it_outer = 0
+    while n_fev in range(max_it):
+        n_fev += 1
         beta = b_i * p / (r * t)
         q = a_i / (b_i * r * t)
         a1 = beta * (epsilon + sigma) - beta - 1
@@ -411,17 +451,35 @@ def p_i_sat_ceos(t, p0, tc_i, pc_i, af_omega_i,
                 1 / 2 * (2 / 27 * a1 ** 3 - 1 / 3 * a1 * a2 + a3) * (
                     2 / 9 * a1**2 * da1_dp
                     - 1 / 3 * (a1 * da2_dp + a2 * da1_dp) + da3_dp)
-        f = disc
+        f = disc + tol
         df_dp = ddisc_dp
         inv_slope = 1 / df_dp
         p_old = p
         p = p_old - inv_slope * f
-        success = abs(disc) <= tol
-        if all(success):
+        success = disc < -tol
+        if success:
+            # FIXME: every secant iteration, x_k is changed in f(x_k)
             break
 
+    soln = solve_cubic([1, a1, a2, a3])
+    z_l = soln['roots'][-1][0]
+    z_v = soln['roots'][0][0]
+
+    if success:
+        i_i_l = +1 / (sigma - epsilon) * log(
+            (z_l + sigma * beta) / (z_l + epsilon * beta)
+        )
+        i_i_v = +1 / (sigma - epsilon) * log(
+            (z_v + sigma * beta) / (z_v + epsilon * beta)
+        )
+        ln_phi_l = + z_l - 1 - \
+                   log(z_l - beta) - q * i_i_l
+        ln_phi_v = + z_v - 1 - \
+                   log(z_v - beta) - q * i_i_v
+        zero_fun = -ln_phi_v + ln_phi_l
+
     soln = dict()
-    for item in ['p', 'success', 'n_fev']:
+    for item in ['p', 'success', 'n_fev', 'zero_fun']:
         soln[item] = locals().get(item)
     return soln
 
@@ -838,7 +896,7 @@ def p_est(t, p, x_i, tc_i, pc_i, af_omega_i, max_it, tol=tol):
 
     # Variablen, die von der Flüssigkeit-Zusammensetzung abhängig sind
     b = sum(x_i * b_i)
-    a = x_i.dot(a_ij).dot(x_i)
+    a = x_i.dot(a_ij).dot(x_i).item()
     q = a / (b * r * t)
 
     rho_lim = 1 / b
@@ -954,7 +1012,7 @@ def p_est(t, p, x_i, tc_i, pc_i, af_omega_i, max_it, tol=tol):
         # mechanical critical point
         z_mc = -1 / 3 * ((epsilon + sigma) * omega - omega - 1)
         p_mc = sum(x_i * pc_i)
-        t_mc = x_i.dot(sqrt(outer(tc_i, tc_i))).dot(x_i)
+        t_mc = x_i.dot(sqrt(outer(tc_i, tc_i))).dot(x_i).item()
         rho_mc = p_mc / (r * t_mc * z_mc)
         v_mc = 1 / rho_mc
 
@@ -983,12 +1041,15 @@ def p_est(t, p, x_i, tc_i, pc_i, af_omega_i, max_it, tol=tol):
             rho_l = exp((p - c0)/c1) + 0.7 * rho_mc
             v_l = 1 / rho_l
             z_l = p * v_l / (r * t)
+            rho_l = 1 / v_l
 
         else:
             v_l = min(v)
             v_v = max(v)
             z_l = p * v_l / (r * t)
             z_v = p * v_v / (r * t)
+            rho_l = 1 / v_l
+            rho_v = 1 / v_v
 
             p_min_l = r * t / (v_l - b) - a / ((v_l + epsilon * b) * (v_l + sigma * b))
             p_max_v = r * t / (v_v - b) - a / ((v_v + epsilon * b) * (v_v + sigma * b))
@@ -1033,6 +1094,7 @@ def z_phase(t, p, z_i, tc_i, pc_i, af_omega_i, phase, alpha_tr, epsilon, sigma, 
     disc_z = soln['disc']
 
     # solve S+U=0 (real root = real part of complex root)
+    # locus matches p-rho inflection point at low density
     q0 = (9 * (epsilon + sigma) * epsilon * sigma + 18 * epsilon * sigma +
           - 2 * (epsilon + sigma) ** 3 - 3 * (epsilon + sigma) ** 2 +
           3 * (epsilon + sigma) + 2) * (b / (r * t)) ** 3
@@ -1442,45 +1504,187 @@ def pt_flash(t, p, z_i, tc_i, pc_i, af_omega_i,
 def vdi_atlas():
     use_pr_eos()
     print(
-        'ref. VDI Wärmeatlas H2 Dampfdruck um -256.6K: ' +
+        'ref. VDI Wärmeatlas H2 Dampfdruck bei -256.6K: ' +
         '{:.4g}'.format(
             p_sat(-256.6 + 273.15, -0.216, 33.19, 13.13).x.item() * 1000
         ) + ' mbar. (Literaturwert 250mbar)'
     )
-    p_new = p_i_sat_ceos(-256.6 + 273.15, 1, 33.19, 13.13,  -0.216,
+    p_new = p_i_sat_ceos(-256.6 + 273.15, 10, 33.19, 13.13,  -0.216,
                  alpha_tr, epsilon, sigma, psi, omega,
                  max_it=100, tol=tol)
     soln = secant_ls_3p(lambda p_var:
                  phi(-256.6 + 273.15, p_var, 1, 33.19, 13.13, -0.216, 'l',
                      alpha_tr, epsilon, sigma, psi, omega
-                     )['phi'].item() - phi(-256.6 + 273.15, p_var, 1, 33.19, 13.13, -0.216, 'v',
+                     )['phi'].item() -
+                 phi(-256.6 + 273.15, p_var, 1, 33.19, 13.13, -0.216, 'v',
                              alpha_tr, epsilon, sigma, psi, omega)['phi'].item()
                  , 0.7, tol=tol, x_1=1.001 * 0.7,
                  restriction=lambda p_val: p_val > 0,
                  print_iterations=True)
-    t = 273.15 + linspace(-200, 500, 30)
-    res = empty_like(t)
-    success = True
-    i = 0
-    res_0 = 1.
-    while i < len(t) and success:
-        temp = t[i]
+    phi_sat = phi(-256.6 + 273.15, soln['x'], 1, 33.19, 13.13, -0.216, 'v',
+                             alpha_tr, epsilon, sigma, psi, omega)
 
-        def fs(psat):
-            return p_sat_func(
-                psat, temp, omega_af[0], tc[0], pc[0]
-            )
+    t = 273.15 + linspace(-200, -10, 5)
+    p_sat_vals = empty([len(t), len(pc)])
+    p_sat_vals_ceos = empty([len(t), len(pc)])
+    p0 = 10 * ones(len(pc))
+    for i in range(len(t)):
+        p_sat_vals[i, :] = 10**(
+                ant_a - ant_b / (t[i] - 273.15 + ant_c)
+        ) * 1 / 760 * 101325 / 1e5  # bar
+        for j in range(len(pc)):
+            soln = secant_ls_3p(lambda p_var:
+                     log(phi(t[i], p_var, 1.0, tc[j], pc[j], omega_af[j], 'l',
+                         alpha_tr, epsilon, sigma, psi, omega
+                         )['phi'].item()) -
+                     log(phi(t[i], p_var, 1.0, tc[j], pc[j], omega_af[j], 'v',
+                         alpha_tr, epsilon, sigma, psi, omega
+                         )['phi'].item())
+                     , p0[j], tol=1e-10, x_1=0.9 * p0[j],
+                     restriction=lambda p_val: p_val > 0,
+                     print_iterations=False)
+            p_sat_vals_ceos[i, j] = soln['x']
+            p0[j] = soln['x']
 
-        root = optimize.root(fs, 1.0, method='lm')
-        if root.success:
-            res[i] = root.x
-            res_0 = res[i]
-        else:
-            res[i:] = nan
-            success = False
-        i += 1
+    lines = plt.plot(t, p_sat_vals)
+    lines_2 = plt.plot(t, p_sat_vals_ceos, 'o', fillstyle='none')
+    for i in range(len(lines)):
+        lines_2[i].set_color(lines[i].get_color())
+    plt.xlabel('T / K')
+    plt.ylabel('$p_{i}^{Sat}$ / bar')
 
-    print(res)
+    t = 273.15 - 256.6
+    tc_i = 33.19
+    pc_i = 13.13
+    af_omega_i = -0.216
+    z_i = asarray(1.0)
+    p_min = p_est(t, 1e-3, z_i, tc_i, pc_i, af_omega_i, 100, tol)['p_min_l']
+
+    phi(-256.6 + 273.15, 0.2620861427179638, 1, 33.19, 13.13, -0.216, 'l',
+        alpha_tr, epsilon, sigma, psi, omega)
+    p_i_sat_ceos(-256.6 + 273.15, 0.2620861427179638, 33.19, 13.13, -0.216,
+                 alpha_tr, epsilon, sigma, psi, omega,
+                 max_it=100, tol=tol)
+    p_range = concatenate([linspace(-71, 0.001, 10), linspace(0.001, 10, 20)])
+
+    markers = plt.Line2D.filled_markers
+    fig2 = plt.figure()
+    plot1 = plt.subplot2grid([2, 2], [1, 0], rowspan=1, colspan=1)
+    plot2 = plt.subplot2grid([2, 2], [1, 1], rowspan=1, colspan=1)
+    plot3 = plt.subplot2grid([2, 2], [0, 0], rowspan=1, colspan=1)
+    plot4 = plt.subplot2grid([2, 2], [0, 1], rowspan=1, colspan=1)
+
+    v_plot = []
+    p_plot = []
+    rho_plot = []
+    z_plot = []
+    z_complex = []
+    p_complex = []
+
+    rho_l_phase = []
+    rho_v_phase = []
+    p_v_phase = []
+    for p in p_range:
+        tr_i = t / tc_i
+        a_i = psi * alpha_tr(tr_i, af_omega_i) * r ** 2 * tc_i ** 2 / pc_i
+        b_i = omega * r * tc_i / pc_i
+        beta_i = b_i * p / (r * t)
+        q_i = a_i / (b_i * r * t)
+        a_ij = sqrt(outer(a_i, a_i))
+
+        # Variablen, die von der Flüssigkeit-Zusammensetzung abhängig sind
+        b = sum(z_i * b_i)
+        a = z_i.dot(a_ij).dot(z_i).item()
+        beta = b * p / (r * t)
+        q = a / (b * r * t)
+        a_mp_i = -a + 2 * a_ij.dot(z_i)  # partielles molares a_i
+        b_mp_i = b_i  # partielles molares b_i
+        q_mp_i = q * (1 + a_mp_i / a - b_i / b)  # partielles molares q_i
+
+        a1 = beta * (epsilon + sigma) - beta - 1
+        a2 = q * beta + epsilon * sigma * beta ** 2 \
+             - beta * (epsilon + sigma) * (1 + beta)
+        a3 = -(epsilon * sigma * beta ** 2 * (1 + beta) +
+               q * beta ** 2)
+
+        soln = solve_cubic([1, a1, a2, a3])
+        roots, disc = soln['roots'], soln['disc']
+        re_roots = array([roots[0][0], roots[1][0], roots[2][0]])
+
+        if disc <= 0:
+            # 3 real roots. smallest ist liq. largest is gas.
+            z_l = re_roots[0]
+            z_mid = re_roots[1]
+            z_v = re_roots[2]
+            v_l = z_l * r * t / p
+            v_mid = z_mid * r * t / p
+            v_v = z_v * r * t / p
+            p_plot += [p, p, p]
+            v_plot += [v_l, v_mid, v_v]
+            rho_plot += [1 / v_l, 1 / v_mid, 1 / v_v]
+            z_plot += [z_l, z_mid, z_v]
+        elif disc > 0:
+            # one real root, 2 complex. First root is the real one.
+            z = re_roots[0]
+            v = z * r * t / abs(p)
+            p_plot += [p]
+            v_plot += [v]
+            rho_plot += [1 / v]
+            z_plot += [z]
+            z_complex += [re_roots[1]]
+            p_complex += [p]
+
+    for p in linspace(1e-4, max(p_range), 30):
+        rho_l_phase += [
+            z_phase(t, p, z_i, tc_i, pc_i, af_omega_i, 'l', alpha_tr, epsilon, sigma, psi, omega, tol)['rho']]
+        rho_v_phase += [
+            z_phase(t, p, z_i, tc_i, pc_i, af_omega_i, 'v', alpha_tr, epsilon, sigma, psi, omega, tol)['rho']]
+        p_v_phase += [p]
+
+    current_marker = markers[randint(0, len(markers))]
+    plot1.axvline(b, linestyle='--')
+    plot2.axvline(1 / b, linestyle='--')
+    plot4.axvline(1 / b, linestyle='--')
+    v_line = plot1.semilogx(v_plot, p_plot, current_marker,
+                            label=r'$z_1={:g}$'.format(z_i),
+                            fillstyle='none')
+    current_marker = plt.get(v_line[0], 'marker')
+    current_color = plt.get(v_line[0], 'color')
+    plot2.plot(rho_plot, p_plot, markers[randint(0, len(markers))],
+               label=r'$z_1={:g}$'.format(z_i),
+               fillstyle='none')
+    plot4.plot(rho_l_phase, p_v_phase, current_marker, markeredgewidth=0.5,
+               color=current_color, markersize=4, fillstyle='bottom', linestyle='none',
+               label=r'$L: x_1={:g}$'.format(z_i))
+    plot4.plot(rho_v_phase, p_v_phase, current_marker, markeredgewidth=0.25,
+                   color=current_color, markersize=4, fillstyle='none', linestyle='--',
+                   label=r'$V: y_1={:g}$'.format(z_i))
+
+    plot3.plot(z_plot, p_plot, current_marker,
+               label=r'$z_1={:g}$'.format(z_i),
+               fillstyle='bottom', linestyle='none')
+    plot3.plot(z_complex, p_complex, current_marker, markersize=4, linestyle='--',
+               fillstyle='none', color=current_color, markeredgewidth=0.25, linewidth=0.5)
+    p_low = z_phase(t, p, z_i, tc_i, pc_i, af_omega_i, 'l', alpha_tr, epsilon, sigma, psi, omega, tol)['p_low']
+    plot1.axhline(p_low, linestyle='-.', color='gray', linewidth=0.5, label='$P_{low}$')
+    plot2.axhline(p_low, linestyle='-.', color='gray', linewidth=0.5, label='$P_{low}$')
+    plot3.axhline(p_low, linestyle='-.', color='gray', linewidth=0.5, label='$P_{low}$')
+    plot4.axhline(p_low, linestyle='-.', color='gray', linewidth=0.5, label='$P_{low}$')
+    plot1.set_xlabel(r'$\frac{v}{cm^3/mol}$')
+    plot1.set_ylabel('p / bar')
+    plot1.legend(fontsize=6)
+    plot2.set_xlabel(r'$\frac{rho}{mol / cm^3}$')
+    plot2.set_ylabel('p / bar')
+    plot2.set_title(r'$\rho$' + ', act.')
+    plot3.set_xlabel(r'$Z$')
+    plot3.set_ylabel('p / bar')
+    plot3.legend(['real root', 'real part of complex root'], fontsize=6)
+    plot4.set_xlabel(r'$\frac{rho}{mol / cm^3}$')
+    plot4.set_ylabel('p / bar')
+    plot4.set_title(r'pseudo-$\rho$' + ', L/V [3]')
+    plot4.legend(fontsize=6)
+    plt.tight_layout()
+    plt.show()
 
 
 def svn_14_1():
@@ -2450,10 +2654,10 @@ vdi_atlas()
 # svn_fig_14_8()
 # svn_14_2()
 # zs_1998()
-ppo_ex_8_12()
-svn_h_1()
-fredenslund_t_6()
-svn_tab_14_1_2()
+# ppo_ex_8_12()
+# svn_h_1()
+# fredenslund_t_6()
+# svn_tab_14_1_2()
 # pat_ue_03_flash()
 # isot_flash_seader_4_1()
 # pat_ue_03_vollstaendig(0.2)

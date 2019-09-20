@@ -194,7 +194,7 @@ def nr_ls(x0, f, j, tol, max_it, inner_loop_condition,
         log(0.1)  # prog=0.1, x=10^-5 & tol=10^-10
     progress_k = exp((-magnitude_f + tol) / tol * progress_factor) * 100.
     stop = magnitude_f < tol  # stop if already fulfilling condition
-    stop = stop or any(isnan(j_val)) or any(isnan(f_val))
+    stop = stop or isnan(j_val).any() or isnan(f_val).any()
     divergent = False
     no_gradient_change_once = False
     # Non-functional status notification
@@ -423,7 +423,7 @@ def line_search(fun, jac, x_c, known_f_c=None, known_j_c=None,
         g_2 = 1 / 2. * scalar_prod(f_2, f_2)
         descent = alpha * lambda_ls * g_prime_t_s
         g_max = g_0 + descent
-        nan_result = any(isnan(f_2))
+        nan_result = isnan(f_2).any()
         # add current lambda to accumulated steps
         accum_step += lambda_ls
         while nan_result and lambda_ls >= lambda_min:
@@ -461,8 +461,7 @@ def line_search(fun, jac, x_c, known_f_c=None, known_j_c=None,
             x_2 = x_c + lambda_ls * s_0_n
             f_2 = fun(x_2)
             g_2 = 1 / 2. * scalar_prod(f_2, f_2)
-            nan_result = any(isnan(f_1)) or \
-                any(isnan(f_2))
+            nan_result = isnan(f_1).any() or isnan(f_2).any()
             accum_step += lambda_ls
         satisfactory = g_2 <= g_max
         stop = satisfactory
@@ -543,8 +542,8 @@ def solve_ax_equal_b(factor_a, term_b):
 # noinspection PyUnboundLocalVariable
 
 
-def secant_ls_3p(y, x_0, x_1, tol, max_it=100, alpha=1e-4,
-                 restriction=None, print_iterations=False):
+def secant_ls_3p(y, x_0, tol, x_1=None, f_prime=None,
+                 max_it=100, alpha=1e-4, restriction=None, print_iterations=False):
     """3 point secant method with line search algorithm (single dimension)
 
         Tiruneh, Ababu Teklemariam. "A modified three-point Secant method with improved rate and
@@ -557,10 +556,11 @@ def secant_ls_3p(y, x_0, x_1, tol, max_it=100, alpha=1e-4,
 
         :param y: function
         :param x_0: point 1 for evaluation
-        :param x_1: point 2 for evaluation
         :param tol: tolerance for method
         :param max_it: maximum iterations
         :param alpha: stringency constant in (0,1/2)
+        :param x_1: point 2 for evaluation (required if no derivative supplied)
+        :param f_prime: derivative (optional)
         :param restriction: optional restrictions imposed on x. Line search when False.
         :param print_iterations: optionally print iteration results
         :return: dict with keys: ['x', 'f', 'x_list', 'f_list',
@@ -592,7 +592,16 @@ def secant_ls_3p(y, x_0, x_1, tol, max_it=100, alpha=1e-4,
         steps += [accum_step]
         if abs(y_k) <= tol:
             break
-        if j == 0:
+        if f_prime is not None:
+            inv_slope = - 1 / f_prime(x_k)
+            p = -inv_slope * y_k
+
+            x_k_minus_1 = x_k
+            y_k_minus_1 = y_k
+            g_k_minus_1 = g_k
+            g_prime_k_minus_1 = g_prime_k
+
+        elif j == 0:
             inv_slope = -(x_1 - x_0) / y_k
             p = -inv_slope * y_k
 
