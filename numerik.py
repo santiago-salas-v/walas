@@ -733,6 +733,8 @@ def secant_ls_3p(y, x_0, tol, x_1=None, f_prime=None,
     f = y_k
     f_list = y_list
     iterations = j
+    if backtrackcount > 0:
+        total_backtracks += backtrackcount
     soln = dict()
     for item in ['x', 'f', 'x_list', 'f_list',
                  'iterations', 'total_backtracks', 'steps', 'success']:
