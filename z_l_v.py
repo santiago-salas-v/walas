@@ -23,6 +23,7 @@ omega_af = array([0.045, -0.217, 0.225, 0.344, 0.565, 0.037, 0.011])
 ant_a = array([6.72828, 6.14858, 9.81367, 8.05573, 8.08404, 6.72531, 6.84377])
 ant_b = array([295.2279, 80.948, 1340.9768, 1723.6425, 1580.4585, 285.5727, 435.4534])
 ant_c = array([268.243, 277.53, 271.883, 233.08, 239.096, 270.09, 271.361])
+labels = ['CO', 'H2', 'CO2', 'H2O', 'CH3OH', 'N2', 'CH4']
 
 class State:
     def __init__(self, t, p, z_i, mm_i, tc_i, pc_i, af_omega_i, eos_name='pr',
@@ -528,16 +529,28 @@ def phi(t, p, z_i, tc_i, pc_i, af_omega_i, phase, alpha_tr, epsilon, sigma, psi,
     a = z_i.dot(a_ij).dot(z_i).item()
     beta = b * p / (r * t)
     q = a / (b * r * t)
-    a_mp_i = -a + 2 * a_ij.dot(z_i) # partielles molares a_i
+    a_mp_i = -a + 2 * a_ij.dot(z_i).item() # partielles molares a_i
     b_mp_i = b_i  # partielles molares b_i
     q_mp_i = q * (1 + a_mp_i / a - b_i / b)  # partielles molares q_i
 
     phase_soln = z_phase(t, p, z_i, tc_i, pc_i, af_omega_i, phase,
                          alpha_tr, epsilon, sigma, psi, omega, tol)
     z = phase_soln['z']
-    i_int = 1 / (sigma - epsilon) * \
-        log((z + sigma * beta) / (z + epsilon * beta))
-    ln_phi = b_i / b * (z - 1) - log(z - beta) - q_mp_i * i_int
+    if epsilon != sigma:
+        # vdw: epsilon = sigma
+        i_int = 1 / (sigma - epsilon) * \
+            log((z + sigma * beta) / (z + epsilon * beta))
+    elif epsilon == sigma:
+        # only vdw
+        i_int = beta / (z + epsilon * beta)
+    if z >= 0:
+        # $G^R/(RT) = Z - 1 - ln(1-\rho b) - ln(Z) - q I$
+        # and $\beta = \rho b Z$
+        ln_phi = b_i / b * (z - 1) - log(z - beta) - q_mp_i * i_int
+    else:
+        # $G^R/(RT) = Z - 1 - ln(1-\rho b) + ln(-Z) - q I$
+        # and $\beta = \rho b Z$
+        ln_phi = b_i / b * (z - 1) - log(beta / z**2 - 1 / z) - q_mp_i * i_int
     phi_calc = exp(ln_phi)
     if phase == 'l':
         # correction for pseudoproperties in phi (Matthias et al. 1984)
@@ -666,6 +679,7 @@ def bubl_point_step_l_k(t, p, x_i, tc_i, pc_i, af_omega_i,
         phi_v = phi(t, p, y_i_est, tc_i, pc_i, af_omega_i, 'v',
                     alpha_tr, epsilon, sigma, psi, omega)['phi']
     else:
+        y_i_est = asarray(y_i_est)
         phi_v = phi(t, p, x_i, tc_i, pc_i, af_omega_i, 'v',
                     alpha_tr, epsilon, sigma, psi, omega)['phi']
     k_i = phi_l / phi_v
@@ -888,6 +902,7 @@ def p_for_3_real_roots(t, p, x_i, tc_i, pc_i, af_omega_i, max_it, tol=tol):
     return p
 
 def p_est(t, p, x_i, tc_i, pc_i, af_omega_i, max_it, tol=tol):
+    x_i = asarray(x_i)
     tr_i = t / tc_i
     a_i = psi * alpha_tr(tr_i, af_omega_i) * r ** 2 * tc_i ** 2 / pc_i
     b_i = omega * r * tc_i / pc_i
@@ -1058,12 +1073,13 @@ def p_est(t, p, x_i, tc_i, pc_i, af_omega_i, max_it, tol=tol):
                 p = p_min_l
             elif p >= p_max_v:
                 p = p_max_v
-    for item in ['p', 'p_inf', 'z_inf', 'v_inf', 'p_min_l', 'p_max_v',
+    for item in ['p', 'p_rho_inf', 'z_rho_inf', 'v_rho_inf', 'p_min_l', 'p_max_v',
                  'z_l', 'z_v', 'v_l', 'v_v', 'rho_l', 'rho_v']:
         soln[item] = locals().get(item)
     return soln
 
 def z_phase(t, p, z_i, tc_i, pc_i, af_omega_i, phase, alpha_tr, epsilon, sigma, psi, omega, tol=tol):
+    z_i = asarray(z_i)
     tr_i = t / tc_i
     a_i = psi * alpha_tr(tr_i, af_omega_i) * r ** 2 * tc_i ** 2 / pc_i
     b_i = omega * r * tc_i / pc_i
@@ -1512,6 +1528,9 @@ def vdi_atlas():
     p_new = p_i_sat_ceos(-256.6 + 273.15, 10, 33.19, 13.13,  -0.216,
                  alpha_tr, epsilon, sigma, psi, omega,
                  max_it=100, tol=tol)
+    p_new = bubl_p(-256.6 + 273.15, 1, 1.0, 33.19, 13.13, -0.216,
+                   alpha_tr, epsilon, sigma, psi, omega,
+                   max_it=100, tol=tol,print_iterations=True)['p'].item()
     soln = secant_ls_3p(lambda p_var:
                  phi(-256.6 + 273.15, p_var, 1, 33.19, 13.13, -0.216, 'l',
                      alpha_tr, epsilon, sigma, psi, omega
@@ -1524,34 +1543,40 @@ def vdi_atlas():
     phi_sat = phi(-256.6 + 273.15, soln['x'], 1, 33.19, 13.13, -0.216, 'v',
                              alpha_tr, epsilon, sigma, psi, omega)
 
-    t = 273.15 + linspace(-200, -10, 5)
+    t = 273.15 + linspace(-200, 0.01, 30)
+    # FIXME: test t from -256.6°C to 200°C
     p_sat_vals = empty([len(t), len(pc)])
-    p_sat_vals_ceos = empty([len(t), len(pc)])
-    p0 = 10 * ones(len(pc))
+    p_sat_vals_ceos = empty([len(t), len(pc)]) * nan
+    p0 = 1.0 * ones(len(pc))
     for i in range(len(t)):
         p_sat_vals[i, :] = 10**(
                 ant_a - ant_b / (t[i] - 273.15 + ant_c)
         ) * 1 / 760 * 101325 / 1e5  # bar
         for j in range(len(pc)):
-            soln = secant_ls_3p(lambda p_var:
-                     log(phi(t[i], p_var, 1.0, tc[j], pc[j], omega_af[j], 'l',
-                         alpha_tr, epsilon, sigma, psi, omega
-                         )['phi'].item()) -
-                     log(phi(t[i], p_var, 1.0, tc[j], pc[j], omega_af[j], 'v',
-                         alpha_tr, epsilon, sigma, psi, omega
-                         )['phi'].item())
-                     , p0[j], tol=1e-10, x_1=0.9 * p0[j],
-                     restriction=lambda p_val: p_val > 0,
-                     print_iterations=False)
-            p_sat_vals_ceos[i, j] = soln['x']
-            p0[j] = soln['x']
+            if t[i] >= tc[j]:
+                pass  # skip
+            else:
+                p_min = p_est(t[i], p0[j], 1.0, tc[j], pc[j], omega_af[j], 100, tol)['p_min_l']
+                if p_min < -1000:
+                    print(bubl_point_step_l_k(t[i], p0[j], 1.0, tc[j], pc[j], omega_af[j],
+                                              alpha_tr, epsilon, sigma, psi, omega,
+                                              max_it=100, tol=1e-10, full_output=True, y_i_est=1.0))
+                else:
+                    p_sat_vals_ceos[i, j] = bubl_p(
+                        t[i], p0[j], 1.0, tc[j], pc[j], omega_af[j],
+                        alpha_tr, epsilon, sigma, psi, omega,
+                        max_it=100, tol=1e-10, print_iterations=False)['p'].item()
+                    p0[j] = p_sat_vals_ceos[i, j]
 
     lines = plt.plot(t, p_sat_vals)
-    lines_2 = plt.plot(t, p_sat_vals_ceos, 'o', fillstyle='none')
+    lines_2 = plt.plot(t, p_sat_vals_ceos, 'x', fillstyle='none')
     for i in range(len(lines)):
         lines_2[i].set_color(lines[i].get_color())
+        lines[i].set_label(labels[i])
     plt.xlabel('T / K')
     plt.ylabel('$p_{i}^{Sat}$ / bar')
+    plt.ylim([0, 1000])
+    plt.legend()
 
     t = 273.15 - 256.6
     tc_i = 33.19
