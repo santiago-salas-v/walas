@@ -1,13 +1,13 @@
 from poly_3_4 import solve_cubic, solve_quartic
 from numerik import secant_ls_3p, nr_ls
 from poly_n import zroots
-from numpy import array, append, zeros, abs, ones, empty_like, empty, argwhere, unique, asarray, concatenate
+from numpy import array, append, zeros, abs, ones, empty_like, empty, argwhere, unique, asarray, concatenate, setup
 from numpy import sqrt, outer, sum, log, exp, multiply, diag, sign
 from numpy import linspace, dot, nan, finfo, isnan, isinf
 from numpy.random import randint
 from scipy import optimize
 from matplotlib import pyplot as plt
-import sys
+import sys, re
 # from setup_results_log import notify_status_func, setup_log_file
 
 r = 8.314 * 10. ** 6 / 10. ** 5  # bar cm^3/(mol K)
@@ -704,7 +704,7 @@ def phi(t, p, z_i, tc_i, pc_i, af_omega_i, phase, alpha_tr, epsilon, sigma, psi,
 
 def bubl_p(t, p, x_i, tc_i, pc_i, af_omega_i,
            alpha_tr, epsilon, sigma, psi, omega,
-           sec_j=None, nu_ij=None,
+           sec_j=None, nu_ij=None, unifac_data_dict=None,
            max_it=100, tol=tol, y_i_est=None, print_iterations=False):
     """Bubble pressure determination
 
@@ -753,14 +753,14 @@ def bubl_p(t, p, x_i, tc_i, pc_i, af_omega_i,
         soln = bubl_p_gamma_phi(
             t, p, x_i, tc_i, pc_i, af_omega_i,
             alpha_tr, epsilon, sigma, psi, omega,
-            sec_j, nu_ij,
+            sec_j, nu_ij, unifac_data_dict,
             max_it, tol=tol, y_i_est=y_i_est)
     return soln
 
 
 def bubl_t(t, p, x_i, tc_i, pc_i, af_omega_i,
            alpha_tr, epsilon, sigma, psi, omega,
-           sec_j=None, nu_ij=None,
+           sec_j=None, nu_ij=None, unifac_data_dict=None,
            max_it=100, tol=tol, y_i_est=None, print_iterations=False):
     """Bubble temperature determination
 
@@ -809,7 +809,7 @@ def bubl_t(t, p, x_i, tc_i, pc_i, af_omega_i,
         soln = bubl_t_gamma_phi(
             t, p, x_i, tc_i, pc_i, af_omega_i,
             alpha_tr, epsilon, sigma, psi, omega,
-            sec_j, nu_ij,
+            sec_j, nu_ij, unifac_data_dict,
             max_it, tol=tol, y_i_est=y_i_est)
     return soln
 
@@ -863,14 +863,14 @@ def bubl_point_step_l_k(t, p, x_i, tc_i, pc_i, af_omega_i,
 
 def bubl_t_gamma_phi(t, p, x_i, tc_i, pc_i, af_omega_i,
                         alpha_tr, epsilon, sigma, psi, omega,
-                        sec_j, nu_ij,
+                        sec_j, nu_ij, unifac_data_dict,
                         max_it, tol=tol, full_output=False, y_i_est=None):
     x_i = asarray(x_i)
     soln = t_i_sat_ceos(t, p, tc_i, pc_i, af_omega_i,
                         alpha_tr, epsilon, sigma, psi, omega, max_it=max_it, tol=tol)
     t_i_sat = soln['t']
     t = sum(x_i * t_i_sat)
-    gamma_i = gamma_u(t, x_i, sec_j, nu_ij)
+    gamma_i = gamma_u(t, x_i, sec_j, nu_ij, unifac_data_dict)
     phi_coef_fun_i = ones(x_i.size)
     soln = p_i_sat_ceos(t, p, tc_i, pc_i, af_omega_i,
                         alpha_tr, epsilon, sigma, psi, omega, max_it=max_it, tol=tol)
@@ -904,7 +904,7 @@ def bubl_t_gamma_phi(t, p, x_i, tc_i, pc_i, af_omega_i,
         phi_i_v = phi(t, p, y_i, tc_i, pc_i, af_omega_i, 'v',
                       alpha_tr, epsilon, sigma, psi, omega)['phi']
 
-        gamma_i = gamma_u(t, x_i, sec_j, nu_ij)
+        gamma_i = gamma_u(t, x_i, sec_j, nu_ij, unifac_data_dict)
         phi_coef_fun_i = phi_i_v / phi_i_sat * poynting_i
 
     k_i = gamma_i * p_i_sat / phi_coef_fun_i / p
@@ -919,10 +919,10 @@ def bubl_t_gamma_phi(t, p, x_i, tc_i, pc_i, af_omega_i,
 
 def bubl_p_gamma_phi(t, p, x_i, tc_i, pc_i, af_omega_i,
                         alpha_tr, epsilon, sigma, psi, omega,
-                        sec_j, nu_ij,
+                        sec_j, nu_ij, unifac_data_dict,
                         max_it, tol=tol, full_output=False, y_i_est=None):
     x_i = asarray(x_i)
-    gamma_i = gamma_u(t, x_i, sec_j, nu_ij)
+    gamma_i = gamma_u(t, x_i, sec_j, nu_ij, unifac_data_dict)
     soln = p_i_sat_ceos(t, p, tc_i, pc_i, af_omega_i,
                         alpha_tr, epsilon, sigma, psi, omega, max_it=max_it, tol=tol)
     p_i_sat = soln['p']
@@ -958,7 +958,7 @@ def bubl_p_gamma_phi(t, p, x_i, tc_i, pc_i, af_omega_i,
 
 def dew_p(t, p, y_i, tc_i, pc_i, af_omega_i,
           alpha_tr, epsilon, sigma, psi, omega,
-          sec_j=None, nu_ij=None,
+          sec_j=None, nu_ij=None, unifac_data_dict=None,
           max_it=100, tol=tol, x_i_est=None, print_iterations=False):
     """Dew pressure determination
 
@@ -1006,7 +1006,7 @@ def dew_p(t, p, y_i, tc_i, pc_i, af_omega_i,
         soln = dew_p_gamma_phi(
             t, p, y_i, tc_i, pc_i, af_omega_i,
             alpha_tr, epsilon, sigma, psi, omega,
-            sec_j, nu_ij,
+            sec_j, nu_ij, unifac_data_dict,
             max_it, tol=tol, x_i_est=x_i_est)
     return soln
 
@@ -1097,7 +1097,7 @@ def dew_point_step_l_k(t, p, y_i, tc_i, pc_i, af_omega_i,
 
 def dew_p_gamma_phi(t, p, y_i, tc_i, pc_i, af_omega_i,
                         alpha_tr, epsilon, sigma, psi, omega,
-                        sec_j, nu_ij,
+                        sec_j, nu_ij, unifac_data_dict,
                         max_it, tol=tol, full_output=False, x_i_est=None):
     y_i = asarray(y_i)
     phi_coef_fun_i = ones(y_i.size)
@@ -1113,7 +1113,7 @@ def dew_p_gamma_phi(t, p, y_i, tc_i, pc_i, af_omega_i,
     x_i = y_i * phi_coef_fun_i / gamma_i / p_i_sat * p
     x_i = x_i / sum(x_i)
 
-    gamma_i = gamma_u(t, x_i, sec_j, nu_ij)
+    gamma_i = gamma_u(t, x_i, sec_j, nu_ij, unifac_data_dict)
 
     p = 1 / sum(y_i * phi_coef_fun_i / gamma_i / p_i_sat)
 
@@ -1129,7 +1129,7 @@ def dew_p_gamma_phi(t, p, y_i, tc_i, pc_i, af_omega_i,
             gamma_i_old = gamma_i
             x_i = y_i * phi_coef_fun_i / gamma_i / p_i_sat * p
             x_i = x_i / sum(x_i)
-            gamma_i = gamma_u(t, x_i, sec_j, nu_ij)
+            gamma_i = gamma_u(t, x_i, sec_j, nu_ij, unifac_data_dict)
             delta_gamma = gamma_i - gamma_i_old
             mag_delta_gamma = sqrt(delta_gamma.dot(delta_gamma))
             success = mag_delta_gamma <= tol
@@ -1693,10 +1693,11 @@ def isot_flash(t, p, x_i, y_i, z_i, tc_i, pc_i, af_omega_i,
     soln_l = phi(t, p, x_i, tc_i, pc_i, af_omega_i, 'l', alpha_tr, epsilon, sigma, psi, omega)
     soln_v = phi(t, p, y_i, tc_i, pc_i, af_omega_i, 'v', alpha_tr, epsilon, sigma, psi, omega)
     k_i = soln_l['phi'] / soln_v['phi']
-    soln_v_f = secant_ls_3p(lambda v_f: sum(
-        z_i * (1 - k_i) / (1 + v_f * (k_i - 1))), 0.5, tol=1e-10, x_1=0.4,
-                            restriction=lambda v_f_val: v_f_val >= 0,
-                            print_iterations=False)
+    soln_v_f = secant_ls_3p(
+        lambda v_f: sum(z_i * (1 - k_i) / (1 + v_f * (k_i - 1))), 0.5, tol=1e-10,
+        f_prime=lambda v_f: -sum(z_i * (k_i - 1) ** 2 / (1 + v_f * (k_i - 1)) ** 2),
+        restriction=lambda v_f_val: 0 <= v_f_val and v_f_val <= 1.0,
+        print_iterations=False)
     v_f = soln_v_f['x']
     x_i = z_i / (1 + v_f * (k_i - 1))
     y_i = x_i * k_i / sum(x_i * k_i)
@@ -1728,13 +1729,16 @@ def isot_flash_solve(t, p, z_i, tc_i, pc_i, af_omega_i, max_it=20,
 
 def pt_flash(t, p, z_i, tc_i, pc_i, af_omega_i,
              alpha_tr, epsilon, sigma, psi, omega,
-             sec_j=None, nu_ij=None, max_it=100, tol=tol):
+             sec_j=None, nu_ij=None, unifac_data_dict=None,
+             max_it=100, tol=tol):
     bubl_p_soln = bubl_p(t, p, z_i, tc_i, pc_i, af_omega_i,
                          alpha_tr, epsilon, sigma, psi, omega,
-                         sec_j=sec_j, nu_ij=nu_ij, max_it=max_it, tol=tol)
+                         sec_j, nu_ij, unifac_data_dict,
+                         max_it=max_it, tol=tol)
     dew_p_soln = dew_p(t, p, z_i, tc_i, pc_i, af_omega_i,
-                         alpha_tr, epsilon, sigma, psi, omega,
-                         sec_j=sec_j, nu_ij=nu_ij, max_it=max_it, tol=tol)
+                       alpha_tr, epsilon, sigma, psi, omega,
+                       sec_j, nu_ij, unifac_data_dict,
+                       max_it=max_it, tol=tol)
     p_bubl, p_dew = bubl_p_soln['p'], dew_p_soln['p']
     phi_bubl, phi_dew = bubl_p_soln['phi_v'], dew_p_soln['phi_v']
     gamma_i_bubl, gamma_i_dew = bubl_p_soln['gamma_i'], dew_p_soln['gamma_i']
@@ -1779,7 +1783,7 @@ def pt_flash(t, p, z_i, tc_i, pc_i, af_omega_i,
             success = mag_delta_x_i <= tol and mag_delta_y_i <=tol and mag_delta_v_f <= tol
             if success:
                 break
-            gamma_i = gamma_u(t, x_i, sec_j, nu_ij)
+            gamma_i = gamma_u(t, x_i, sec_j, nu_ij, unifac_data_dict)
             phi_i_v = phi(t, p, y_i, tc_i, pc_i, af_omega_i, 'v',
                           alpha_tr, epsilon, sigma, psi, omega)['phi']
     elif p_dew >= p:
@@ -2010,29 +2014,34 @@ def svn_14_2():
     ant_b = array([395.744, 935.773])
     ant_c = array([266.681, 238.789])
     max_it = 100
-    print(bubl_point_step_l_k(310.92, 30, x_i, tc_i, pc_i, af_omega_i, alpha_tr, epsilon, sigma, psi, omega, max_it,
-                              full_output=True, y_i_est=y_i)
-          )
-    y_i = bubl_point_step_l_k(310.92, 30, x_i, tc_i, pc_i, af_omega_i, alpha_tr, epsilon, sigma, psi, omega, max_it,
-                              full_output=True, y_i_est=y_i)['y_i']
+    print(bubl_point_step_l_k(
+        310.92, 30, x_i, tc_i, pc_i, af_omega_i, alpha_tr, epsilon, sigma, psi, omega,
+        max_it=max_it,full_output=True, y_i_est=y_i))
+    y_i = bubl_point_step_l_k(
+        310.92, 30, x_i, tc_i, pc_i, af_omega_i, alpha_tr, epsilon, sigma, psi, omega,
+        max_it=max_it, full_output=True, y_i_est=y_i)['y_i']
     for i in range(5):
-        soln = bubl_point_step_l_k(310.92, 30, x_i, tc_i, pc_i, af_omega_i, alpha_tr, epsilon, sigma, psi, omega, max_it,
-                                   full_output=True, y_i_est=y_i)
+        soln = bubl_point_step_l_k(
+            310.92, 30, x_i, tc_i, pc_i, af_omega_i, alpha_tr, epsilon, sigma, psi, omega,
+            max_it=max_it, full_output=True, y_i_est=y_i)
         y_i = soln['y_i']
         k_i = soln['k_i']
         print(y_i)
         print(1 - sum(y_i))
         print(sum(k_i * x_i))
-    soln = bubl_p(310.92, 1., x_i, tc_i, pc_i, af_omega_i, alpha_tr, epsilon, sigma, psi, omega, max_it, tol=1e-10,
-                  y_i_est=y_i)
+    soln = bubl_p(
+        310.92, 1., x_i, tc_i, pc_i, af_omega_i, alpha_tr, epsilon, sigma, psi, omega,
+        max_it=max_it, tol=1e-10, y_i_est=y_i)
     print(soln)
-    print(dew_point_step_l_k(310.92, soln['p'], soln['y_i'], tc_i, pc_i, af_omega_i, alpha_tr, epsilon, sigma, psi, omega,
-                             max_it))
-    print(
-        dew_p(310.92, 30, soln['y_i'], tc_i, pc_i, af_omega_i, alpha_tr, epsilon, sigma, psi, omega, max_it, tol=1e-10,
-              x_i_est=x_i, print_iterations=True))
-    print(bubl_point_step_l_k(310.92, soln['p'], x_i, tc_i, pc_i, af_omega_i, alpha_tr, epsilon, sigma, psi, omega, max_it,
-                              full_output=True, y_i_est=y_i))
+    print(dew_point_step_l_k(
+        310.92, soln['p'], soln['y_i'], tc_i, pc_i, af_omega_i, alpha_tr, epsilon, sigma, psi, omega,
+        max_it=max_it))
+    print(dew_p(
+        310.92, 30, soln['y_i'], tc_i, pc_i, af_omega_i, alpha_tr, epsilon, sigma, psi, omega,
+        max_it=max_it, tol=1e-10, x_i_est=x_i, print_iterations=True))
+    print(bubl_point_step_l_k(
+        310.92, soln['p'], x_i, tc_i, pc_i, af_omega_i, alpha_tr, epsilon, sigma, psi, omega,
+        max_it=max_it, full_output=True, y_i_est=y_i))
 
     x = linspace(0.0, 0.8, 50)
     y = empty_like(x)
@@ -2052,8 +2061,8 @@ def svn_14_2():
     p_v_0_dew = 1.0
     for i in range(len(x)):
         x_i = array([x[i], 1 - x[i]])
-        soln = bubl_p(310.92, p_v0, x_i, tc_i, pc_i, af_omega_i, alpha_tr, epsilon, sigma, psi, omega, max_it,
-                      tol=1e-10, y_i_est=y_i_est)
+        soln = bubl_p(310.92, p_v0, x_i, tc_i, pc_i, af_omega_i, alpha_tr, epsilon, sigma, psi, omega,
+                      max_it=max_it, tol=1e-10, y_i_est=y_i_est)
         p_v[i] = soln['p']
         y[i] = soln['y_i'][0]
         p_v0 = p_v[i]
@@ -2062,7 +2071,7 @@ def svn_14_2():
 
         y_i_dew = array([y_dew[i], 1 - y_dew[i]])
         soln_dew = dew_p(310.92, p_v_0_dew, y_i_dew, tc_i, pc_i, af_omega_i, alpha_tr, epsilon, sigma, psi, omega,
-                         max_it, tol=1e-10, x_i_est=x_i_est_dew)
+                         max_it=max_it, tol=1e-10, x_i_est=x_i_est_dew)
         p_v_dew[i] = soln_dew['p']
         x_dew[i] = soln_dew['x_i'][0]
         p_v_0_dew = p_v_dew[i]
@@ -2224,16 +2233,17 @@ def svn_tab_14_1_2():
     af_omega_i = array([0.3  , 0.649, 0.227, 0.21 ])
     z_i = array([0.162, 0.068, 0.656, 0.114])
     # unifac secondary groups and coefficients by component
-    sec_i = array([1, 2, 3, 10, 15])
+    sec_i = array([1, 2, 3, 9, 14])
     nu_ji = array([[2, 4, 0, 0, 0], [1, 1, 0, 0, 1], [1, 4, 1, 0, 0], [0, 0, 0, 6, 0]])
+    unifac_data_dict = setup_unifac_data()
 
     soln = bubl_p(334.82, 1.0, z_i, tc_i, pc_i, af_omega_i,
                   alpha_tr, epsilon, sigma, psi, omega,
-                  sec_i, nu_ji,
+                  sec_i, nu_ji, unifac_data_dict,
                   max_it, tol, print_iterations=True)
     soln = bubl_t(273.15, p, z_i, tc_i, pc_i, af_omega_i,
                   alpha_tr, epsilon, sigma, psi, omega,
-                  sec_i, nu_ji,
+                  sec_i, nu_ji, unifac_data_dict,
                   max_it, 1e-10, print_iterations=True)
     y_i = soln['y_i']
     k_i = soln['k_i']
@@ -2242,7 +2252,8 @@ def svn_tab_14_1_2():
     n_it = soln['n_it']
     phi_coef_fun_i = soln['phi_coef_fun_i']
 
-    gamma_j = gamma_u(t, z_i, sec_i, nu_ji)
+    unifac_data_dict = setup_unifac_data()
+    gamma_j = gamma_u(t, z_i, sec_i, nu_ji, unifac_data_dict)
     print('\n'*2)
     print('SVN Table 14.1 - n-hexane (1) / ethanol (2) / methylcyclopentane (3) /' +
           'benzene (4) at {:0.2f} K'.format(t))
@@ -2257,12 +2268,13 @@ def svn_tab_14_1_2():
     z_i = array([0.250, 0.400, 0.200, 0.150])
     soln = bubl_t(273.15, p, z_i, tc_i, pc_i, af_omega_i,
                   alpha_tr, epsilon, sigma, psi, omega,
-                  sec_i, nu_ji,
+                  sec_i, nu_ji, unifac_data_dict,
                   max_it, 1e-10, print_iterations=True)
     t = soln['t']
     soln = pt_flash(334.152/334.85*334.15, p, z_i, tc_i, pc_i, af_omega_i,
                     alpha_tr, epsilon, sigma, psi, omega,
-                    sec_i, nu_ji, max_it=max_it, tol=tol)
+                    sec_i, nu_ji, unifac_data_dict,
+                    max_it=max_it, tol=tol)
     y_i = soln['y_i']
     x_i = soln['x_i']
     z_i = soln['z_i']
@@ -2291,7 +2303,8 @@ def pat_ue_03_flash():
         1489.88,
         854.75,
         1348.86,
-        2496.13
+        2496.13,
+        0
     ])
 
     z_i = n / sum(n)
@@ -2304,7 +2317,8 @@ def pat_ue_03_flash():
     p = 50.
 
     for i in range(20):
-        soln = isot_flash(t, p, x_i, y_i, z_i, tc_i, pc_i, af_omega_i, alpha_tr, epsilon, sigma, psi, omega)
+        # soln = isot_flash(t, p, x_i, y_i, z_i, tc_i, pc_i, af_omega_i, alpha_tr, epsilon, sigma, psi, omega)
+        soln = pt_flash(t, p, z_i, tc_i, pc_i, af_omega_i, alpha_tr, epsilon, sigma, psi, omega)
         y_i = soln['y_i']
         x_i = soln['x_i']
         v_f = soln['v_f']
@@ -2834,9 +2848,10 @@ def interaction_pairs(list, i=0, j=0, perms=[]):
 def ppo_ex_8_12():
     t = 307
     x_j = array([0.047, 1 - 0.047])
-    sec_j = array([1, 2, 19])
+    sec_j = array([1, 2, 18])
     nu_ij = array([[1, 0, 1], [2, 3, 0]])
-    gamma_j = gamma_u(t, x_j, sec_j, nu_ij)
+    unifac_data_dict = setup_unifac_data()
+    gamma_j = gamma_u(t, x_j, sec_j, nu_ij, unifac_data_dict)
     print('PPO example 8-12 - acetone (1) / n-pentane (2) at 307K')
     print('gamma_1: {:0.4f}\tgamma_2: {:0.4f}'.format(*gamma_j))
     print('\n')
@@ -2845,9 +2860,10 @@ def ppo_ex_8_12():
 def svn_h_1():
     t = 308.15
     x_j = array([0.4, 1 - 0.4])
-    sec_j = array([1, 2, 33])
+    sec_j = array([1, 2, 32])
     nu_ij = array([[2, 1, 1], [2, 5, 0]])
-    gamma_j = gamma_u(t, x_j, sec_j, nu_ij)
+    unifac_data_dict = setup_unifac_data()
+    gamma_j = gamma_u(t, x_j, sec_j, nu_ij, unifac_data_dict)
     print('SVN Example H.1 - diethylamine (1) / n-heptane (2) at 308.15K')
     print('gamma_1: {:0.4f}\tgamma_2: {:0.4f}'.format(*gamma_j))
     print('\n')
@@ -2856,16 +2872,17 @@ def svn_h_1():
 def fredenslund_t_6():
     t = 318
     x_j = array([0.8869, 0.0991, 1 - 0.8869 - 0.0991])
-    sec_j = array([1, 2, 10, 41])
+    sec_j = array([1, 2, 9, 40])
     nu_ij = array([[0, 0, 0, 1], [0, 0, 6, 0], [2, 5, 0, 0]])
-    gamma_j = gamma_u(t, x_j, sec_j, nu_ij)
+    unifac_data_dict = setup_unifac_data()
+    gamma_j = gamma_u(t, x_j, sec_j, nu_ij, unifac_data_dict)
     print('Fredenslund 1975 Table 6 - acetonitrile (1) / benzene (2) / n-heptane (3) at 318K')
     print('x_1: {:0.4f}\tx_2: {:0.4f}\tx_3: {:0.4f}'.format(*x_j))
     print('gamma_1: {:0.4f}\tgamma_2: {:0.4f}\tgamma_3: {:0.4f}'.format(*gamma_j))
     print('\n')
 
 
-def gamma_u(t, x_j, sec_j, nu_ij):
+def gamma_u(t, x_j, sec_j, nu_ij, unifac_data_dict):
     """Activity coefficients by UNIFAC
 
     Determines gamma_j(T) at temperature T by UNIFAC method.
@@ -2874,6 +2891,8 @@ def gamma_u(t, x_j, sec_j, nu_ij):
     :param x_j: composition
     :param sec_j: secondary groups / subgroups
     :param nu_ij: coefficients in secondary groups per component
+    :param unifac_data_dict: dict with table columns subgroups_k, main_groups_of_k, r_k, q_k and
+    interaction parameters table with A_ij on lower diagonal, A_ji on upper diagonal (nxn matrix)
     :return: gamma_j
 
     Example
@@ -2895,42 +2914,18 @@ def gamma_u(t, x_j, sec_j, nu_ij):
 
     [ 1.01793099  2.27445733 17.53230898]
     """
-    data = []
-    f = open('./data/unifac_interaction_parameters.csv')
-    sep_char = f.readline().split('=')[-1]
-    for line in f:
-        if len(line) > 0:
-            data += [[float(x) for x in line.split(',')]]
-    f.close()
-    interaction_params = array(data)
+    subroups_k = unifac_data_dict['subgroups_k']
+    main_groups_of_k = unifac_data_dict['main_groups_of_k']
+    r_k = unifac_data_dict['r_k']
+    q_k = unifac_data_dict['q_k']
+    unifac_interaction_params = unifac_data_dict['unifac_interaction_params']
 
-    f = open('./data/unifac_subgroup_parameters.csv')
-    sep_char = f.readline().split('=')[-1]
-    col_names = f.readline().split('|')
-    main_group, main_group_names = [], []
-    secondary_group_k, group_symbol = [], []
-    r_k, q_k = [], []
-    example = []
-    for line in f:
-        cols = line.split('|')
-        main_group += [cols[0]]
-        main_group_names += [cols[1]]
-        secondary_group_k += [cols[2]]
-        group_symbol += [cols[3]]
-        r_k += [cols[4]]
-        q_k += [cols[5]]
-        example += [cols[6]]
-    main_group = array(main_group, dtype=int)
-    main_group_names = array(main_group_names, dtype=str)
-    secondary_group_k = array(secondary_group_k, dtype=int)
-    r_k = array(r_k, dtype=float)
-    q_k = array(q_k, dtype=float)
-    example = array(example, dtype=str)
-    f.close()
-
-    indexes_j = [argwhere(x == secondary_group_k).item() for x in sec_j]
+    indexes_j = [argwhere(x == subroups_k).item() for x in sec_j]
     q_m = q_k[indexes_j]
     r_m = r_k[indexes_j]
+    groups = main_groups_of_k[indexes_j]
+    pairs = interaction_pairs(groups - 1)
+
     r_j = nu_ij.dot(r_m)
     q_j = nu_ij.dot(q_m)
     phi_j = r_j * x_j / r_j.dot(x_j)
@@ -2939,14 +2934,12 @@ def gamma_u(t, x_j, sec_j, nu_ij):
     i_j = z / 2 * (r_j - q_j) - (r_j - 1)
     ln_gamma_c_j = log(phi_j / x_j) + z / 2 * q_j * log(
         theta_j / phi_j) + i_j - phi_j / x_j * x_j.dot(i_j)
-    unique_groups = unique(main_group[indexes_j])
-    groups = main_group[indexes_j]
-    pairs = interaction_pairs(groups-1)
+
     a_mn = zeros([len(groups), len(groups)])
     counter = 0
     for i in range(len(groups)):
         for j in range(len(groups)):
-            a_mn[i, j] = interaction_params[
+            a_mn[i, j] = unifac_interaction_params[
                 pairs[counter][0], pairs[counter][1]
             ]
             counter += 1
@@ -2973,15 +2966,63 @@ def gamma_u(t, x_j, sec_j, nu_ij):
     return gamma_j
 
 
-# vdi_atlas()
+def setup_unifac_data():
+    f = open('./data/unifac_list_of_interaction_parameters.csv', 'r')
+    sep_char = f.readline().split('=')[-1].replace('\n', '')
+    col_names = f.readline().split(sep_char)
+    table_data = []
+    for line in f:
+        table_data += [line.split(sep_char)]
+    f.close()
+    data = array(table_data)
+    indexes_i = array(data[:, 0], dtype=int)
+    indexes_j = array(data[:, 1], dtype=int)
+    a_ij = array(data[:, 2], dtype=float)
+    a_ji = array(data[:, 3], dtype=float)
+    unifac_interaction_params = zeros([len(indexes_i), len(indexes_j)])
+    for row_no in range(len(data)):
+        unifac_interaction_params[
+            indexes_i[row_no] - 1, indexes_j[row_no] - 1
+        ] = a_ij[row_no]
+        unifac_interaction_params[
+            indexes_j[row_no] - 1, indexes_i[row_no] - 1
+        ] = a_ji[row_no]
+
+    f = open('./data/unifac_sub_groups_surfaces_and_volumes.csv', 'r')
+    sep_char = f.readline().split('=')[-1].replace('\n', '')
+    col_names = f.readline().split(sep_char)
+    table_data = []
+    for line in f:
+        table_data += [line.split(sep_char)]
+    f.close()
+    unifac_subgroup_data = array(table_data)
+    subgroups_k = array(unifac_subgroup_data[:, 0], dtype=int)
+    main_group_names_of_k = array(unifac_subgroup_data[:, 1], dtype=str)
+    main_groups_of_k = array(
+        [re.match('\[([0-9]*)\]', x).groups()[0] for x in
+         array(unifac_subgroup_data[:, 2], dtype=str)],
+        dtype=int)
+    main_group_names_of_k = array(
+        [re.match('\[[0-9]*\](.*)', x).groups()[0] for x in
+         array(unifac_subgroup_data[:, 2], dtype=str)])
+    r_k = array(unifac_subgroup_data[:, 3], dtype=float)
+    q_k = array(unifac_subgroup_data[:, 4], dtype=float)
+
+    unifac_data_dict = dict()
+    for var in ['subgroups_k', 'r_k', 'q_k', 'main_groups_of_k',
+                'main_group_names_of_k', 'unifac_interaction_params']:
+        unifac_data_dict[var] = locals()[var]
+    return unifac_data_dict
+
+vdi_atlas()
 # svn_14_1()
 # svn_fig_14_8()
-svn_14_2()
+# svn_14_2()
 # zs_1998()
-# ppo_ex_8_12()
-# svn_h_1()
-# fredenslund_t_6()
-# svn_tab_14_1_2()
+ppo_ex_8_12()
+svn_h_1()
+fredenslund_t_6()
+svn_tab_14_1_2()
 # pat_ue_03_flash()
 # isot_flash_seader_4_1()
 # pat_ue_03_vollstaendig(0.2)

@@ -666,9 +666,10 @@ def secant_ls_3p(y, x_0, tol, x_1=None, f_prime=None,
             if restriction is not None and not restriction(x_2):
                 # restriction not fulfilled - cannot evaluate func.
                 x_2 = x_k
+                f_2 = y(x_2)
             else:
                 f_2 = y(x_2)
-                g_2 = 1 / 2 * f_2**2
+            g_2 = 1 / 2 * f_2**2
             descent = alpha * lambda_ls * g_prime_0
             g_max = g_0 + descent
 
