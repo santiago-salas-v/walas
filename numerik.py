@@ -150,8 +150,8 @@ def gauss_elimination(a, b):
 
 
 # noinspection PyAugmentAssignment
-def nr_ls(x0, f, j, tol, max_it, inner_loop_condition,
-          notify_status_func, process_func_handle,
+def nr_ls(x0, f, j, tol=finfo(float).eps, max_it=100, inner_loop_condition=None,
+          notify_status_func=None, process_func_handle=None,
           alpha=1e-4):
     """
     Newton method: G(x) = J(x)^-1 * F(x)
@@ -249,7 +249,8 @@ def nr_ls(x0, f, j, tol, max_it, inner_loop_condition,
                 pass
             if premature_stop:
                 # Non-functional gui processing
-                process_func_handle()
+                if process_func_handle is not None:
+                    process_func_handle()
                 stop = True
                 # End non-functional processing
                 # if form.progress_var.wasCanceled():
@@ -576,13 +577,17 @@ def secant_ls_3p(y, x_0, tol, x_1=None, f_prime=None,
     y_k_minus_1 = 0
     y_k_minus_2 = 0
     # relative length of p as calculated in the stopping routine
-    p = x_1 - x_0
+    if f_prime is not None:
+        inv_slope = 1 / f_prime(x_k)
+        p = -inv_slope * y_k
+    else:
+        p = x_1 - x_0
     rellength = abs(p / x_k)
     lambda_min = tol / rellength
     accum_step = 0.0
     total_backtracks = 0
     backtrackcount = 0
-    success = True
+    success = False
     steps = []
     y_list = []
     x_list = []
@@ -591,6 +596,7 @@ def secant_ls_3p(y, x_0, tol, x_1=None, f_prime=None,
         x_list += [x_k]
         steps += [accum_step]
         if abs(y_k) <= tol:
+            success = True
             break
         if f_prime is not None:
             inv_slope = - 1 / f_prime(x_k)
@@ -600,7 +606,6 @@ def secant_ls_3p(y, x_0, tol, x_1=None, f_prime=None,
             y_k_minus_1 = y_k
             g_k_minus_1 = g_k
             g_prime_k_minus_1 = g_prime_k
-
         elif j == 0:
             inv_slope = -(x_1 - x_0) / y_k
             p = -inv_slope * y_k

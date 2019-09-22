@@ -1,5 +1,5 @@
 from poly_3_4 import solve_cubic, solve_quartic
-from numerik import secant_ls_3p
+from numerik import secant_ls_3p, nr_ls
 from poly_n import zroots
 from numpy import array, append, zeros, abs, ones, empty_like, empty, argwhere, unique, asarray, concatenate
 from numpy import sqrt, outer, sum, log, exp, multiply, diag, sign
@@ -8,11 +8,13 @@ from numpy.random import randint
 from scipy import optimize
 from matplotlib import pyplot as plt
 import sys
+# from setup_results_log import notify_status_func, setup_log_file
 
 r = 8.314 * 10. ** 6 / 10. ** 5  # bar cm^3/(mol K)
 rlv = 0.8  # Rücklaufverhältnis
 t_flash = 273.16 + 60  # K
 tol = finfo(float).eps
+# setup_log_file('log_z_l_v.log', with_console=True)
 
 # Nach unten hin: CO, H2, CO2, H2O, CH3OH, N2, CH4
 
@@ -815,15 +817,18 @@ def bubl_t(t, p, x_i, tc_i, pc_i, af_omega_i,
 def bubl_point_step_l_k(t, p, x_i, tc_i, pc_i, af_omega_i,
                         alpha_tr, epsilon, sigma, psi, omega,
                         max_it, tol=tol, full_output=False, y_i_est=None):
-    phi_l = phi(t, p, x_i, tc_i, pc_i, af_omega_i, 'l',
-                alpha_tr, epsilon, sigma, psi, omega)['phi']
+    soln_l = phi(t, p, x_i, tc_i, pc_i, af_omega_i, 'l',
+                alpha_tr, epsilon, sigma, psi, omega)
+    phi_l = soln_l['phi']
     if y_i_est is not None:
-        phi_v = phi(t, p, y_i_est, tc_i, pc_i, af_omega_i, 'v',
-                    alpha_tr, epsilon, sigma, psi, omega)['phi']
+        soln_v = phi(t, p, y_i_est, tc_i, pc_i, af_omega_i, 'v',
+                    alpha_tr, epsilon, sigma, psi, omega)
+        phi_v = soln_v['phi']
     else:
         y_i_est = asarray(y_i_est)
-        phi_v = phi(t, p, x_i, tc_i, pc_i, af_omega_i, 'v',
-                    alpha_tr, epsilon, sigma, psi, omega)['phi']
+        soln_v = phi(t, p, x_i, tc_i, pc_i, af_omega_i, 'v',
+                    alpha_tr, epsilon, sigma, psi, omega)
+        phi_v = soln_v['phi']
     k_i = phi_l / phi_v
     sum_ki_xi = sum(k_i * x_i)
     y_i = k_i * x_i / sum_ki_xi
@@ -832,8 +837,9 @@ def bubl_point_step_l_k(t, p, x_i, tc_i, pc_i, af_omega_i,
     success = True
     while not stop:
         sum_ki_xi_k_minus_1 = sum_ki_xi
-        phi_v = phi(t, p, y_i, tc_i, pc_i, af_omega_i, 'v',
-                    alpha_tr, epsilon, sigma, psi, omega)['phi']
+        soln_v = phi(t, p, y_i, tc_i, pc_i, af_omega_i, 'v',
+                    alpha_tr, epsilon, sigma, psi, omega)
+        phi_v = soln_v['phi']
         k_i = phi_l / phi_v
         sum_ki_xi = sum(k_i * x_i)
         y_i = k_i * x_i / sum_ki_xi
@@ -845,8 +851,10 @@ def bubl_point_step_l_k(t, p, x_i, tc_i, pc_i, af_omega_i,
             stop = True
             success = False
     if full_output:
+        z_l = soln_l['z']
+        z_v = soln_v['z']
         soln = dict()
-        for item in ['x_i', 'y_i', 'phi_l', 'phi_v', 'k_i', 'sum_ki_xi', 'p', 't', 'success']:
+        for item in ['x_i', 'y_i', 'phi_l', 'phi_v', 'z_l', 'z_v', 'k_i', 'sum_ki_xi', 'p', 't', 'success']:
             soln[item] = locals().get(item)
         return soln
     else:
@@ -900,9 +908,11 @@ def bubl_t_gamma_phi(t, p, x_i, tc_i, pc_i, af_omega_i,
         phi_coef_fun_i = phi_i_v / phi_i_sat * poynting_i
 
     k_i = gamma_i * p_i_sat / phi_coef_fun_i / p
+    phi_v = phi_i_v
     soln = dict()
-    for item in ['p', 't', 'success', 'n_it', 'gamma_i', 'phi_coef_fun_i',
-                 'p_i_sat', 'z_l_i', 'v_l_i', 'poynting_i', 'y_i', 'x_i', 'k_i']:
+    for item in ['t', 'p', 'success', 'n_it', 'gamma_i', 'phi_coef_fun_i',
+                 'phi_v', 'phi_i_sat', 'p_i_sat', 'z_l_i', 'v_l_i', 'poynting_i',
+                 'y_i', 'x_i', 'k_i']:
         soln[item] = locals().get(item)
     return soln
 
@@ -913,12 +923,11 @@ def bubl_p_gamma_phi(t, p, x_i, tc_i, pc_i, af_omega_i,
                         max_it, tol=tol, full_output=False, y_i_est=None):
     x_i = asarray(x_i)
     gamma_i = gamma_u(t, x_i, sec_j, nu_ij)
-    soln = p_i_sat_ceos(t, p, tc_i, pc_i, af_omega_i, alpha_tr, epsilon, sigma, psi, omega, max_it=max_it, tol=tol)
+    soln = p_i_sat_ceos(t, p, tc_i, pc_i, af_omega_i,
+                        alpha_tr, epsilon, sigma, psi, omega, max_it=max_it, tol=tol)
     p_i_sat = soln['p']
     phi_i_sat = soln['phi_v']
     z_l_i = soln['z_l']
-    v_l_i = z_l_i * r * t / p
-    poynting_i = exp(-v_l_i * (p - p_i_sat) / (r * t))
 
     phi_coef_fun_i = ones(x_i.size)
 
@@ -930,25 +939,31 @@ def bubl_p_gamma_phi(t, p, x_i, tc_i, pc_i, af_omega_i,
         y_i = y_i / sum(y_i)
         phi_i_v = phi(t, p, y_i, tc_i, pc_i, af_omega_i, 'v',
                   alpha_tr, epsilon, sigma, psi, omega)['phi']
+        v_l_i = z_l_i * r * t / p
+        poynting_i = exp(-v_l_i * (p - p_i_sat) / (r * t))
         phi_coef_fun_i = phi_i_v / phi_i_sat * poynting_i
         success = abs(delta_p) <= tol
         if success:
             break
 
     k_i = gamma_i * p_i_sat / phi_coef_fun_i / p
+    phi_v = phi_i_v
     soln = dict()
     for item in ['t', 'p', 'success', 'n_it', 'gamma_i', 'phi_coef_fun_i',
-                 'p_i_sat', 'z_l_i', 'v_l_i', 'poynting_i', 'y_i', 'x_i', 'k_i']:
+                 'phi_v', 'phi_i_sat', 'p_i_sat', 'z_l_i', 'v_l_i', 'poynting_i',
+                 'y_i', 'x_i', 'k_i']:
         soln[item] = locals().get(item)
     return soln
 
 
 def dew_p(t, p, y_i, tc_i, pc_i, af_omega_i,
           alpha_tr, epsilon, sigma, psi, omega,
-          max_it, tol=tol, x_i_est=None, print_iterations=False):
+          sec_j=None, nu_ij=None,
+          max_it=100, tol=tol, x_i_est=None, print_iterations=False):
     """Dew pressure determination
 
         Determines dew pressure at given temperature and vapor composition. Lee Kessler method.
+        If sec_j and nu_ij are provided, gamma-phi approach is used, otherwise phi-phi.
 
         ref. Smith, Joseph Mauk ; Ness, Hendrick C. Van ; Abbott, Michael M.: \
         Introduction to chemical engineering thermodynamics. New York: McGraw-Hill, 2005.\
@@ -968,22 +983,31 @@ def dew_p(t, p, y_i, tc_i, pc_i, af_omega_i,
         :param sigma: CEOS sigma
         :param psi: CEOS psi
         :param omega: CEOS omega
+        :param sec_j: unifac secondary group / subgroup
+        :param nu_ij: coefficients in unifac subgroups per component
         :param max_it: maximum iterations
         :param tol: tolerance of method
         :param x_i_est: optional liquid composition (estimate)
         :param print_iterations: optionally print Lee-Kessler iterations
         :return: dictionary with 'x_i', 'y_i', 'phi_l', 'phi_v', 'k_i', 'sum_ki_xi', 'p', 'success'
         """
-    soln = secant_ls_3p(lambda p_var: dew_point_step_l_k(
-        t, p_var, y_i, tc_i, pc_i, af_omega_i,
-        alpha_tr, epsilon, sigma, psi, omega,
-        max_it, tol=tol, x_i_est=x_i_est), p, tol=tol, x_1=1.001 * p,
-                        restriction=lambda p_val: p_val > 0,
-                        print_iterations=print_iterations)
-    p = soln['x']
-    soln = dew_point_step_l_k(t, p, y_i, tc_i, pc_i, af_omega_i,
-                              alpha_tr, epsilon, sigma, psi, omega, max_it,
-                              full_output=True, x_i_est=x_i_est)
+    if sec_j is None:
+        soln = secant_ls_3p(lambda p_var: dew_point_step_l_k(
+            t, p_var, y_i, tc_i, pc_i, af_omega_i,
+            alpha_tr, epsilon, sigma, psi, omega,
+            max_it, tol=tol, x_i_est=x_i_est), p, tol=tol, x_1=1.001 * p,
+                            restriction=lambda p_val: p_val > 0,
+                            print_iterations=print_iterations)
+        p = soln['x']
+        soln = dew_point_step_l_k(t, p, y_i, tc_i, pc_i, af_omega_i,
+                                  alpha_tr, epsilon, sigma, psi, omega, max_it,
+                                  full_output=True, x_i_est=x_i_est)
+    else:
+        soln = dew_p_gamma_phi(
+            t, p, y_i, tc_i, pc_i, af_omega_i,
+            alpha_tr, epsilon, sigma, psi, omega,
+            sec_j, nu_ij,
+            max_it, tol=tol, x_i_est=x_i_est)
     return soln
 
 
@@ -1071,54 +1095,62 @@ def dew_point_step_l_k(t, p, y_i, tc_i, pc_i, af_omega_i,
         return 1 - sum_yi_over_ki
 
 
-def p_for_3_real_roots(t, p, x_i, tc_i, pc_i, af_omega_i, max_it, tol=tol):
-    tr_i = t / tc_i
-    a_i = psi * alpha_tr(tr_i, af_omega_i) * r ** 2 * tc_i ** 2 / pc_i
-    b_i = omega * r * tc_i / pc_i
-    q_i = a_i / (b_i * r * t)
-    a_ij = sqrt(outer(a_i, a_i))
+def dew_p_gamma_phi(t, p, y_i, tc_i, pc_i, af_omega_i,
+                        alpha_tr, epsilon, sigma, psi, omega,
+                        sec_j, nu_ij,
+                        max_it, tol=tol, full_output=False, x_i_est=None):
+    y_i = asarray(y_i)
+    phi_coef_fun_i = ones(y_i.size)
+    gamma_i = ones(y_i.size)
+    soln = p_i_sat_ceos(
+        t, p, tc_i, pc_i, af_omega_i,
+        alpha_tr, epsilon, sigma, psi, omega, max_it=max_it, tol=tol)
+    p_i_sat = soln['p']
+    phi_i_sat = soln['phi_v']
+    z_l_i = soln['z_l']
 
-    # Variablen, die von der Flüssigkeit-Zusammensetzung abhängig sind
-    b = sum(x_i * b_i)
-    a = x_i.dot(a_ij).dot(x_i)
+    p = 1 / sum(y_i * phi_coef_fun_i / gamma_i / p_i_sat)
+    x_i = y_i * phi_coef_fun_i / gamma_i / p_i_sat * p
+    x_i = x_i / sum(x_i)
 
-    # p loop
-    for i in range(max_it):
-        beta_i = b_i * p / (r * t)
-        beta = b * p / (r * t)
-        q = a / (b * r * t)
-        a_mp_i = -a + 2 * a_ij.dot(x_i)  # partielles molares a_i
-        b_mp_i = b_i  # partielles molares b_i
-        q_mp_i = q * (1 + a_mp_i / a - b_i / b)  # partielles molares q_i
+    gamma_i = gamma_u(t, x_i, sec_j, nu_ij)
 
-        a1 = beta * (epsilon + sigma) - beta - 1
-        a2 = q * beta + epsilon * sigma * beta ** 2 \
-               - beta * (epsilon + sigma) * (1 + beta)
-        a3 = -(epsilon * sigma * beta ** 2 * (1 + beta) +
-                 q * beta ** 2)
-        disc = 1/27 * (- 1 / 3 * a1**2 + a2)**3 + \
-               1 / 4 * (2 / 27 * a1**3 - 1 / 3 * a1 * a2 + a3)**2
-        da1_dp = 1 / p * beta * (epsilon + sigma - 1)
-        da2_dp = 1 / p * (q * beta + 2 * epsilon * sigma * beta ** 2 \
-                          - beta * (epsilon + sigma) * (1 + 2 * beta))
-        da3_dp = 1 / p * (-(epsilon * sigma * beta ** 2 * (2 + 3 * beta) +
-                            2 * q * beta ** 2))
-        disc = 1 / 27 * (- 1 / 3 * a1 ** 2 + a2) ** 3 + \
-               1 / 4 * (2 / 27 * a1 ** 3 - 1 / 3 * a1 * a2 + a3) ** 2
-        ddisc_dp = 1 / 9 * (- 1 / 3 * a1 ** 2 + a2) ** 2 * (
-                -2 / 3 * a1 * da1_dp + da2_dp) + \
-                   1 / 2 * (2 / 27 * a1 ** 3 - 1 / 3 * a1 * a2 + a3) * (
-                           2 / 9 * a1 ** 2 * da1_dp
-                           - 1 / 3 * (a1 * da2_dp + a2 * da1_dp) + da3_dp)
+    p = 1 / sum(y_i * phi_coef_fun_i / gamma_i / p_i_sat)
 
-        f = disc + tol
-        df_dp = ddisc_dp
-        inv_slope = 1 / df_dp
+    for n_it in range(max_it):
         p_old = p
-        p = p_old - inv_slope * f
-        if disc <= -tol:
+        phi_i_v = phi(t, p, y_i, tc_i, pc_i, af_omega_i, 'v',
+                      alpha_tr, epsilon, sigma, psi, omega)['phi']
+        v_l_i = z_l_i * r * t / p
+        poynting_i = exp(-v_l_i * (p - p_i_sat) / (r * t))
+        phi_coef_fun_i = phi_i_v / phi_i_sat * poynting_i
+
+        for n_it_inner in range(max_it):
+            gamma_i_old = gamma_i
+            x_i = y_i * phi_coef_fun_i / gamma_i / p_i_sat * p
+            x_i = x_i / sum(x_i)
+            gamma_i = gamma_u(t, x_i, sec_j, nu_ij)
+            delta_gamma = gamma_i - gamma_i_old
+            mag_delta_gamma = sqrt(delta_gamma.dot(delta_gamma))
+            success = mag_delta_gamma <= tol
+            if success:
+                break
+
+        p = 1 / sum(y_i * phi_coef_fun_i / gamma_i / p_i_sat)
+        delta_p = p - p_old
+        success = abs(delta_p) <= tol
+        if success:
             break
-    return p
+
+    k_i = gamma_i * p_i_sat / phi_coef_fun_i / p
+    phi_v = phi_i_v
+    soln = dict()
+    for item in ['t', 'p', 'success', 'n_it', 'gamma_i', 'phi_coef_fun_i',
+                 'phi_v', 'phi_i_sat', 'p_i_sat', 'z_l_i', 'v_l_i', 'poynting_i',
+                 'y_i', 'x_i', 'k_i']:
+        soln[item] = locals().get(item)
+    return soln
+
 
 def p_est(t, p, x_i, tc_i, pc_i, af_omega_i, max_it, tol=tol):
     x_i = asarray(x_i)
@@ -1142,8 +1174,8 @@ def p_est(t, p, x_i, tc_i, pc_i, af_omega_i, max_it, tol=tol):
     d2p_dv2_at_rho_lb = 2 * r * t / (v - b) ** 3 - a / ((v + epsilon * b) * (v + sigma * b)) * (
             1 / (v + epsilon * b) ** 2 + 1 / (v + sigma * b) ** 2
     ) - a / ((v + epsilon * b) * (v + sigma * b)) ** 2 * (
-                                   1 + (v + epsilon * b) / (v + sigma * b) + 1 + (v + sigma * b) / (v + epsilon * b)
-                           )
+            1 + (v + epsilon * b) / (v + sigma * b) + 1 + (v + sigma * b) / (v + epsilon * b)
+    )
 
     dp_drho_at_rho_lb = - 1/rho_lb**2 * dp_dv_at_rho_lb
     d2p_drho_at_rho_lb = 1/rho_lb**4 * d2p_dv2_at_rho_lb + dp_dv_at_rho_lb * 2 / rho_lb**3
@@ -1695,43 +1727,68 @@ def isot_flash_solve(t, p, z_i, tc_i, pc_i, af_omega_i, max_it=20,
 
 
 def pt_flash(t, p, z_i, tc_i, pc_i, af_omega_i,
-               alpha_tr, epsilon, sigma, psi, omega, max_it, tol):
+             alpha_tr, epsilon, sigma, psi, omega,
+             sec_j=None, nu_ij=None, max_it=100, tol=tol):
     bubl_p_soln = bubl_p(t, p, z_i, tc_i, pc_i, af_omega_i,
-               alpha_tr, epsilon, sigma, psi, omega, max_it=max_it, tol=tol)
+                         alpha_tr, epsilon, sigma, psi, omega,
+                         sec_j=sec_j, nu_ij=nu_ij, max_it=max_it, tol=tol)
     dew_p_soln = dew_p(t, p, z_i, tc_i, pc_i, af_omega_i,
-               alpha_tr, epsilon, sigma, psi, omega, max_it=max_it, tol=tol)
+                         alpha_tr, epsilon, sigma, psi, omega,
+                         sec_j=sec_j, nu_ij=nu_ij, max_it=max_it, tol=tol)
     p_bubl, p_dew = bubl_p_soln['p'], dew_p_soln['p']
     phi_bubl, phi_dew = bubl_p_soln['phi_v'], dew_p_soln['phi_v']
+    gamma_i_bubl, gamma_i_dew = bubl_p_soln['gamma_i'], dew_p_soln['gamma_i']
+    poynting_i_bubl, poynting_i_dew = bubl_p_soln['poynting_i'], dew_p_soln['poynting_i']
+    phi_i_sat = dew_p_soln['phi_i_sat']  # equal to bubl_p_soln['phi_i_sat']
+    p_i_sat = bubl_p_soln['p_i_sat']
     if  p_dew < p and p < p_bubl:
         # 0 < v_f < 1
         # gamma-phi-formulation - svn eq. 14.1
         # $y_i \Phi_i P = x_i \gamma_i P_i^{sat}$
-        gamma_i = ones(phi_dew.size)
+        gamma_i = gamma_i_dew + (gamma_i_bubl - gamma_i_dew) * (p - p_dew) / (p_bubl - p_dew)
         phi_i_v = phi_dew + (phi_bubl - phi_dew) * (p - p_dew) / (p_bubl - p_dew)
-        phi_i_sat = phi_dew
-        poynting = 1.0
-        phi_i = phi_i_v / phi_i_sat * poynting
-        p_i_sat = p_bubl
+        poynting_i = poynting_i_dew + (poynting_i_bubl - poynting_i_dew) * (p - p_dew) / (p_bubl - p_dew)
         v_f = 1 + (0 - 1) * (p - p_dew) / (p_bubl - p_dew)
-        k_i = gamma_i * p_i_sat / (phi_i * p)
-        soln_v_f = secant_ls_3p(lambda v_f: sum(
-            z_i * (1 - k_i) / (1 + v_f * (k_i - 1))), 0.5, tol=1e-10, x_1=0.4,
-                                restriction=lambda v_f_val: v_f_val >= 0,
-                                print_iterations=False)
-        v_f = soln_v_f['x']
-        x_i = z_i / (1 + v_f * (k_i - 1))
-        y_i = k_i * x_i
+        y_i = z_i
+        x_i = z_i
+        for n_it in range(max_it):
+            y_i_old = y_i
+            x_i_old = x_i
+            v_f_old = v_f
+            phi_coef_fun_i = phi_i_v / phi_i_sat * poynting_i
+            k_i = gamma_i * p_i_sat / (phi_coef_fun_i * p)
+            soln_v_f = secant_ls_3p(
+                lambda v_f: sum(z_i * (1 - k_i) / (1 + v_f * (k_i - 1))), v_f, tol=1e-10,
+                f_prime=lambda v_f: -sum(z_i * (k_i - 1)**2 / (1 + v_f * (k_i - 1))**2),
+                restriction=lambda v_f_val: v_f_val >= 0,
+                print_iterations=False)
+            # soln_v_f = nr_ls(
+            #     v_f, lambda v_f: sum(z_i * (1 - k_i) / (1 + v_f * (k_i - 1))),
+            #     lambda v_f: -sum(z_i * (k_i - 1) ** 2 / (1 + v_f * (k_i - 1)) ** 2),
+            #     tol=1e-10, inner_loop_condition=lambda v_f_val: v_f_val >= 0,
+            #     notify_status_func=notify_status_func)
+            v_f = soln_v_f['x']
+            x_i = z_i / (1 + v_f * (k_i - 1))
+            y_i = k_i * x_i
+            delta_x_i = x_i - x_i_old
+            delta_y_i = y_i - y_i_old
+            delta_v_f = v_f - v_f_old
+            mag_delta_x_i = sqrt(delta_x_i.dot(delta_x_i))
+            mag_delta_y_i = sqrt(delta_y_i.dot(delta_y_i))
+            mag_delta_v_f = sqrt(delta_v_f**2)
+            success = mag_delta_x_i <= tol and mag_delta_y_i <=tol and mag_delta_v_f <= tol
+            if success:
+                break
+            gamma_i = gamma_u(t, x_i, sec_j, nu_ij)
+            phi_i_v = phi(t, p, y_i, tc_i, pc_i, af_omega_i, 'v',
+                          alpha_tr, epsilon, sigma, psi, omega)['phi']
     elif p_dew >= p:
         v_f = 1.0
-        soln_l = bubl_p_soln
-        soln_v = bubl_p_soln
     elif p_bubl <= p:
         v_f = 0.0
-        soln_l = dew_p_soln
-        soln_v = dew_p_soln
     soln = dict()
-    for item in ['soln_l', 'soln_v', 'soln_v_f',
-                 'k_i', 'v_f', 'x_i', 'y_i']:
+    for item in ['t', 'p', 'k_i', 'v_f', 'z_i', 'x_i', 'y_i', 'gamma_i', 'phi_coef_fun_i',
+                 'dew_p_soln', 'bubl_p_soln', 'p_dew', 'p_bubl', 'poynting', 'n_it']:
         soln[item] = locals().get(item)
     return soln
 
@@ -2190,7 +2247,7 @@ def svn_tab_14_1_2():
     print('SVN Table 14.1 - n-hexane (1) / ethanol (2) / methylcyclopentane (3) /' +
           'benzene (4) at {:0.2f} K'.format(t))
 
-    print('i\tx_i\t\ty_i\t\tp_i_sat\tphi\t\tgamma\tk_i')
+    print('i\tx_i\t\ty_i\t\tp_i_sat\tphi\t\tgamma\tK_i')
     for i in range(len(z_i)):
         print(('{:d}'+'\t{:.4g}'*6).format(
             i, z_i[i], y_i[i], p_i_sat[i], phi_coef_fun_i[i], gamma_j[i], k_i[i]))
@@ -2198,13 +2255,32 @@ def svn_tab_14_1_2():
     print('\n'*2)
 
     z_i = array([0.250, 0.400, 0.200, 0.150])
-    t = bubl_t(273.15, p, z_i, tc_i, pc_i, af_omega_i,
-           alpha_tr, epsilon, sigma, psi, omega,
-           max_it=max_it, tol=tol, print_iterations=False)['t']
-    t = 341.1
-    soln = pt_flash(t, p, z_i, tc_i, pc_i, af_omega_i,
-               alpha_tr, epsilon, sigma, psi, omega, max_it=max_it, tol=tol)
-    print(soln)
+    soln = bubl_t(273.15, p, z_i, tc_i, pc_i, af_omega_i,
+                  alpha_tr, epsilon, sigma, psi, omega,
+                  sec_i, nu_ji,
+                  max_it, 1e-10, print_iterations=True)
+    t = soln['t']
+    soln = pt_flash(334.152/334.85*334.15, p, z_i, tc_i, pc_i, af_omega_i,
+                    alpha_tr, epsilon, sigma, psi, omega,
+                    sec_i, nu_ji, max_it=max_it, tol=tol)
+    y_i = soln['y_i']
+    x_i = soln['x_i']
+    z_i = soln['z_i']
+    k_i = soln['k_i']
+    v_f = soln['v_f']
+    t = soln['t']
+    p = soln['p']
+    n_it = soln['n_it']
+    phi_coef_fun_i = soln['phi_coef_fun_i']
+
+    print('SVN Table 14.2 - n-hexane (1) / ethanol (2) / methylcyclopentane (3) /' +
+          'benzene (4) at {:0.4g} bar and {:0.4g} K'.format(p, t))
+    print('i\tz_i\t\tx_i\t\ty_i\t\tK_i\t\tPhi_i\t\tgamma_i')
+    for i in range(len(z_i)):
+        print(('{:d}' + '\t{:.4f}' * 6).format(
+            i, z_i[i], x_i[i], y_i[i], k_i[i], phi_coef_fun_i[i], gamma_j[i]))
+    print('p: {:0.3f} bar\tT(calc): {:0.3f} K\tIterations:{:d}'.format(p, t, n_it))
+    print('\n' * 2)
 
 
 def pat_ue_03_flash():
@@ -2897,15 +2973,15 @@ def gamma_u(t, x_j, sec_j, nu_ij):
     return gamma_j
 
 
-vdi_atlas()
+# vdi_atlas()
 # svn_14_1()
 # svn_fig_14_8()
-# svn_14_2()
+svn_14_2()
 # zs_1998()
 # ppo_ex_8_12()
 # svn_h_1()
 # fredenslund_t_6()
-svn_tab_14_1_2()
+# svn_tab_14_1_2()
 # pat_ue_03_flash()
 # isot_flash_seader_4_1()
 # pat_ue_03_vollstaendig(0.2)
