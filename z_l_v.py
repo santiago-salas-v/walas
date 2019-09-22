@@ -388,10 +388,9 @@ def p_sat(t, af_omega, tc, pc):
     return optimize.root(fs, 1., method='lm')
 
 
-def p_i_sat_ceos(t, p0, tc_i, pc_i, af_omega_i,
+def p_i_sat_ceos(t, p, tc_i, pc_i, af_omega_i,
                  alpha_tr, epsilon, sigma, psi, omega,
-                 max_it, tol=tol):
-    # soln: ['p', 'success', 'n_fev', 'zero_fun', 'z_l', 'z_v', 'phi_l', 'phi_v']:
+                 max_it=100, tol=tol):
     n_comps = asarray(tc_i).size
     p_sat_list = empty(n_comps)
     success = empty(n_comps, dtype=bool)
@@ -407,40 +406,38 @@ def p_i_sat_ceos(t, p0, tc_i, pc_i, af_omega_i,
         else:
             tc, pc, af_omega = tc_i, pc_i, af_omega_i
         # approach saturation if possible
-        first_step_soln = p_i_sat_ceos_step(
-            t, p0, tc, pc, af_omega,
-            alpha_tr, epsilon, sigma, psi, omega, max_it, tol
-        )
+        first_step_soln = approach_pt_i_sat_ceos(
+            t, p, tc, pc, af_omega, alpha_tr, epsilon, sigma, psi, omega,
+            p_or_t='p', max_it=max_it, tol=tol)
         if tc < t or not first_step_soln['success']:
             # no p_sat if supercritical
             p_sat_list[i] = nan
         else:
             p0_it = first_step_soln['p']
             inv_slope = 1 / first_step_soln['ddisc_dp']
-            func = first_step_soln['f']
             p1_it = p0_it * (1 + sign(-inv_slope) * 0.001)
             if first_step_soln['n_fev'] == 1:
                 # initial slope not necessarily convergent, direct it toward descending disc
                 disc_0 = first_step_soln['disc']
-                disc_1 = p_i_sat_ceos_step(
+                disc_1 = approach_pt_i_sat_ceos(
                     t, p1_it, tc, pc, af_omega, alpha_tr, epsilon, sigma, psi, omega,
-                    max_it, tol)['disc']
+                    p_or_t='p', max_it=max_it, tol=tol)['disc']
                 inv_slope = -(p1_it - p0_it) / (disc_1 - disc_0)
                 p1_it = p0_it * (1 + sign(-inv_slope) * 0.001)
             soln_temp = secant_ls_3p(
-                lambda p_var: sat_ceos_step(
+                lambda p_var: phi_sat_ceos(
                     t, p_var, tc, pc, af_omega,
                     alpha_tr, epsilon, sigma, psi, omega)['zero_fun'],
                 p0_it, tol, x_1=p1_it,
-                restriction=lambda p_var: p_var > 0 and sat_ceos_step(
+                restriction=lambda p_var: p_var > 0 and phi_sat_ceos(
                     t, p_var, tc, pc, af_omega, alpha_tr, epsilon,
                     sigma, psi, omega)['success'],
                 print_iterations=False
             )
             n_fev[i] = soln_temp['iterations'] + soln_temp['total_backtracks']
             p_sat_list[i] = soln_temp['x']
-            soln_temp = sat_ceos_step(t, p_sat_list[i], tc, pc, af_omega,
-                                      alpha_tr, epsilon, sigma, psi, omega)
+            soln_temp = phi_sat_ceos(t, p_sat_list[i], tc, pc, af_omega,
+                                     alpha_tr, epsilon, sigma, psi, omega)
             success[i] = soln_temp['success']
             zero_fun[i] = soln_temp['zero_fun']
             z_l[i] = soln_temp['z_l']
@@ -450,22 +447,85 @@ def p_i_sat_ceos(t, p0, tc_i, pc_i, af_omega_i,
 
     p = p_sat_list
     soln = dict()
-    for item in ['p', 'success', 'n_fev', 'zero_fun', 'z_l', 'z_v', 'phi_l', 'phi_v']:
+    for item in ['p', 't', 'success', 'n_fev', 'zero_fun', 'z_l', 'z_v', 'phi_l', 'phi_v']:
         soln[item] = locals().get(item)
     return soln
 
 
-def p_i_sat_ceos_step(t, p0, tc_i, pc_i, af_omega_i,
+def t_i_sat_ceos(t, p, tc_i, pc_i, af_omega_i,
                  alpha_tr, epsilon, sigma, psi, omega,
-                 max_it, tol=tol):
-    tr_i = t / tc_i
-    a_i = psi * alpha_tr(tr_i, af_omega_i) * r ** 2 * tc_i ** 2 / pc_i
+                 max_it=100, tol=tol):
+    n_comps = asarray(tc_i).size
+    t_sat_list = empty(n_comps)
+    success = empty(n_comps, dtype=bool)
+    n_fev = empty(n_comps, dtype=int)
+    zero_fun = empty(n_comps)
+    z_l = empty(n_comps)
+    z_v = empty(n_comps)
+    phi_l = empty(n_comps)
+    phi_v = empty(n_comps)
+    for i in range(n_comps):
+        if n_comps > 1:
+            tc, pc, af_omega = tc_i[i], pc_i[i], af_omega_i[i]
+        else:
+            tc, pc, af_omega = tc_i, pc_i, af_omega_i
+        # approach saturation if possible
+        first_step_soln = approach_pt_i_sat_ceos(
+            t, p, tc, pc, af_omega, alpha_tr, epsilon, sigma, psi, omega,
+            p_or_t='t', max_it=max_it, tol=tol)
+        if pc < p or not first_step_soln['success']:
+            # no p_sat if supercritical
+            t_sat_list[i] = nan
+        else:
+            t0_it = first_step_soln['t']
+            inv_slope = 1 / first_step_soln['ddisc_dt']
+            t1_it = t0_it * (1 + sign(-inv_slope) * 0.001)
+            if first_step_soln['n_fev'] == 1:
+                # initial slope not necessarily convergent, direct it toward descending disc
+                disc_0 = first_step_soln['disc']
+                disc_1 = approach_pt_i_sat_ceos(
+                    t1_it, p, tc, pc, af_omega, alpha_tr, epsilon, sigma, psi, omega,
+                    p_or_t='t', max_it=max_it, tol=tol)['disc']
+                inv_slope = -(t1_it - t0_it) / (disc_1 - disc_0)
+                t1_it = t0_it * (1 + sign(-inv_slope) * 0.001)
+            soln_temp = secant_ls_3p(
+                lambda t_var: phi_sat_ceos(
+                    t_var, p, tc, pc, af_omega,
+                    alpha_tr, epsilon, sigma, psi, omega)['zero_fun'],
+                t0_it, tol, x_1=t1_it,
+                restriction=lambda t_var: t_var > 0 and phi_sat_ceos(
+                    t_var, p, tc, pc, af_omega, alpha_tr, epsilon,
+                    sigma, psi, omega)['success'],
+                print_iterations=False
+            )
+            n_fev[i] = soln_temp['iterations'] + soln_temp['total_backtracks']
+            t_sat_list[i] = soln_temp['x']
+            soln_temp = phi_sat_ceos(t_sat_list[i], p, tc, pc, af_omega,
+                                     alpha_tr, epsilon, sigma, psi, omega)
+            success[i] = soln_temp['success']
+            zero_fun[i] = soln_temp['zero_fun']
+            z_l[i] = soln_temp['z_l']
+            z_v[i] = soln_temp['z_v']
+            phi_l[i] = soln_temp['phi_l']
+            phi_v[i] = soln_temp['phi_v']
+
+    t = t_sat_list
+    soln = dict()
+    for item in ['p', 't', 'success', 'n_fev', 'zero_fun', 'z_l', 'z_v', 'phi_l', 'phi_v']:
+        soln[item] = locals().get(item)
+    return soln
+
+
+def approach_pt_i_sat_ceos(t, p, tc_i, pc_i, af_omega_i,
+                           alpha_tr, epsilon, sigma, psi, omega,
+                           p_or_t='p', max_it=100, tol=tol):
     b_i = omega * r * tc_i / pc_i
-    p = p0
     n_fev = 0
     it_outer = 0
     while n_fev in range(max_it):
         n_fev += 1
+        tr_i = t / tc_i
+        a_i = psi * alpha_tr(tr_i, af_omega_i) * r ** 2 * tc_i ** 2 / pc_i
         beta = b_i * p / (r * t)
         q = a_i / (b_i * r * t)
         a1 = beta * (epsilon + sigma) - beta - 1
@@ -501,17 +561,23 @@ def p_i_sat_ceos_step(t, p0, tc_i, pc_i, af_omega_i,
         if success:
             break
         f = disc + tol
-        df_dp = ddisc_dp
-        inv_slope = 1 / df_dp
-        p_old = p
-        p = p_old - inv_slope * f
+        if p_or_t == 'p':
+            df_dp = ddisc_dp
+            inv_slope = 1 / df_dp
+            p_old = p
+            p = p_old - inv_slope * f
+        elif p_or_t == 't':
+            df_dt = ddisc_dt
+            inv_slope = 1 / df_dt
+            t_old = t
+            t = t_old - inv_slope * f
     soln = dict()
     for item in ['p', 't', 'success', 'n_fev', 'ddisc_dt', 'ddisc_dp', 'f', 'disc']:
         soln[item] = locals().get(item)
     return soln
 
 
-def sat_ceos_step(t, p, tc_i, pc_i, af_omega_i, alpha_tr, epsilon, sigma, psi, omega):
+def phi_sat_ceos(t, p, tc_i, pc_i, af_omega_i, alpha_tr, epsilon, sigma, psi, omega):
     tr_i = t / tc_i
     a_i = psi * alpha_tr(tr_i, af_omega_i) * r ** 2 * tc_i ** 2 / pc_i
     b_i = omega * r * tc_i / pc_i
@@ -792,34 +858,50 @@ def bubl_t_gamma_phi(t, p, x_i, tc_i, pc_i, af_omega_i,
                         sec_j, nu_ij,
                         max_it, tol=tol, full_output=False, y_i_est=None):
     x_i = asarray(x_i)
+    soln = t_i_sat_ceos(t, p, tc_i, pc_i, af_omega_i,
+                        alpha_tr, epsilon, sigma, psi, omega, max_it=max_it, tol=tol)
+    t_i_sat = soln['t']
+    t = sum(x_i * t_i_sat)
     gamma_i = gamma_u(t, x_i, sec_j, nu_ij)
-    soln = p_i_sat_ceos(t, p, tc_i, pc_i, af_omega_i,
-                          alpha_tr, epsilon, sigma, psi, omega,
-                          max_it, tol=tol)
-    p_i_sat = soln['p']
-    phi_i_sat = soln['phi_v']
-    z_l_i = soln['z_l']
-    v_l_i = z_l_i * r * t / p
-    poynting_i = exp(-v_l_i * (p - p_i_sat) / (r * t))
-
     phi_coef_fun_i = ones(x_i.size)
+    soln = p_i_sat_ceos(t, p, tc_i, pc_i, af_omega_i,
+                        alpha_tr, epsilon, sigma, psi, omega, max_it=max_it, tol=tol)
+    p_i_sat = soln['p']
 
     for n_it in range(max_it):
-        p_old = p
-        p = sum(x_i * gamma_i * p_i_sat / phi_coef_fun_i)
-        delta_p = p - p_old
-        y_i = x_i * gamma_i * p_i_sat / phi_coef_fun_i / p
-        y_i = y_i / sum(y_i)
-        phi_i_v = phi(t, p, y_i, tc_i, pc_i, af_omega_i, 'v',
-                  alpha_tr, epsilon, sigma, psi, omega)['phi']
-        phi_coef_fun_i = phi_i_v / phi_i_sat * poynting_i
-        success = abs(delta_p) <= tol
+        # find closest to mean value, use as key component j for vapor pressure ratios
+        j = abs(p_i_sat - p_i_sat.mean()).argmin()
+        p_j_sat = p_i_sat[j]
+        p_j_sat = p / sum(x_i * gamma_i / phi_coef_fun_i * p_i_sat / p_j_sat)
+        # with sat. pressure of key component determine sat. temperature
+        t_old = t
+        t = t_i_sat_ceos(
+            t, p_j_sat, tc_i[j], pc_i[j], af_omega_i[j],
+            alpha_tr, epsilon, sigma, psi, omega, max_it=max_it, tol=tol
+        )['t'].item()
+
+        delta_t = t - t_old
+        success = abs(delta_t) <= tol
         if success:
             break
 
+        soln = p_i_sat_ceos(t, p, tc_i, pc_i, af_omega_i,
+                            alpha_tr, epsilon, sigma, psi, omega, max_it=max_it, tol=tol)
+        p_i_sat = soln['p']
+        phi_i_sat = soln['phi_v']
+        z_l_i = soln['z_l']
+        v_l_i = z_l_i * r * t / p
+        y_i = x_i * gamma_i * p_i_sat / phi_coef_fun_i / p
+        poynting_i = exp(-v_l_i * (p - p_i_sat) / (r * t))
+        phi_i_v = phi(t, p, y_i, tc_i, pc_i, af_omega_i, 'v',
+                      alpha_tr, epsilon, sigma, psi, omega)['phi']
+
+        gamma_i = gamma_u(t, x_i, sec_j, nu_ij)
+        phi_coef_fun_i = phi_i_v / phi_i_sat * poynting_i
+
     k_i = gamma_i * p_i_sat / phi_coef_fun_i / p
     soln = dict()
-    for item in ['p', 'success', 'n_it', 'gamma_i', 'phi_coef_fun_i',
+    for item in ['p', 't', 'success', 'n_it', 'gamma_i', 'phi_coef_fun_i',
                  'p_i_sat', 'z_l_i', 'v_l_i', 'poynting_i', 'y_i', 'x_i', 'k_i']:
         soln[item] = locals().get(item)
     return soln
@@ -831,9 +913,7 @@ def bubl_p_gamma_phi(t, p, x_i, tc_i, pc_i, af_omega_i,
                         max_it, tol=tol, full_output=False, y_i_est=None):
     x_i = asarray(x_i)
     gamma_i = gamma_u(t, x_i, sec_j, nu_ij)
-    soln = p_i_sat_ceos(t, p, tc_i, pc_i, af_omega_i,
-                          alpha_tr, epsilon, sigma, psi, omega,
-                          max_it, tol=tol)
+    soln = p_i_sat_ceos(t, p, tc_i, pc_i, af_omega_i, alpha_tr, epsilon, sigma, psi, omega, max_it=max_it, tol=tol)
     p_i_sat = soln['p']
     phi_i_sat = soln['phi_v']
     z_l_i = soln['z_l']
@@ -857,7 +937,7 @@ def bubl_p_gamma_phi(t, p, x_i, tc_i, pc_i, af_omega_i,
 
     k_i = gamma_i * p_i_sat / phi_coef_fun_i / p
     soln = dict()
-    for item in ['p', 'success', 'n_it', 'gamma_i', 'phi_coef_fun_i',
+    for item in ['t', 'p', 'success', 'n_it', 'gamma_i', 'phi_coef_fun_i',
                  'p_i_sat', 'z_l_i', 'v_l_i', 'poynting_i', 'y_i', 'x_i', 'k_i']:
         soln[item] = locals().get(item)
     return soln
@@ -1617,9 +1697,9 @@ def isot_flash_solve(t, p, z_i, tc_i, pc_i, af_omega_i, max_it=20,
 def pt_flash(t, p, z_i, tc_i, pc_i, af_omega_i,
                alpha_tr, epsilon, sigma, psi, omega, max_it, tol):
     bubl_p_soln = bubl_p(t, p, z_i, tc_i, pc_i, af_omega_i,
-               alpha_tr, epsilon, sigma, psi, omega, max_it, tol)
+               alpha_tr, epsilon, sigma, psi, omega, max_it=max_it, tol=tol)
     dew_p_soln = dew_p(t, p, z_i, tc_i, pc_i, af_omega_i,
-               alpha_tr, epsilon, sigma, psi, omega, max_it, tol)
+               alpha_tr, epsilon, sigma, psi, omega, max_it=max_it, tol=tol)
     p_bubl, p_dew = bubl_p_soln['p'], dew_p_soln['p']
     phi_bubl, phi_dew = bubl_p_soln['phi_v'], dew_p_soln['phi_v']
     if  p_dew < p and p < p_bubl:
@@ -1664,9 +1744,8 @@ def vdi_atlas():
             p_sat(-256.6 + 273.15, -0.216, 33.19, 13.13).x.item() * 1000
         ) + ' mbar. (Literaturwert 250mbar)'
     )
-    p_new = p_i_sat_ceos(-256.6 + 273.15, 10, 33.19, 13.13,  -0.216,
-                 alpha_tr, epsilon, sigma, psi, omega,
-                 max_it=100, tol=tol)
+    p_new = p_i_sat_ceos(-256.6 + 273.15, 10, 33.19, 13.13, -0.216, alpha_tr, epsilon, sigma, psi, omega, max_it=100,
+                         tol=tol)
     p_new = bubl_p(-256.6 + 273.15, 1, 1.0, 33.19, 13.13, -0.216,
                    alpha_tr, epsilon, sigma, psi, omega,
                    max_it=100, tol=tol,print_iterations=True)['p'].item()
@@ -1704,10 +1783,8 @@ def vdi_atlas():
                     #     t[i], p0[j], 1.0, tc[j], pc[j], omega_af[j],
                     #     alpha_tr, epsilon, sigma, psi, omega,
                     #     max_it=100, tol=1e-10, print_iterations=False)['p'].item()
-                    p_sat_vals_ceos[i, j] = p_i_sat_ceos(
-                        t[i], p0[j], tc[j], pc[j], omega_af[j],
-                        alpha_tr, epsilon, sigma, psi, omega,
-                        max_it=100, tol=1e-10)['p']
+                    p_sat_vals_ceos[i, j] = p_i_sat_ceos(t[i], p0[j], tc[j], pc[j], omega_af[j], alpha_tr, epsilon,
+                                                         sigma, psi, omega, max_it=100, tol=1e-10)['p']
                     p0[j] = p_sat_vals_ceos[i, j]
 
     lines = plt.plot(t, p_sat_vals)
@@ -1729,8 +1806,7 @@ def vdi_atlas():
 
     phi(-256.6 + 273.15, 0.2620861427179638, 1, 33.19, 13.13, -0.216, 'l',
         alpha_tr, epsilon, sigma, psi, omega)
-    p_i_sat_ceos(-256.6 + 273.15, 0.2620861427179638, 33.19, 13.13, -0.216,
-                 alpha_tr, epsilon, sigma, psi, omega,
+    p_i_sat_ceos(-256.6 + 273.15, 0.2620861427179638, 33.19, 13.13, -0.216, alpha_tr, epsilon, sigma, psi, omega,
                  max_it=100, tol=tol)
     p_range = concatenate([linspace(-71, 0.001, 10), linspace(0.001, 10, 20)])
 
@@ -2101,34 +2177,35 @@ def svn_tab_14_1_2():
     soln = bubl_t(273.15, p, z_i, tc_i, pc_i, af_omega_i,
                   alpha_tr, epsilon, sigma, psi, omega,
                   sec_i, nu_ji,
-                  max_it, tol, print_iterations=True)
+                  max_it, 1e-10, print_iterations=True)
     y_i = soln['y_i']
     k_i = soln['k_i']
     t = soln['t']
+    p_i_sat = soln['p_i_sat']
+    n_it = soln['n_it']
+    phi_coef_fun_i = soln['phi_coef_fun_i']
 
     gamma_j = gamma_u(t, z_i, sec_i, nu_ji)
-    print('\n')
+    print('\n'*2)
     print('SVN Table 14.1 - n-hexane (1) / ethanol (2) / methylcyclopentane (3) /' +
           'benzene (4) at {:0.2f} K'.format(t))
-    print(*['x_{:d}:\t {:0.4f}\t'.format(i, y_i[i]) for i in range(len(y_i))])
-    print(*['gamma_{:d}:\t {:0.4f}\t'.format(i, gamma_j[i]) for i in range(len(gamma_j))])
-    print('\n')
 
-
-    print('i\tx_i\t\ty_i\t\tk_i')
+    print('i\tx_i\t\ty_i\t\tp_i_sat\tphi\t\tgamma\tk_i')
     for i in range(len(z_i)):
-        print('{:d}\t{:.3f}\t{:.4g}\t{:.4g}'.format(
-            i, z_i[i], y_i[i], k_i[i]))
-    print('p: {:0.3f} bar\tT(calc): {:0.3f} K'.format(p, t))
+        print(('{:d}'+'\t{:.4g}'*6).format(
+            i, z_i[i], y_i[i], p_i_sat[i], phi_coef_fun_i[i], gamma_j[i], k_i[i]))
+    print('p: {:0.3f} bar\tT(calc): {:0.3f} K\tIterations:{:d}'.format(p, t, n_it))
+    print('\n'*2)
 
     z_i = array([0.250, 0.400, 0.200, 0.150])
     t = bubl_t(273.15, p, z_i, tc_i, pc_i, af_omega_i,
            alpha_tr, epsilon, sigma, psi, omega,
-           max_it, tol, print_iterations=True)['t']
+           max_it=max_it, tol=tol, print_iterations=False)['t']
     t = 341.1
     soln = pt_flash(t, p, z_i, tc_i, pc_i, af_omega_i,
-               alpha_tr, epsilon, sigma, psi, omega, max_it, tol)
+               alpha_tr, epsilon, sigma, psi, omega, max_it=max_it, tol=tol)
     print(soln)
+
 
 def pat_ue_03_flash():
     use_pr_eos()
