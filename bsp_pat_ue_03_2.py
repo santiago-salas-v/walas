@@ -1386,6 +1386,10 @@ zisat = np.array([z_i[i] for i in range(len(z_i)) if soln['success'][i]])
 p_est = sum(pisat * zisat / sum(zisat))
 soln = z_l_v.pt_flash(t_aus_tkuehler, p, z_i, tc, pc, omega_af,
                       alpha_tr, epsilon, sigma, psi, omega, tol=1e-10, p_est=p_est)
+v_f = soln['v_f']
+x_i = soln['x_i']
+y_i = soln['y_i']
+k_i_verteilung = soln['k_i']
 n_8_l = (1 - v_f) * sum(n_7) * x_i
 n_8_v = v_f * sum(n_7) * y_i
 
@@ -1760,10 +1764,14 @@ for it_n in range(1, 25):
     p_est = sum(pisat * zisat / sum(zisat))
     soln = z_l_v.pt_flash(t_aus_tkuehler, p, z_i, tc, pc, omega_af,
                           alpha_tr, epsilon, sigma, psi, omega, tol=1e-10, p_est=p_est)
+    v_f = soln['v_f']
+    y_i = soln['y_i']
+    x_i = soln['x_i']
+    k_i_verteilung = soln['k_i']
 
-    time_1 = timeit.timeit(stmt='z_l_v.pt_flash(t_aus_tkuehler, p, z_i, tc, pc, omega_af,'+
-                          'alpha_tr, epsilon, sigma, psi, omega, tol=1e-10, p_est=p_est)',
-                  globals=globals(), number=4)
+    # time_1 = timeit.timeit(stmt='z_l_v.pt_flash(t_aus_tkuehler, p, z_i, tc, pc, omega_af,'+
+    #                       'alpha_tr, epsilon, sigma, psi, omega, tol=1e-10, p_est=p_est)',
+    #               globals=globals(), number=4)
     # FIXME: times to 6.3 s (brute force faster than sofisticated)
 
     def profile_fun(t_aus_tkuehler, p, z_i, tc, pc, omega_af,
@@ -1784,9 +1792,9 @@ for it_n in range(1, 25):
                 break
         return soln
 
-    time_2 = timeit.timeit(stmt='profile_fun(t_aus_tkuehler, p, z_i, tc, pc, omega_af,'+
-                          'alpha_tr, epsilon, sigma, psi, omega, tol=1e-10, p_est=p_est)',
-                        globals=globals(), number=4)
+    # time_2 = timeit.timeit(stmt='profile_fun(t_aus_tkuehler, p, z_i, tc, pc, omega_af,'+
+    #                       'alpha_tr, epsilon, sigma, psi, omega, tol=1e-10, p_est=p_est)',
+    #                     globals=globals(), number=4)
 
     n_8_l = (1 - v_f) * sum(n_7) * x_i
     n_8_v = v_f * sum(n_7) * y_i
