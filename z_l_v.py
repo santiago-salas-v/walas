@@ -7,7 +7,8 @@ from numpy import linspace, dot, nan, finfo, isnan, isinf
 from numpy.random import randint
 from scipy import optimize
 from matplotlib import pyplot as plt
-import sys, re
+import sys
+import re
 # from setup_results_log import notify_status_func, setup_log_file
 
 r = 8.314 * 10. ** 6 / 10. ** 5  # bar cm^3/(mol K)
@@ -2492,7 +2493,7 @@ def pat_ue_03_vollstaendig(rlv, print_output=False):
     # log
     old_stdout = sys.stdout
     log_file = open('output.log', 'w')
-    # sys.stdout = log_file
+    sys.stdout = log_file
 
     p = 50.  # bar
     temp = 273.15 + 220.  # K

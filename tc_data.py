@@ -67,7 +67,7 @@ class App(QWidget):
         self.delete_selected_button = QPushButton()
         self.copy_selected_button = QPushButton()
         self.phases_vol_button = QPushButton()
-        #self.plot_window = PlotWindow()
+        self.plot_window = PlotWindow()
         self.cp_button = QPushButton()
         self.psat_button = QPushButton()
 
@@ -236,7 +236,7 @@ class App(QWidget):
             # change z_i
             df_index = int(self.tableWidget1.verticalHeaderItem(row).text())
             new_value = float(
-                self.tableWidget1.item(row, col).text()
+                self.tableWidget1.item(row, col).text().replace(',', '.')
                 )
             self.props_i.loc[df_index, 'z_i'] = new_value
         else:

@@ -24,3 +24,6 @@ docs/*
 #!docs/*.html
 #!docs/*.png
 #!docs/*.css
+*/BURCAT_THR.xml
+data/*.csv
+utils/icon_batch_32X32.png

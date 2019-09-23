@@ -584,7 +584,7 @@ print('SN= ' + str(sn))
 print('NTU= ' + str(ntu))
 print('y(CO)/y(CO2)= ' + str(verhaeltnis_co_co2))
 print('\n'.join([
-    namen[i] + ': ' + locale.format('%.8g', x) + ' kg/h'
+    namen[i] + ': ' + locale.format_string('%.8g', x) + ' kg/h'
     for i, x in enumerate(m_i_z[-1])
 ]))
 print('T= ' + str(t_z[-1] - 273.15) + '°C')
@@ -606,46 +606,46 @@ print('')
 print('======' * 3)
 print('=== MAKEUP-STROM ===')
 print('\n'.join([
-    namen[i] + ': ' + locale.format('%.8g', x) + ' kg/h'
+    namen[i] + ': ' + locale.format_string('%.8g', x) + ' kg/h'
     for i, x in enumerate(n_i_0 * mm / 1000. * 60**2)
 ]))
 print('')
 print('\n'.join([
-    namen[i] + ': ' + locale.format('%.8g', x) + 'kmol/h'
+    namen[i] + ': ' + locale.format_string('%.8g', x) + 'kmol/h'
     for i, x in enumerate(n_i_0 * 60**2 / 1000.)
 ]))
 print('')
 print('======' * 3)
 print('=== RÜCKLAUFSTROM ===')
 print('\n'.join([
-    namen[i] + ': ' + locale.format('%.8g', x) + ' kg/h'
+    namen[i] + ': ' + locale.format_string('%.8g', x) + ' kg/h'
     for i, x in enumerate(n_i_r * mm / 1000. * 60**2)
 ]))
 print('')
 print('======' * 3)
 print('=== ERFORDERLICHE CO UND H2 STRÖME, UM SN UND CO/CO2 ANZUPASSEN ===')
 print('H2: ' +
-      locale.format('%.8g', n_h2_zus.item() * mm[namen.index('H2')] /
+      locale.format_string('%.8g', n_h2_zus.item() * mm[namen.index('H2')] /
                     1000. * 60 ** 2) + ' kg/h')
 print('auf kmol/h')
 print('H2: ' +
-      locale.format('%.8g', n_h2_zus.item() / 1000. * 60 ** 2) + ' kmol/h')
+      locale.format_string('%.8g', n_h2_zus.item() / 1000. * 60 ** 2) + ' kmol/h')
 print('')
 print('MAKE-UP MIT ERFORDERLICHEN H2 UND CO-STRÖMEN')
 print('\n'.join([
-    namen[i] + ': ' + locale.format('%.8g', x) + 'kmol/h'
+    namen[i] + ': ' + locale.format_string('%.8g', x) + 'kmol/h'
     for i, x in enumerate(n_i_0_vollst / 1000. * 60**2)
 ]))
 print('')
 print('======' * 3)
 print('=== REAKTOR ZULAUFSTROM ===')
 print('\n'.join([
-    namen[i] + ': ' + locale.format('%.8g', x) + ' kg/h'
+    namen[i] + ': ' + locale.format_string('%.8g', x) + ' kg/h'
     for i, x in enumerate(n_i_1 * mm / 1000. * 60**2)
 ]))
 print('\nauf kmol/h\n')
 print('\n'.join([
-    namen[i] + ': ' + locale.format('%.8g', x) + ' kmol/h'
+    namen[i] + ': ' + locale.format_string('%.8g', x) + ' kmol/h'
     for i, x in enumerate(n_i_1 / 1000. * 60**2)
 ]))
 print('SN0: ' + str((n_i_0_vollst[namen.index('H2')] -

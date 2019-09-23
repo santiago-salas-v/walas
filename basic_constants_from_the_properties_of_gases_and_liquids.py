@@ -16,6 +16,7 @@ def str_list_to_np_array_str(param):
 
 #sel_component_numbers = [130, 460, 461, 463, 95]
 sel_component_numbers = [461, 455, 460, 463, 465]
+# sel_component_numbers = [66, 60, 440, 460]
 #sel_component_numbers = [130, 460, 31, 440, 455]
 #sel_component_numbers = [66, 438, ]
 out_file.write('sep=' + sep_char_for_csv + '\n')
