@@ -787,18 +787,11 @@ g_3 = g(t_aus_tkuehler, h_3)
 
 # Lösung des isothermischen Verdampfers (des Abscheiders)
 z_i = n_2 / sum(n_2)
-x_i = 1 / len(n_2) * np.ones(len(n_2))
-y_i = 1 / len(n_2) * np.ones(len(n_2))
-v_f = 1.
-for i in range(10):
-    v_f_temp = v_f
-    soln = z_l_v.isot_flash(t_aus_tkuehler, p, x_i, y_i, z_i, tc, pc, omega_af, alpha_tr, epsilon, sigma, psi, omega)
-    y_i = soln['y_i']
-    x_i = soln['x_i']
-    v_f = soln['v_f']
-    k_i_verteilung = soln['k_i']
-    if abs(v_f - v_f_temp) < 1e-12:
-        break
+soln = z_l_v.pt_flash(t_aus_tkuehler, p, z_i, tc, pc, omega_af, alpha_tr, epsilon, sigma, psi, omega, tol=1e-10)
+y_i = soln['y_i']
+x_i = soln['x_i']
+v_f = soln['v_f']
+k_i_verteilung = soln['k_i']
 
 n_3_l = (1 - v_f) * sum(n_2) * x_i
 n_3_v = v_f * sum(n_2) * y_i
@@ -814,15 +807,6 @@ n_3_v = v_f * sum(n_2) * y_i
 # Das molare Volumen der Flüssigkeit v' ist gegenüber demjenigen des Gases v''
 # vernachlässigbar.
 
-def p_sat_func(i):
-    soln = optimize.root(lambda p_sat: z_l_v.p_sat_func(
-        p_sat, t_aus_tkuehler, omega_af[i], tc[i], pc[i]), 1e-5)
-    if soln.success:
-        return soln.x
-    else:
-        return np.nan
-
-
 p_sat = np.empty_like(n_2)
 v_m_l = np.empty_like(n_2)
 v_m_v = np.empty_like(n_2)
@@ -831,12 +815,11 @@ z_v = np.empty_like(n_2)
 delta_h_v = np.empty_like(n_2)
 
 for i in range(len(p_sat)):
-    p_sat[i] = p_sat_func(i)
-    if not np.isnan(p_sat[i]):
-        soln = z_l_v.p_sat_func(
-            p_sat[i], t_aus_tkuehler,
-            omega_af[i], tc[i], pc[i],
-            full_output=True)
+    if not t_aus_tkuehler > tc[i]:
+        soln = z_l_v.bubl_p(
+            t_aus_tkuehler, 1e-5, 1.0, tc[i], pc[i], omega_af[i],
+            alpha_tr, epsilon, sigma, psi, omega, tol=1e-10, y_i_est=1.0)
+        p_sat[i] = soln['p']
         z_l[i] = soln['z_l']
         z_v[i] = soln['z_v']
         v_m_l[i] = z_l[i] * r * t_aus_tkuehler / (
@@ -844,15 +827,16 @@ for i in range(len(p_sat)):
         v_m_v[i] = z_v[i] * r * t_aus_tkuehler / (
             p_sat[i] * 100000.)  # m^3 / mol
         dps_dt = misc.derivative(
-            lambda t: optimize.root(
-                lambda p_sat: z_l_v.p_sat_func(
-                    p_sat, t, omega_af[i],
-                    tc[i], pc[i]), 1e-3
-            ).x, t_aus_tkuehler)  # bar / °K
+            lambda t_var: z_l_v.bubl_p(
+                t_var, p_sat[i], 1.0, tc[i], pc[i], omega_af[i],
+                alpha_tr, epsilon, sigma, psi, omega,
+                tol=1e-10, y_i_est=1.0)['p'],
+            t_aus_tkuehler)  # bar / °K
         # Clausius-Clapeyron
         delta_h_v[i] = t_aus_tkuehler * (v_m_v[i] - v_m_l[i]) * dps_dt * \
             100000.  # J / mol
     else:
+        p_sat[i] = np.nan
         z_l[i] = np.nan
         z_v[i] = np.nan
         v_m_l[i] = np.nan
@@ -1394,16 +1378,13 @@ z_i = n_7 / sum(n_7)
 x_i = 1 / len(n_7) * np.ones(len(n_7))
 y_i = z_i
 v_f = 1.
-for i in range(10):
-    v_f_temp = v_f
-    soln = z_l_v.isot_flash(t_aus_tkuehler, p, x_i, y_i, z_i, tc, pc, omega_af, alpha_tr, epsilon, sigma, psi, omega)
-    y_i = soln['y_i']
-    x_i = soln['x_i']
-    v_f = soln['v_f']
-    k_i_verteilung = soln['k_i']
-    if abs(v_f - v_f_temp) < 1e-12:
-        break
-
+# make a better estimate of p
+soln = z_l_v.p_i_sat_ceos(t_aus_tkuehler, p, tc, pc, omega_af, alpha_tr, epsilon, sigma, psi, omega, tol=1e-10)
+pisat = np.array([soln['p'][i] for i in range(len(z_i)) if soln['success'][i]])
+zisat = np.array([z_i[i] for i in range(len(z_i)) if soln['success'][i]])
+p_est = sum(pisat * zisat / sum(zisat))
+soln = z_l_v.pt_flash(t_aus_tkuehler, p, z_i, tc, pc, omega_af,
+                      alpha_tr, epsilon, sigma, psi, omega, tol=1e-10, p_est=p_est)
 n_8_l = (1 - v_f) * sum(n_7) * x_i
 n_8_v = v_f * sum(n_7) * y_i
 
@@ -1416,12 +1397,11 @@ z_v = np.empty_like(n_7)
 delta_h_v = np.empty_like(n_7)
 
 for i in range(len(p_sat)):
-    p_sat[i] = p_sat_func(i)
-    if not np.isnan(p_sat[i]):
-        soln = z_l_v.p_sat_func(
-            p_sat[i], t_aus_nh3_fl,
-            omega_af[i], tc[i], pc[i],
-            full_output=True)
+    if not t_aus_tkuehler > tc[i]:
+        soln = z_l_v.bubl_p(
+            t_aus_tkuehler, 1e-5, 1.0, tc[i], pc[i], omega_af[i],
+            alpha_tr, epsilon, sigma, psi, omega, tol=1e-10, y_i_est=1.0)
+        p_sat[i] = soln['p']
         z_l[i] = soln['z_l']
         z_v[i] = soln['z_v']
         v_m_l[i] = z_l[i] * r * t_aus_nh3_fl / (
@@ -1429,15 +1409,16 @@ for i in range(len(p_sat)):
         v_m_v[i] = z_v[i] * r * t_aus_nh3_fl / (
             p_sat[i] * 100000.)  # m^3 / mol
         dps_dt = misc.derivative(
-            lambda t: optimize.root(
-                lambda p_sat: z_l_v.p_sat_func(
-                    p_sat, t, omega_af[i],
-                    tc[i], pc[i]), 1e-3
-            ).x, t_aus_nh3_fl)  # bar / °K
+            lambda t_var: z_l_v.bubl_p(
+                t_var, p_sat[i], 1.0, tc[i], pc[i], omega_af[i],
+                alpha_tr, epsilon, sigma, psi, omega,
+                tol=1e-10, y_i_est=1.0)['p'],
+            t_aus_tkuehler)  # bar / °K
         # Clausius-Clapeyron
         delta_h_v[i] = t_aus_nh3_fl * (v_m_v[i] - v_m_l[i]) * dps_dt * \
             100000.  # J / mol
     else:
+        p_sat[i] = np.nan
         z_l[i] = np.nan
         z_v[i] = np.nan
         v_m_l[i] = np.nan
@@ -1775,6 +1756,13 @@ for it_n in range(1, 25):
     x_i = 1 / len(n_7) * np.ones(len(n_7))
     y_i = z_i
     v_f = 1.
+    soln = z_l_v.p_i_sat_ceos(t_aus_tkuehler, p, tc, pc, omega_af, alpha_tr, epsilon, sigma, psi, omega, tol=1e-10)
+    pisat = np.array([soln['p'][i] for i in range(len(z_i)) if soln['success'][i]])
+    zisat = np.array([z_i[i] for i in range(len(z_i)) if soln['success'][i]])
+    p_est = sum(pisat * zisat / sum(zisat))
+    soln = z_l_v.pt_flash(t_aus_tkuehler, p, z_i, tc, pc, omega_af,
+                          alpha_tr, epsilon, sigma, psi, omega, tol=1e-10, p_est=p_est)
+
     for i in range(10):
         v_f_temp = v_f
         soln = z_l_v.isot_flash(t_aus_tkuehler, p, x_i, y_i, z_i, tc, pc, omega_af, alpha_tr, epsilon, sigma, psi,
@@ -1798,12 +1786,11 @@ for it_n in range(1, 25):
     delta_h_v = np.empty_like(n_7)
 
     for i in range(len(p_sat)):
-        p_sat[i] = p_sat_func(i)
-        if not np.isnan(p_sat[i]):
-            soln = z_l_v.p_sat_func(
-                p_sat[i], t_aus_nh3_fl,
-                omega_af[i], tc[i], pc[i],
-                full_output=True)
+        if not t_aus_tkuehler > tc[i]:
+            soln = z_l_v.bubl_p(
+                t_aus_tkuehler, 1e-5, 1.0, tc[i], pc[i], omega_af[i],
+                alpha_tr, epsilon, sigma, psi, omega, tol=1e-10, y_i_est=1.0)
+            p_sat[i] = soln['p']
             z_l[i] = soln['z_l']
             z_v[i] = soln['z_v']
             v_m_l[i] = z_l[i] * r * t_aus_nh3_fl / (
@@ -1811,15 +1798,16 @@ for it_n in range(1, 25):
             v_m_v[i] = z_v[i] * r * t_aus_nh3_fl / (
                 p_sat[i] * 100000.)  # m^3 / mol
             dps_dt = misc.derivative(
-                lambda t: optimize.root(
-                    lambda p_sat: z_l_v.p_sat_func(
-                        p_sat, t, omega_af[i],
-                        tc[i], pc[i]), 1e-3
-                ).x, t_aus_nh3_fl)  # bar / °K
+                lambda t_var: z_l_v.bubl_p(
+                    t_var, p_sat[i], 1.0, tc[i], pc[i], omega_af[i],
+                    alpha_tr, epsilon, sigma, psi, omega,
+                    tol=1e-10, y_i_est=1.0)['p'],
+                t_aus_tkuehler)  # bar / °K
             # Clausius-Clapeyron
             delta_h_v[i] = t_aus_nh3_fl * (v_m_v[i] - v_m_l[i]) * dps_dt * \
                 100000.  # J / mol
         else:
+            p_sat[i] = np.nan
             z_l[i] = np.nan
             z_v[i] = np.nan
             v_m_l[i] = np.nan

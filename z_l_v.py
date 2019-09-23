@@ -421,7 +421,7 @@ def p_i_sat_ceos(t, p, tc_i, pc_i, af_omega_i,
         else:
             p0_it = first_step_soln['p']
             inv_slope = 1 / first_step_soln['ddisc_dp']
-            p1_it = p0_it * (1 + sign(-inv_slope) * 0.001)
+            p1_it = p0_it * (1 + sign(-inv_slope) * 0.01)
             if first_step_soln['n_fev'] == 1:
                 # initial slope not necessarily convergent, direct it toward descending disc
                 disc_0 = first_step_soln['disc']
@@ -1425,9 +1425,16 @@ def z_phase(t, p, z_i, tc_i, pc_i, af_omega_i, phase, alpha_tr, epsilon, sigma, 
                    q * beta_low ** 2)
         soln_z_low = solve_cubic([1, a1_low, a2_low, a3_low])
         roots_z_low = array(soln_z_low['roots'])
-        if phase == 'l':
+        disc_z_low = soln_z_low['disc']
+        if phase == 'l' and disc_z_low <= 0:
+            # 3 real roots
             z_low = roots_z_low[-1][0]
+        elif phase == 'l' and disc_z_low > 0:
+            # 1 real, 2 complex roots
+            z_low = roots_z_low[0][0]
         elif phase == 'v':
+            # 3 real roots or 1 real, 2 complex roots,
+            # at any rate index 0
             z_low = roots_z_low[0][0]
         v_low = z_low * r * t / (p_low)
         rho_low = 1 / v_low
@@ -1449,9 +1456,15 @@ def z_phase(t, p, z_i, tc_i, pc_i, af_omega_i, phase, alpha_tr, epsilon, sigma, 
                 rho = 1 / v
             elif p <= p_low:
                 # pseudo liquid density - eq. 36, 40, 41
-                c1 = dp_drho_at_rho_low * (rho_low - 0.7 * rho_mc)
-                c0 = p_low - c1 * log(rho_low - 0.7 * rho_mc)
-                rho = 0.7 * rho_mc + exp((p - c0) / c1)
+                # FIXME: extrapolate when (rho_low - 0.7 * rho_mc) < 0 ==>> complex root
+                if rho_low - 0.7 * rho_mc <= 0 or dp_drho_at_rho_low < 0:
+                    # use linear interpolation
+                    rho = rho_low + (rho_low - 0.7 * rho_mc) / dp_drho_at_rho_low
+                    rho = (p - p_low) * (rho_low - 0.7 * rho_mc) + rho_low
+                else:
+                    c1 = dp_drho_at_rho_low * (rho_low - 0.7 * rho_mc)
+                    c0 = p_low - c1 * log(rho_low - 0.7 * rho_mc)
+                    rho = 0.7 * rho_mc + exp((p - c0) / c1)
                 v = 1 / rho
                 z = p * v / (r * t)
         elif t >= t_mc or n_positive_roots_p <= 1:
@@ -1741,13 +1754,18 @@ def isot_flash_solve(t, p, z_i, tc_i, pc_i, af_omega_i, max_it=20,
 def pt_flash(t, p, z_i, tc_i, pc_i, af_omega_i,
              alpha_tr, epsilon, sigma, psi, omega,
              sec_j=None, nu_ij=None, unifac_data_dict=None,
-             max_it=100, tol=tol):
+             max_it=100, tol=tol, p_est=None):
+    if p_est is None:
+        # take estimate for 2-phase region
+        p0 = p
+    else:
+        p0 = p_est
     # FIXME: check if bubl_p at all possible (by now, no error when converging to k=1)
-    bubl_p_soln = bubl_p(t, p, z_i, tc_i, pc_i, af_omega_i,
+    bubl_p_soln = bubl_p(t, p0, z_i, tc_i, pc_i, af_omega_i,
                          alpha_tr, epsilon, sigma, psi, omega,
                          sec_j, nu_ij, unifac_data_dict,
                          max_it=max_it, tol=tol)
-    dew_p_soln = dew_p(t, p, z_i, tc_i, pc_i, af_omega_i,
+    dew_p_soln = dew_p(t, p0, z_i, tc_i, pc_i, af_omega_i,
                        alpha_tr, epsilon, sigma, psi, omega,
                        sec_j, nu_ij, unifac_data_dict,
                        max_it=max_it, tol=tol)
@@ -1793,7 +1811,7 @@ def pt_flash(t, p, z_i, tc_i, pc_i, af_omega_i,
             soln_v_f = secant_ls_3p(
                 lambda v_f: sum(z_i * (1 - k_i) / (1 + v_f * (k_i - 1))), v_f, tol=1e-10,
                 f_prime=lambda v_f: -sum(z_i * (k_i - 1)**2 / (1 + v_f * (k_i - 1))**2),
-                restriction=lambda v_f_val: v_f_val >= 0,
+                restriction=lambda v_f_val: 0 <= v_f_val and v_f_val <= 1,
                 print_iterations=False)
             # soln_v_f = nr_ls(
             #     v_f, lambda v_f: sum(z_i * (1 - k_i) / (1 + v_f * (k_i - 1))),
@@ -1826,7 +1844,8 @@ def pt_flash(t, p, z_i, tc_i, pc_i, af_omega_i,
         v_f = 0.0
     soln = dict()
     for item in ['t', 'p', 'k_i', 'v_f', 'z_i', 'x_i', 'y_i', 'gamma_i', 'phi_coef_fun_i',
-                 'dew_p_soln', 'bubl_p_soln', 'p_dew', 'p_bubl', 'poynting', 'n_it']:
+                 'dew_p_soln', 'bubl_p_soln', 'p_dew', 'p_bubl', 'poynting', 'n_it',
+                 'mag_delta_x_i', 'mag_delta_y_i', 'mag_delta_v_f']:
         soln[item] = locals().get(item)
     return soln
 
@@ -2410,6 +2429,8 @@ def pat_ue_03_flash():
     x_i = soln['x_i']
     v_f = soln['v_f']
     k_i = soln['k_i']
+    print('v_f: ')
+    print(v_f)
     print('k_i: ')
     print(k_i)
     print('l_i: ')
@@ -3111,7 +3132,7 @@ def setup_unifac_data():
 # svn_h_1()
 # fredenslund_t_6()
 # svn_tab_14_1_2()
-pat_ue_03_flash()
+# pat_ue_03_flash()
 # isot_flash_seader_4_1()
 # pat_ue_03_vollstaendig(0.2)
 # optimize.root(
