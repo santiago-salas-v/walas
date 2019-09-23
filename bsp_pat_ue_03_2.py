@@ -7,6 +7,7 @@ from numerik import nr_ls
 from numerik import rref, ref
 import itertools
 from setup_results_log import notify_status_func, setup_log_file
+import timeit
 
 eps = np.finfo(float).eps
 np.set_printoptions(linewidth=200)
@@ -1753,9 +1754,6 @@ for it_n in range(1, 25):
 
     # Lösung des isothermischen Verdampfers (des Abscheiders)
     z_i = n_7 / sum(n_7)
-    x_i = 1 / len(n_7) * np.ones(len(n_7))
-    y_i = z_i
-    v_f = 1.
     soln = z_l_v.p_i_sat_ceos(t_aus_tkuehler, p, tc, pc, omega_af, alpha_tr, epsilon, sigma, psi, omega, tol=1e-10)
     pisat = np.array([soln['p'][i] for i in range(len(z_i)) if soln['success'][i]])
     zisat = np.array([z_i[i] for i in range(len(z_i)) if soln['success'][i]])
@@ -1763,16 +1761,32 @@ for it_n in range(1, 25):
     soln = z_l_v.pt_flash(t_aus_tkuehler, p, z_i, tc, pc, omega_af,
                           alpha_tr, epsilon, sigma, psi, omega, tol=1e-10, p_est=p_est)
 
-    for i in range(10):
-        v_f_temp = v_f
-        soln = z_l_v.isot_flash(t_aus_tkuehler, p, x_i, y_i, z_i, tc, pc, omega_af, alpha_tr, epsilon, sigma, psi,
-                                omega)
-        y_i = soln['y_i']
-        x_i = soln['x_i']
-        v_f = soln['v_f']
-        k_i_verteilung = soln['k_i']
-        if abs(v_f - v_f_temp) < 1e-12:
-            break
+    time_1 = timeit.timeit(stmt='z_l_v.pt_flash(t_aus_tkuehler, p, z_i, tc, pc, omega_af,'+
+                          'alpha_tr, epsilon, sigma, psi, omega, tol=1e-10, p_est=p_est)',
+                  globals=globals(), number=4)
+    # FIXME: times to 6.3 s (brute force faster than sofisticated)
+
+    def profile_fun(t_aus_tkuehler, p, z_i, tc, pc, omega_af,
+                          alpha_tr, epsilon, sigma, psi, omega, tol=1e-10, p_est=p_est):
+        # FIXME: times to 0.9 s (brute force better than sofisticated)
+        x_i = 1 / len(n_7) * np.ones(len(n_7))
+        y_i = z_i
+        v_f = 1.
+        for i in range(10):
+            v_f_temp = v_f
+            soln = z_l_v.isot_flash(t_aus_tkuehler, p, x_i, y_i, z_i, tc, pc, omega_af, alpha_tr, epsilon, sigma, psi,
+                                    omega)
+            y_i = soln['y_i']
+            x_i = soln['x_i']
+            v_f = soln['v_f']
+            k_i_verteilung = soln['k_i']
+            if abs(v_f - v_f_temp) < 1e-12:
+                break
+        return soln
+
+    time_2 = timeit.timeit(stmt='profile_fun(t_aus_tkuehler, p, z_i, tc, pc, omega_af,'+
+                          'alpha_tr, epsilon, sigma, psi, omega, tol=1e-10, p_est=p_est)',
+                        globals=globals(), number=4)
 
     n_8_l = (1 - v_f) * sum(n_7) * x_i
     n_8_v = v_f * sum(n_7) * y_i
