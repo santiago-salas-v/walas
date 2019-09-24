@@ -397,7 +397,7 @@ def p_i_sat_ceos(t, p, tc_i, pc_i, af_omega_i,
     n_comps = asarray(tc_i).size
     p_sat_list = empty(n_comps)
     success = empty(n_comps, dtype=bool)
-    n_fev = empty(n_comps, dtype=int)
+    n_fev = zeros(n_comps, dtype=int)
     zero_fun = empty(n_comps)
     z_l = empty(n_comps)
     z_v = empty(n_comps)
@@ -416,6 +416,7 @@ def p_i_sat_ceos(t, p, tc_i, pc_i, af_omega_i,
             first_step_soln = approach_pt_i_sat_ceos(
                 t, p, tc, pc, af_omega, alpha_tr, epsilon, sigma, psi, omega,
                 p_or_t='p', max_it=max_it, tol=tol)
+            n_fev[i] += first_step_soln['n_fev']
             success[i] = first_step_soln['success']
         if not success[i]:
             p_sat_list[i] = nan
@@ -425,10 +426,12 @@ def p_i_sat_ceos(t, p, tc_i, pc_i, af_omega_i,
             p1_it = p0_it * (1 + sign(-inv_slope) * 0.01)
             if first_step_soln['n_fev'] == 1:
                 # initial slope not necessarily convergent, direct it toward descending disc
-                disc_0 = first_step_soln['disc']
-                disc_1 = approach_pt_i_sat_ceos(
+                second_step_soln = approach_pt_i_sat_ceos(
                     t, p1_it, tc, pc, af_omega, alpha_tr, epsilon, sigma, psi, omega,
-                    p_or_t='p', max_it=max_it, tol=tol)['disc']
+                    p_or_t='p', max_it=max_it, tol=tol)
+                disc_0 = first_step_soln['disc']
+                disc_1 = second_step_soln['disc']
+                n_fev[i] += second_step_soln['n_fev']
                 inv_slope = -(p1_it - p0_it) / (disc_1 - disc_0)
                 p1_it = p0_it * (1 + sign(-inv_slope) * 0.001)
             soln_temp = secant_ls_3p(
@@ -441,7 +444,7 @@ def p_i_sat_ceos(t, p, tc_i, pc_i, af_omega_i,
                     sigma, psi, omega)['success'],
                 print_iterations=False
             )
-            n_fev[i] = soln_temp['iterations'] + soln_temp['total_backtracks']
+            n_fev[i] += soln_temp['iterations'] + soln_temp['total_backtracks']
             p_sat_list[i] = soln_temp['x']
             soln_temp = phi_sat_ceos(t, p_sat_list[i], tc, pc, af_omega,
                                      alpha_tr, epsilon, sigma, psi, omega)
@@ -480,6 +483,7 @@ def t_i_sat_ceos(t, p, tc_i, pc_i, af_omega_i,
         first_step_soln = approach_pt_i_sat_ceos(
             t, p, tc, pc, af_omega, alpha_tr, epsilon, sigma, psi, omega,
             p_or_t='t', max_it=max_it, tol=tol)
+        n_fev[i] += first_step_soln['n_fev']
         if pc < p or not first_step_soln['success']:
             # no p_sat if supercritical
             t_sat_list[i] = nan
@@ -489,10 +493,12 @@ def t_i_sat_ceos(t, p, tc_i, pc_i, af_omega_i,
             t1_it = t0_it * (1 + sign(-inv_slope) * 0.001)
             if first_step_soln['n_fev'] == 1:
                 # initial slope not necessarily convergent, direct it toward descending disc
-                disc_0 = first_step_soln['disc']
-                disc_1 = approach_pt_i_sat_ceos(
+                second_step_soln = approach_pt_i_sat_ceos(
                     t1_it, p, tc, pc, af_omega, alpha_tr, epsilon, sigma, psi, omega,
-                    p_or_t='t', max_it=max_it, tol=tol)['disc']
+                    p_or_t='t', max_it=max_it, tol=tol)
+                disc_0 = first_step_soln['disc']
+                disc_1 = second_step_soln['disc']
+                n_fev[i] += second_step_soln['n_fev']
                 inv_slope = -(t1_it - t0_it) / (disc_1 - disc_0)
                 t1_it = t0_it * (1 + sign(-inv_slope) * 0.001)
             soln_temp = secant_ls_3p(
@@ -505,7 +511,7 @@ def t_i_sat_ceos(t, p, tc_i, pc_i, af_omega_i,
                     sigma, psi, omega)['success'],
                 print_iterations=False
             )
-            n_fev[i] = soln_temp['iterations'] + soln_temp['total_backtracks']
+            n_fev[i] += soln_temp['iterations'] + soln_temp['total_backtracks']
             t_sat_list[i] = soln_temp['x']
             soln_temp = phi_sat_ceos(t_sat_list[i], p, tc, pc, af_omega,
                                      alpha_tr, epsilon, sigma, psi, omega)
@@ -751,15 +757,20 @@ def bubl_p(t, p, x_i, tc_i, pc_i, af_omega_i,
                             restriction=lambda p_val: p_val > 0,
                             print_iterations=print_iterations)
         p = soln['x']
+        n_fev = soln['iterations'] + soln['total_backtracks']
         soln = bubl_point_step_l_k(t, p, x_i, tc_i, pc_i, af_omega_i,
                                    alpha_tr, epsilon, sigma, psi, omega, max_it,
                                    full_output=True, y_i_est=y_i_est)
+        n_fev += soln['n_fev']
+        soln['n_fev'] = n_fev
     else:
         soln = bubl_p_gamma_phi(
             t, p, x_i, tc_i, pc_i, af_omega_i,
             alpha_tr, epsilon, sigma, psi, omega,
             sec_j, nu_ij, unifac_data_dict,
             max_it, tol=tol, y_i_est=y_i_est)
+        n_fev = soln['n_it']
+        soln['n_fev'] = n_fev
     return soln
 
 
@@ -807,15 +818,20 @@ def bubl_t(t, p, x_i, tc_i, pc_i, af_omega_i,
                             restriction=lambda t_val: t_val > 0,
                             print_iterations=print_iterations)
         t = soln['x']
+        n_fev = soln['iterations'] + soln['total_backtracks']
         soln = bubl_point_step_l_k(t, p, x_i, tc_i, pc_i, af_omega_i,
                                    alpha_tr, epsilon, sigma, psi, omega, max_it,
                                    full_output=True, y_i_est=y_i_est)
+        n_fev += soln['n_fev']
+        soln['n_fev'] = n_fev
     else:
         soln = bubl_t_gamma_phi(
             t, p, x_i, tc_i, pc_i, af_omega_i,
             alpha_tr, epsilon, sigma, psi, omega,
             sec_j, nu_ij, unifac_data_dict,
             max_it, tol=tol, y_i_est=y_i_est)
+        n_fev = soln['n_it']
+        soln['n_fev'] = n_fev
     return soln
 
 
@@ -858,8 +874,10 @@ def bubl_point_step_l_k(t, p, x_i, tc_i, pc_i, af_omega_i,
     if full_output:
         z_l = soln_l['z']
         z_v = soln_v['z']
+        n_fev = 1 + i
         soln = dict()
-        for item in ['x_i', 'y_i', 'phi_l', 'phi_v', 'z_l', 'z_v', 'k_i', 'sum_ki_xi', 'p', 't', 'success']:
+        for item in ['x_i', 'y_i', 'phi_l', 'phi_v', 'z_l', 'z_v', 'k_i', 'sum_ki_xi',
+                     'p', 't', 'success', 'n_fev']:
             soln[item] = locals().get(item)
         return soln
     else:
@@ -1005,15 +1023,20 @@ def dew_p(t, p, y_i, tc_i, pc_i, af_omega_i,
                             restriction=lambda p_val: p_val > 0,
                             print_iterations=print_iterations)
         p = soln['x']
+        n_fev = soln['iterations'] + soln['total_backtracks']
         soln = dew_point_step_l_k(t, p, y_i, tc_i, pc_i, af_omega_i,
                                   alpha_tr, epsilon, sigma, psi, omega, max_it,
                                   full_output=True, x_i_est=x_i_est)
+        n_fev += soln['n_fev']
+        soln['n_fev'] = n_fev
     else:
         soln = dew_p_gamma_phi(
             t, p, y_i, tc_i, pc_i, af_omega_i,
             alpha_tr, epsilon, sigma, psi, omega,
             sec_j, nu_ij, unifac_data_dict,
             max_it, tol=tol, x_i_est=x_i_est)
+        n_fev = soln['n_it']
+        soln['n_fev'] = n_fev
     return soln
 
 
@@ -1056,9 +1079,12 @@ def dew_t(t, p, y_i, tc_i, pc_i, af_omega_i,
                         restriction=lambda p_val: p_val > 0,
                         print_iterations=print_iterations)
     p = soln['x']
+    n_fev = soln['iterations'] + soln['total_backtracks']
     soln = dew_point_step_l_k(t, p, y_i, tc_i, pc_i, af_omega_i,
                               alpha_tr, epsilon, sigma, psi, omega, max_it,
                               full_output=True, x_i_est=x_i_est)
+    n_fev += soln['n_fev']
+    soln['n_fev'] = n_fev
     return soln
 
 
@@ -1099,8 +1125,11 @@ def dew_point_step_l_k(t, p, y_i, tc_i, pc_i, af_omega_i,
     if full_output:
         z_l = soln_l['z']
         z_v = soln_v['z']
+        n_fev = 1 + i
         soln = dict()
-        for item in ['x_i', 'y_i', 'phi_l', 'phi_v', 'z_l', 'z_v', 'k_i', 'sum_yi_over_ki', 'p', 't', 'success']:
+        for item in ['x_i', 'y_i', 'phi_l', 'phi_v', 'z_l', 'z_v', 'k_i',
+                     'sum_yi_over_ki', 'p', 't',
+                     'n_fev','success']:
             soln[item] = locals().get(item)
         return soln
     else:
@@ -1117,6 +1146,7 @@ def dew_p_gamma_phi(t, p, y_i, tc_i, pc_i, af_omega_i,
     soln = p_i_sat_ceos(
         t, p, tc_i, pc_i, af_omega_i,
         alpha_tr, epsilon, sigma, psi, omega, max_it=max_it, tol=tol)
+    n_fev = soln['n_fev']
     p_i_sat = soln['p']
     phi_i_sat = soln['phi_v']
     z_l_i = soln['z_l']
@@ -1156,6 +1186,7 @@ def dew_p_gamma_phi(t, p, y_i, tc_i, pc_i, af_omega_i,
 
     k_i = gamma_i * p_i_sat / phi_coef_fun_i / p
     phi_v = phi_i_v
+    n_fev += n_it
     soln = dict()
     for item in ['t', 'p', 'success', 'n_it', 'gamma_i', 'phi_coef_fun_i',
                  'phi_v', 'phi_i_sat', 'p_i_sat', 'z_l_i', 'v_l_i', 'poynting_i',
@@ -1730,9 +1761,12 @@ def isot_flash(t, p, x_i, y_i, z_i, tc_i, pc_i, af_omega_i,
     # Normalize
 
     x_i = x_i / sum(x_i)
+    iterations = soln_v_f['iterations']
+    total_backtracks = soln_v_f['total_backtracks']
     soln = dict()
     for item in ['soln_l', 'soln_v', 'soln_v_f',
-                 'k_i', 'v_f', 'x_i', 'y_i']:
+                 'k_i', 'v_f', 'x_i', 'y_i',
+                 'iterations', 'total_backtracks']:
         soln[item] = locals().get(item)
     return soln
 
@@ -1761,7 +1795,7 @@ def pt_flash(t, p, z_i, tc_i, pc_i, af_omega_i,
         p0 = p
     else:
         p0 = p_est
-    # FIXME: check if bubl_p at all possible (by now, no error when converging to k=1)
+    # FIXME: bubl_p / dew_p might be off converging toward k_i=1
     bubl_p_soln = bubl_p(t, p0, z_i, tc_i, pc_i, af_omega_i,
                          alpha_tr, epsilon, sigma, psi, omega,
                          sec_j, nu_ij, unifac_data_dict,
@@ -1770,6 +1804,8 @@ def pt_flash(t, p, z_i, tc_i, pc_i, af_omega_i,
                        alpha_tr, epsilon, sigma, psi, omega,
                        sec_j, nu_ij, unifac_data_dict,
                        max_it=max_it, tol=tol)
+    n_fev = bubl_p_soln['n_fev'] + dew_p_soln['n_fev']
+    total_backtracks = 0
     p_bubl, p_dew = bubl_p_soln['p'], dew_p_soln['p']
     phi_bubl, phi_dew = bubl_p_soln['phi_v'], dew_p_soln['phi_v']
     k_i_bubl, k_i_dew = bubl_p_soln['k_i'], dew_p_soln['k_i']
@@ -1818,6 +1854,7 @@ def pt_flash(t, p, z_i, tc_i, pc_i, af_omega_i,
                     lambda v_f: -sum(z_i * (k_i - 1) ** 2 / (1 + v_f * (k_i - 1)) ** 2),
                     v_f_old, additional_restrictions=lambda v_f: 0 < v_f < 1)
                 v_f = ls_approach['x_2']
+                total_backtracks += ls_approach['backtrack_count']
             x_i = z_i / (1 + v_f * (k_i - 1))
             y_i = k_i * x_i
             x_i = x_i / sum(x_i)
@@ -1844,10 +1881,12 @@ def pt_flash(t, p, z_i, tc_i, pc_i, af_omega_i,
         v_f = 1.0
     elif p_bubl <= p:
         v_f = 0.0
+    iterations = n_it + n_fev
     soln = dict()
     for item in ['t', 'p', 'k_i', 'v_f', 'z_i', 'x_i', 'y_i', 'gamma_i', 'phi_coef_fun_i',
                  'dew_p_soln', 'bubl_p_soln', 'p_dew', 'p_bubl', 'poynting', 'n_it',
-                 'mag_delta_x_i', 'mag_delta_y_i', 'mag_delta_v_f', 'sum_rr', 'criterion']:
+                 'mag_delta_x_i', 'mag_delta_y_i', 'mag_delta_v_f', 'sum_rr', 'criterion',
+                 'iterations', 'total_backtracks']:
         soln[item] = locals().get(item)
     return soln
 
