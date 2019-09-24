@@ -214,14 +214,17 @@ def nr_ls(x0, f, j, tol=finfo(float).eps, max_it=100, inner_loop_condition=None,
         progress_k_m_1 = progress_k
         # First attempt without backtracking. Continue line search
         # until satisfactory descent.
+        ls_soln = line_search(f, j, x, known_f_c=f_val, known_j_c=j_val,
+                              max_iter=max_it, alpha=alpha, tol=tol,
+                              additional_restrictions=inner_loop_condition,
+                              notify_status_func=notify_status_func,
+                              outer_it=outer_it_k, accum_step=accum_step)
         x, f_val, g_val, y, j_val, magnitude_f, g_max, ls_it, \
-            lambda_ls, overall_stop, accum_step = \
-            line_search(
-                f, j, x, known_f_c=f_val, known_j_c=j_val,
-                max_iter=max_it, alpha=alpha, tol=tol,
-                additional_restrictions=inner_loop_condition,
-                notify_status_func=notify_status_func,
-                outer_it=outer_it_k, accum_step=accum_step)
+        lambda_ls, overall_stop, accum_step = [
+            ls_soln[item] for item in [
+                'x_2', 'f_2', 'g_2', 's_0_n', 'j_2', 'magnitude_f',
+                'g_max', 'backtrack_count', 'lambda_ls',
+                'outer_it_stop', 'accum_step']]
         inner_it_j = ls_it
         diff = x - x_k_m_1
         if overall_stop:
@@ -259,9 +262,13 @@ def nr_ls(x0, f, j, tol=finfo(float).eps, max_it=100, inner_loop_condition=None,
         progress_k = 100.0
     elif divergent:
         progress_k = 0.0
-    return progress_k, stop, outer_it_k,\
-        inner_it_j, lambda_ls, accum_step,\
-        x, diff, f_val, lambda_ls * y
+    lambda_ls_y = lambda_ls * y
+    soln = dict()
+    for item in ['progress_k', 'stop', 'outer_it_k',
+                 'inner_it_j', 'lambda_ls', 'accum_step',
+                 'x', 'diff', 'f_val', 'lambda_ls_y']:
+        soln[item] = locals().get(item)
+    return soln
 
 
 def sdm(x0, f, j, tol, notify_status_func, inner_loop_condition=None):
@@ -523,8 +530,11 @@ def line_search(fun, jac, x_c, known_f_c=None, known_j_c=None,
             else:
                 lambda_ls = lambda_temp
     j_2 = jac(x_2)
-    return x_2, f_2, g_2, s_0_n, j_2, magnitude_f, g_max,\
-        backtrack_count, lambda_ls, outer_it_stop, accum_step
+    soln = dict()
+    for item in ['x_2', 'f_2', 'g_2', 's_0_n', 'j_2', 'magnitude_f', 'g_max',
+                 'backtrack_count', 'lambda_ls', 'outer_it_stop', 'accum_step']:
+        soln[item] = locals().get(item)
+    return soln
 
 
 def scalar_prod(factor_a, factor_b):

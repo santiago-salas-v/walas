@@ -1,5 +1,7 @@
+import sys
+import re
 from poly_3_4 import solve_cubic, solve_quartic
-from numerik import secant_ls_3p, nr_ls
+from numerik import secant_ls_3p, nr_ls, line_search
 from poly_n import zroots
 from numpy import array, append, zeros, abs, ones, empty_like, empty, argwhere, unique, asarray, concatenate, setup
 from numpy import sqrt, outer, sum, log, exp, multiply, diag, sign
@@ -7,15 +9,13 @@ from numpy import linspace, dot, nan, finfo, isnan, isinf
 from numpy.random import randint
 from scipy import optimize
 from matplotlib import pyplot as plt
-import sys
-import re
-# from setup_results_log import notify_status_func, setup_log_file
+from setup_results_log import notify_status_func, setup_log_file
 
 r = 8.314 * 10. ** 6 / 10. ** 5  # bar cm^3/(mol K)
 rlv = 0.8  # Rücklaufverhältnis
 t_flash = 273.16 + 60  # K
 tol = finfo(float).eps
-# setup_log_file('log_z_l_v.log', with_console=True)
+setup_log_file('log_z_l_v.log', with_console=False)
 
 # Nach unten hin: CO, H2, CO2, H2O, CH3OH, N2, CH4
 
@@ -747,7 +747,7 @@ def bubl_p(t, p, x_i, tc_i, pc_i, af_omega_i,
         t, p_var, x_i, tc_i, pc_i, af_omega_i,
         alpha_tr, epsilon, sigma, psi, omega,
         max_it, tol=tol, y_i_est=y_i_est)
-        soln = secant_ls_3p(obj_fun, p, tol=tol, x_1=1.001 * p,
+        soln = secant_ls_3p(obj_fun, p, tol=tol, x_1=1.01 * p,
                             restriction=lambda p_val: p_val > 0,
                             print_iterations=print_iterations)
         p = soln['x']
@@ -1001,7 +1001,7 @@ def dew_p(t, p, y_i, tc_i, pc_i, af_omega_i,
             t, p_var, y_i, tc_i, pc_i, af_omega_i,
             alpha_tr, epsilon, sigma, psi, omega,
             max_it, tol=tol, x_i_est=x_i_est)
-        soln = secant_ls_3p(obj_fun, p, tol=tol, x_1=1.001 * p,
+        soln = secant_ls_3p(obj_fun, p, tol=tol, x_1=0.99 * p,
                             restriction=lambda p_val: p_val > 0,
                             print_iterations=print_iterations)
         p = soln['x']
@@ -1809,26 +1809,27 @@ def pt_flash(t, p, z_i, tc_i, pc_i, af_omega_i,
             else:
                 phi_coef_fun_i = phi_i_v / phi_i_sat * poynting_i
                 k_i = gamma_i * p_i_sat / (phi_coef_fun_i * p)
-            soln_v_f = secant_ls_3p(
-                lambda v_f: sum(z_i * (1 - k_i) / (1 + v_f * (k_i - 1))), v_f, tol=1e-10,
-                f_prime=lambda v_f: -sum(z_i * (k_i - 1)**2 / (1 + v_f * (k_i - 1))**2),
-                restriction=lambda v_f_val: 0 <= v_f_val and v_f_val <= 1,
-                print_iterations=False)
-            # soln_v_f = nr_ls(
-            #     v_f, lambda v_f: sum(z_i * (1 - k_i) / (1 + v_f * (k_i - 1))),
-            #     lambda v_f: -sum(z_i * (k_i - 1) ** 2 / (1 + v_f * (k_i - 1)) ** 2),
-            #     tol=1e-10, inner_loop_condition=lambda v_f_val: v_f_val >= 0,
-            #     notify_status_func=notify_status_func)
-            v_f = soln_v_f['x']
+            f = sum(z_i * (k_i - 1) / (1 + v_f * (k_i - 1)))
+            df_dv_f = -sum(z_i * (k_i - 1) ** 2 / (1 + v_f * (k_i - 1)) ** 2)
+            v_f = v_f - 1 / df_dv_f * f
+            if not 0 < v_f < 1:
+                ls_approach = line_search(
+                    lambda v_f: sum(z_i * (k_i - 1) / (1 + v_f * (k_i - 1))),
+                    lambda v_f: -sum(z_i * (k_i - 1) ** 2 / (1 + v_f * (k_i - 1)) ** 2),
+                    v_f_old, additional_restrictions=lambda v_f: 0 < v_f < 1)
+                v_f = ls_approach['x_2']
             x_i = z_i / (1 + v_f * (k_i - 1))
             y_i = k_i * x_i
+            x_i = x_i / sum(x_i)
+            y_i = y_i / sum(y_i)
             delta_x_i = x_i - x_i_old
             delta_y_i = y_i - y_i_old
             delta_v_f = v_f - v_f_old
-            mag_delta_x_i = sqrt(delta_x_i.dot(delta_x_i))
-            mag_delta_y_i = sqrt(delta_y_i.dot(delta_y_i))
-            mag_delta_v_f = sqrt(delta_v_f**2)
-            success = mag_delta_x_i <= tol and mag_delta_y_i <=tol and mag_delta_v_f <= tol
+            sum_rr = sum(z_i * (k_i - 1) / (1 + v_f * (k_i - 1)))
+            # criterion as vector sum of distance to convergence
+            criterion = sqrt(sum_rr**2 + delta_x_i.dot(delta_x_i) +
+                             delta_y_i.dot(delta_y_i) + delta_v_f**2)
+            success = criterion <= tol
             if success:
                 break
             if sec_j is None:
@@ -1846,7 +1847,7 @@ def pt_flash(t, p, z_i, tc_i, pc_i, af_omega_i,
     soln = dict()
     for item in ['t', 'p', 'k_i', 'v_f', 'z_i', 'x_i', 'y_i', 'gamma_i', 'phi_coef_fun_i',
                  'dew_p_soln', 'bubl_p_soln', 'p_dew', 'p_bubl', 'poynting', 'n_it',
-                 'mag_delta_x_i', 'mag_delta_y_i', 'mag_delta_v_f']:
+                 'mag_delta_x_i', 'mag_delta_y_i', 'mag_delta_v_f', 'sum_rr', 'criterion']:
         soln[item] = locals().get(item)
     return soln
 
@@ -2098,8 +2099,8 @@ def svn_14_2():
         max_it=max_it, full_output=True, y_i_est=y_i))
 
     x = linspace(0.0, 0.8, 50)
-    y = empty_like(x)
-    p_v = empty_like(x)
+    y = empty_like(x) * nan
+    p_v = empty_like(x) * nan
 
     y_dew = linspace(0.0, 0.8789, 50)
     x_dew = y.copy()
@@ -2130,6 +2131,9 @@ def svn_14_2():
         x_dew[i] = soln_dew['x_i'][0]
         p_v_0_dew = p_v_dew[i]
         x_i_est_dew = soln_dew['x_i']
+
+        if p_v[i] > 140:
+            break
     line1 = plt.plot(x, p_v, label=r'$x_1(L)$ bubl_p')
     line2 = plt.plot(y, p_v, label=r'$y_1(V)$ bubl_p')
     plt.plot(x_dew, p_v_dew, 'o', fillstyle='none',
@@ -2378,7 +2382,7 @@ def svn_tab_14_1_2():
                   sec_i, nu_ji, unifac_data_dict,
                   max_it, 1e-10, print_iterations=True)
     t = soln['t']
-    soln = pt_flash(334.152/334.85*334.15, p, z_i, tc_i, pc_i, af_omega_i,
+    soln = pt_flash(334.152 / 334.85 * 334.15, p, z_i, tc_i, pc_i, af_omega_i,
                     alpha_tr, epsilon, sigma, psi, omega,
                     sec_i, nu_ji, unifac_data_dict,
                     max_it=max_it, tol=tol)
@@ -2391,6 +2395,7 @@ def svn_tab_14_1_2():
     p = soln['p']
     n_it = soln['n_it']
     phi_coef_fun_i = soln['phi_coef_fun_i']
+    criterion = soln['criterion']
 
     print('SVN Table 14.2 - n-hexane (1) / ethanol (2) / methylcyclopentane (3) /' +
           'benzene (4) at {:0.4g} bar and {:0.4g} K'.format(p, t))
@@ -2398,7 +2403,9 @@ def svn_tab_14_1_2():
     for i in range(len(z_i)):
         print(('{:d}' + '\t{:.4f}' * 6).format(
             i, z_i[i], x_i[i], y_i[i], k_i[i], phi_coef_fun_i[i], gamma_j[i]))
-    print('p: {:0.3f} bar\tT(calc): {:0.3f} K\tIterations:{:d}'.format(p, t, n_it))
+    print(('p: {:0.3f} bar\tT(calc): {:0.3f} K\tv_f: {:0.4g}'+
+          '\titerations:{:d}\tcriterion:{:0.4g}').format(
+        p, t, v_f, n_it, criterion))
     print('\n' * 2)
 
 

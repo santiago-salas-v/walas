@@ -458,23 +458,21 @@ def r_entspannung_isoth(k_x_j, nuij, n_0, temp_0, p, x_mal=1):
             order = np.argsort(
                 [-abs(gg_abstaende(k_x_j[i], nuij[:, i], n, 0)) for i in r_to_relax])
             j = r_to_relax[order[0]]
-            progress_k, stop, outer_it_k, outer_it_j, \
-                lambda_ls, accum_step, x, \
-                diff, f_val, lambda_ls_y = \
-                nr_ls(x0=x0,
-                      f=lambda xi_t: gg_abstaende(
-                          k_x_j[j], nuij[:, j], n, xi_t, h_0, 'isotherm'),
-                      j=lambda xi_t: jac_gg_abstaende(
-                          k_x_j[j], nuij[:, j], n, xi_t, h_0, 'isotherm'),
-                      tol=1e-5,
-                      max_it=1000,
-                      inner_loop_condition=lambda xi: all(
-                          [item >= 0 or abs(item) < eps for item in
-                           n + nuij[:, j] * xi]),
-                      notify_status_func=notify_status_func,
-                      process_func_handle=lambda: logging.debug('no progress'))
+            soln =  nr_ls(
+                x0=x0,
+                f=lambda xi_t: gg_abstaende(
+                  k_x_j[j], nuij[:, j], n, xi_t, h_0, 'isotherm'),
+                j=lambda xi_t: jac_gg_abstaende(
+                  k_x_j[j], nuij[:, j], n, xi_t, h_0, 'isotherm'),
+                tol=1e-5,
+                max_it=1000,
+                inner_loop_condition=lambda xi: all(
+                  [item >= 0 or abs(item) < eps for item in
+                   n + nuij[:, j] * xi]),
+                notify_status_func=notify_status_func,
+                process_func_handle=lambda: logging.debug('no progress'))
 
-            soln_xi = x
+            soln_xi = soln['x']
 
             xi_j[j] = soln_xi
 
@@ -492,21 +490,19 @@ def r_entspannung_adiab(k_x_j, nuij, n_0, temp_0, p, x_mal=1):
     h_0 = h(temp_0)
     n, xi_j, xi_j_accum_isot, temp = r_entspannung_isoth(
         k_x_j, nuij, n_0, temp_0, p, x_mal=1)
-    progress_k, stop, outer_it_k, outer_it_j, \
-        lambda_ls, accum_step, x, \
-        diff, f_val, lambda_ls_y = \
-        nr_ls(x0=temp,
-              f=lambda t: np.sum(
-                  np.multiply(n_0, h_0) -
-                  np.multiply(n, h(t))),
-              j=lambda t: -sum(n * r * np.concatenate(
-                  [[cp_durch_r(t, i)] for i in range(np.size(n))])),
-              tol=1e-5,
-              max_it=1000,
-              inner_loop_condition=None,
-              notify_status_func=notify_status_func,
-              process_func_handle=lambda: logging.debug('no progress'))
-    temp = x
+    soln = nr_ls(
+        x0=temp,
+        f=lambda t: np.sum(
+          np.multiply(n_0, h_0) -
+          np.multiply(n, h(t))),
+        j=lambda t: -sum(n * r * np.concatenate(
+          [[cp_durch_r(t, i)] for i in range(np.size(n))])),
+        tol=1e-5,
+        max_it=1000,
+        inner_loop_condition=None,
+        notify_status_func=notify_status_func,
+        process_func_handle=lambda: logging.debug('no progress'))
+    temp = soln['x']
     n = np.copy(n_0)
     for rel in range(x_mal):
         r_to_relax = [j for j in range(nuij.shape[1])]
@@ -517,25 +513,23 @@ def r_entspannung_adiab(k_x_j, nuij, n_0, temp_0, p, x_mal=1):
                 [-abs(gg_abstaende(k_x_j[i], nuij[:, i], n, 0)) for i in r_to_relax])
             j = r_to_relax[order[0]]
             x0 = np.concatenate([[xi_j_accum_isot[j]], [temp]])
-            progress_k, stop, outer_it_k, outer_it_j, \
-                lambda_ls, accum_step, x, \
-                diff, f_val, lambda_ls_y = \
-                nr_ls(x0=x0,
-                      f=lambda xi_t: gg_abstaende(
-                          k_x_j[j], nuij[:, j], n, xi_t, h_0, 'adiabat'),
-                      j=lambda xi_t: jac_gg_abstaende(
-                          k_x_j[j], nuij[:, j], n, xi_t, h_0, 'adiabat'),
-                      tol=1e-5,
-                      max_it=1000,
-                      inner_loop_condition=lambda xi_t: all(
-                          [item >= 0 or abs(item) < eps for item in
-                           n + nuij[:, j] * xi_t[:-1]]),
-                      notify_status_func=notify_status_func,
-                      process_func_handle=lambda: logging.debug('no progress'))
+            soln = nr_ls(
+                x0=x0,
+                f=lambda xi_t: gg_abstaende(
+                  k_x_j[j], nuij[:, j], n, xi_t, h_0, 'adiabat'),
+                j=lambda xi_t: jac_gg_abstaende(
+                  k_x_j[j], nuij[:, j], n, xi_t, h_0, 'adiabat'),
+                tol=1e-5,
+                max_it=1000,
+                inner_loop_condition=lambda xi_t: all(
+                  [item >= 0 or abs(item) < eps for item in
+                   n + nuij[:, j] * xi_t[:-1]]),
+                notify_status_func=notify_status_func,
+                process_func_handle=lambda: logging.debug('no progress'))
 
-            soln_xi = x[:-1]
+            soln_xi = soln['x'][:-1]
 
-            temp = x[-1]
+            temp = soln['x'][-1]
 
             h_0 = h(temp)
 
@@ -576,20 +570,19 @@ n_1_norm = n_1 / sum(n_0)  # Normalisieren
 _, _, xi_1_norm, _ = r_entspannung_isoth(
     k_x_1, nuij, n_1_norm, t_aus_rdampfr, p, 1)
 # Newton Raphson
-progress_k, stop, outer_it_k, outer_it_j, \
-    lambda_ls, accum_step, x, \
-    diff, f_val, lambda_ls_y = \
-    nr_ls(x0=xi_1_norm,
-          f=lambda xi: gg_abstaende(k_x_1, nuij, n_1_norm, xi),
-          j=lambda xi: jac_gg_abstaende(k_x_1, nuij, n_1_norm, xi),
-          tol=1e-12,
-          max_it=1000,
-          inner_loop_condition=lambda xi:
-          all([item >= 0 for item in
-               n_1_norm + nuij.dot(xi)]),
-          notify_status_func=notify_status_func,
-          process_func_handle=lambda: logging.debug('no progress'))
-xi_1 = x * sum(n_0)
+soln = nr_ls(
+    x0=xi_1_norm,
+    f=lambda xi: gg_abstaende(k_x_1, nuij, n_1_norm, xi),
+    j=lambda xi: jac_gg_abstaende(k_x_1, nuij, n_1_norm, xi),
+    tol=1e-12,
+    max_it=1000,
+    inner_loop_condition=lambda xi:
+    all([item >= 0 for item in
+       n_1_norm + nuij.dot(xi)]),
+    notify_status_func=notify_status_func,
+    process_func_handle=lambda: logging.debug('no progress'))
+
+xi_1 = soln['x'] * sum(n_0)
 n_1 = (n_0 + nuij.dot(xi_1))
 fehler = fj_0(xi_1, n_0, k_x_1, nuij)
 
@@ -701,20 +694,18 @@ n_2_norm = n_2 / sum(n_1)  # Normalisieren
 _, _, xi_2_norm, _ = r_entspannung_isoth(
     k_x_2, nuij, n_2_norm, t_aus_rwgs, p, 1)
 # Newton Raphson
-progress_k, stop, outer_it_k, outer_it_j, \
-    lambda_ls, accum_step, x, \
-    diff, f_val, lambda_ls_y = \
-    nr_ls(x0=xi_2_norm,
-          f=lambda xi: gg_abstaende(k_x_2, nuij, n_2_norm, xi),
-          j=lambda xi: jac_gg_abstaende(k_x_2, nuij, n_2_norm, xi),
-          tol=1e-12,
-          max_it=1000,
-          inner_loop_condition=lambda xi:
-          all([item >= 0 for item in
-               n_2_norm + nuij.dot(xi)]),
-          notify_status_func=notify_status_func,
-          process_func_handle=lambda: logging.debug('no progress'))
-xi_2 = x * sum(n_1)
+soln = nr_ls(
+    x0=xi_2_norm,
+    f=lambda xi: gg_abstaende(k_x_2, nuij, n_2_norm, xi),
+    j=lambda xi: jac_gg_abstaende(k_x_2, nuij, n_2_norm, xi),
+    tol=1e-12,
+    max_it=1000,
+    inner_loop_condition=lambda xi:
+    all([item >= 0 for item in
+       n_2_norm + nuij.dot(xi)]),
+    notify_status_func=notify_status_func,
+process_func_handle=lambda: logging.debug('no progress'))
+xi_2 = soln['x'] * sum(n_1)
 n_2 = (n_1 + nuij.dot(xi_2))
 fehler = fj_0(xi_2, n_1, k_x_2, nuij)
 
@@ -1001,20 +992,18 @@ n_5_norm = n_5 / sum(n_5)  # Normalisieren
 _, _, xi_5_norm, _ = r_entspannung_isoth(
     k_x_5, nuij, n_5_norm, t_aus_rmeth, p, 1)
 # Newton Raphson
-progress_k, stop, outer_it_k, outer_it_j, \
-    lambda_ls, accum_step, x, \
-    diff, f_val, lambda_ls_y = \
-    nr_ls(x0=xi_5_norm,
-          f=lambda xi: gg_abstaende(k_x_5, nuij, n_5_norm, xi),
-          j=lambda xi: jac_gg_abstaende(k_x_5, nuij, n_5_norm, xi),
-          tol=1e-12,
-          max_it=1000,
-          inner_loop_condition=lambda xi:
-          all([item >= 0 for item in
-               n_5_norm + nuij.dot(xi)]),
-          notify_status_func=notify_status_func,
-          process_func_handle=lambda: logging.debug('no progress'))
-xi_5 = x * sum(n_5)
+soln = nr_ls(
+    x0=xi_5_norm,
+    f=lambda xi: gg_abstaende(k_x_5, nuij, n_5_norm, xi),
+    j=lambda xi: jac_gg_abstaende(k_x_5, nuij, n_5_norm, xi),
+    tol=1e-12,
+    max_it=1000,
+    inner_loop_condition=lambda xi:
+    all([item >= 0 for item in
+       n_5_norm + nuij.dot(xi)]),
+    notify_status_func=notify_status_func,
+    process_func_handle=lambda: logging.debug('no progress'))
+xi_5 = soln['x'] * sum(n_5)
 n_5 = (n_4_pr + nuij.dot(xi_5))
 fehler = fj_0(xi_5, n_4_pr, k_x_5, nuij)
 
@@ -1301,23 +1290,21 @@ n_7_norm, _, xi_7_norm, t_aus_nh3_syn = r_entspannung_adiab(
 xi_7 = xi_7_norm * sum(n_6)
 # Newton Raphson
 x0 = np.concatenate([xi_7, [t_aus_nh3_syn]])
-progress_k, stop, outer_it_k, outer_it_j, \
-    lambda_ls, accum_step, x, \
-    diff, f_val, lambda_ls_y = \
-    nr_ls(x0=x0,
-          f=lambda xi_t: gg_abstaende(
-              k_x_7, nuij, n_6, xi_t, h_6, 'adiabat'),
-          j=lambda xi_t: jac_gg_abstaende(
-              k_x_7, nuij, n_6, xi_t, h_6, 'adiabat'),
-          tol=1e-12,
-          max_it=1000,
-          inner_loop_condition=lambda xi_t: all(
-              [item >= 0 for item in
-               n_6 + nuij.dot(xi_t[:-1])]),
-          notify_status_func=notify_status_func,
-          process_func_handle=lambda: logging.debug('no progress'))
-xi_7 = x[:-1]
-t_aus_nh3_syn = x[-1]
+soln = nr_ls(
+    x0=x0,
+    f=lambda xi_t: gg_abstaende(
+      k_x_7, nuij, n_6, xi_t, h_6, 'adiabat'),
+    j=lambda xi_t: jac_gg_abstaende(
+      k_x_7, nuij, n_6, xi_t, h_6, 'adiabat'),
+    tol=1e-12,
+    max_it=1000,
+    inner_loop_condition=lambda xi_t: all(
+      [item >= 0 for item in
+       n_6 + nuij.dot(xi_t[:-1])]),
+    notify_status_func=notify_status_func,
+process_func_handle=lambda: logging.debug('no progress'))
+xi_7 = soln['x'][:-1]
+t_aus_nh3_syn = soln['x'][-1]
 n_7 = (n_6 + nuij.dot(xi_7))
 h_7 = h(t_aus_nh3_syn)
 g_7 = g(t_aus_nh3_syn, h_7)
@@ -1657,25 +1644,23 @@ for it_n in range(1, 25):
         k_x_7, nuij, n_6_norm, t_ein_nh3_syn, p, 1)
     # Newton Raphson
     x0 = np.concatenate([xi_7_norm, [t_aus_nh3_syn]])
-    progress_k, stop, outer_it_k, outer_it_j, \
-        lambda_ls, accum_step, x, \
-        diff, f_val, lambda_ls_y = \
-        nr_ls(x0=x0,
-              f=lambda xi_t: gg_abstaende(
-                  k_x_7, nuij, n_6_norm, xi_t, h_6, 'adiabat'),
-              j=lambda xi_t: jac_gg_abstaende(
-                  k_x_7, nuij, n_6_norm, xi_t, h_6, 'adiabat'),
-              tol=1e-12,
-              max_it=1000,
-              inner_loop_condition=lambda xi_t: all(
-                  [item >= 0 or abs(item) for item in
-                   n_6_norm + nuij.dot(xi_t[:-1])]),
-              notify_status_func=notify_status_func,
-              process_func_handle=lambda: logging.debug('no progress'))
-    xi_7 = x[:-1]
+    soln = nr_ls(
+        x0=x0,
+        f=lambda xi_t: gg_abstaende(
+          k_x_7, nuij, n_6_norm, xi_t, h_6, 'adiabat'),
+        j=lambda xi_t: jac_gg_abstaende(
+          k_x_7, nuij, n_6_norm, xi_t, h_6, 'adiabat'),
+        tol=1e-12,
+        max_it=1000,
+        inner_loop_condition=lambda xi_t: all(
+          [item >= 0 or abs(item) for item in
+           n_6_norm + nuij.dot(xi_t[:-1])]),
+        notify_status_func=notify_status_func,
+        process_func_handle=lambda: logging.debug('no progress'))
+    xi_7 = soln['x'][:-1]
     # denormalize
     xi_7 = xi_7 * sum(n_6)
-    t_aus_nh3_syn = x[-1]
+    t_aus_nh3_syn = soln['x'][-1]
     n_7 = (n_6 + nuij.dot(xi_7))
     fehler = gg_abstaende(k_x_7, nuij, n_6,
                           np.concatenate([xi_7, [t_aus_nh3_syn]]),
@@ -1690,22 +1675,20 @@ for it_n in range(1, 25):
     g_7 = g(t_aus_nh3_syn, h_7)
     k_7 = k(t_aus_nh3_syn, g_7, nuij)
     k_x_7 = np.multiply(k_7, np.power(p / 1., -sum(nuij)))
-    progress_k, stop, outer_it_k, outer_it_j, \
-        lambda_ls, accum_step, x, \
-        diff, f_val, lambda_ls_y = \
-        nr_ls(x0=xi_7,
-              f=lambda xi: gg_abstaende(
-                  k_x_7, nuij, n_6, xi, h_6, 'isotherm'),
-              j=lambda xi: jac_gg_abstaende(
-                  k_x_7, nuij, n_6, xi, h_6, 'isotherm'),
-              tol=1e-6,
-              max_it=1000,
-              inner_loop_condition=lambda xi: all(
-                  [item >= 0 or abs(item) < eps for item in
-                   n_6 + nuij.dot(xi)]),
-              notify_status_func=notify_status_func,
-              process_func_handle=lambda: logging.debug('no progress'))
-    xi_7 = x
+    soln = nr_ls(
+        x0=xi_7,
+        f=lambda xi: gg_abstaende(
+          k_x_7, nuij, n_6, xi, h_6, 'isotherm'),
+        j=lambda xi: jac_gg_abstaende(
+          k_x_7, nuij, n_6, xi, h_6, 'isotherm'),
+        tol=1e-6,
+        max_it=1000,
+        inner_loop_condition=lambda xi: all(
+          [item >= 0 or abs(item) < eps for item in
+           n_6 + nuij.dot(xi)]),
+        notify_status_func=notify_status_func,
+        process_func_handle=lambda: logging.debug('no progress'))
+    xi_7 = soln['x']
     n_7 = (n_6 + nuij.dot(xi_7))
     fehler = gg_abstaende(k_x_7, nuij, n_6,
                           np.concatenate([xi_7, [t_aus_nh3_syn]]),
