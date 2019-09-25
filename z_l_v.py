@@ -7,8 +7,8 @@ from numpy import array, append, zeros, abs, ones, empty_like, empty, argwhere, 
 from numpy import sqrt, outer, sum, log, exp, multiply, diag, sign
 from numpy import linspace, dot, nan, finfo, isnan, isinf
 from numpy.random import randint
-from scipy import optimize
-from matplotlib import pyplot as plt
+# from scipy import optimize
+# from matplotlib import pyplot as plt
 from setup_results_log import notify_status_func, setup_log_file
 
 r = 8.314 * 10. ** 6 / 10. ** 5  # bar cm^3/(mol K)
