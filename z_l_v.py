@@ -7,8 +7,8 @@ from numpy import array, append, zeros, abs, ones, empty_like, empty, argwhere, 
 from numpy import sqrt, outer, sum, log, exp, multiply, diag, sign
 from numpy import linspace, dot, nan, finfo, isnan, isinf
 from numpy.random import randint
-from scipy import optimize
-from matplotlib import pyplot as plt
+# from scipy import optimize
+# from matplotlib import pyplot as plt
 from setup_results_log import notify_status_func, setup_log_file
 
 r = 8.314 * 10. ** 6 / 10. ** 5  # bar cm^3/(mol K)
@@ -1831,13 +1831,19 @@ def pt_flash(t, p, z_i, tc_i, pc_i, af_omega_i,
         phi_i_v = phi_dew + (phi_bubl - phi_dew) * (p - p_dew) / (p_bubl - p_dew)
         k_i = k_i_dew + (k_i_bubl - k_i_dew) * (p - p_dew) / (p_bubl - p_dew)
         v_f = 1 + (0 - 1) * (p - p_dew) / (p_bubl - p_dew)
-        y_i = z_i
-        x_i = z_i / (1 + v_f * (k_i - 1))
+        y_i = k_i * z_i / (1 + v_f * (k_i - 1))
+        x_i = z_i - v_f * y_i
         x_i = x_i / sum(x_i)
+        v_f_vs = v_f * sum(y_i)**1.0
+        g = v_f_vs - v_f
+        v_f_vs_old = v_f
+        p_weg = 1.0
         for n_it in range(max_it):
             y_i_old = y_i
             x_i_old = x_i
             v_f_old = v_f
+            g_old = g
+            v_f_vs_old = v_f_vs
             if sec_j is None:
                 phi_i_l = phi(t, p, x_i, tc_i, pc_i, af_omega_i, 'l',
                           alpha_tr, epsilon, sigma, psi, omega)['phi']
@@ -1845,9 +1851,8 @@ def pt_flash(t, p, z_i, tc_i, pc_i, af_omega_i,
             else:
                 phi_coef_fun_i = phi_i_v / phi_i_sat * poynting_i
                 k_i = gamma_i * p_i_sat / (phi_coef_fun_i * p)
-            f = sum(z_i * (k_i - 1) / (1 + v_f * (k_i - 1)))
-            df_dv_f = -sum(z_i * (k_i - 1) ** 2 / (1 + v_f * (k_i - 1)) ** 2)
-            v_f = v_f - 1 / df_dv_f * f
+            # Wegstein-projected method -
+            v_f = p_weg * v_f_vs_old + (1 - p_weg) * v_f_vs
             if not 0 < v_f < 1:
                 ls_approach = line_search(
                     lambda v_f: sum(z_i * (k_i - 1) / (1 + v_f * (k_i - 1))),
@@ -1855,10 +1860,13 @@ def pt_flash(t, p, z_i, tc_i, pc_i, af_omega_i,
                     v_f_old, additional_restrictions=lambda v_f: 0 < v_f < 1)
                 v_f = ls_approach['x_2']
                 total_backtracks += ls_approach['backtrack_count']
-            x_i = z_i / (1 + v_f * (k_i - 1))
-            y_i = k_i * x_i
+            y_i = k_i * z_i / (1 + v_f * (k_i - 1))
+            x_i = z_i - v_f * y_i
             x_i = x_i / sum(x_i)
-            y_i = y_i / sum(y_i)
+            v_f_vs = v_f * sum(y_i) ** 1.0
+            g = v_f_vs - v_f
+            p_weg = g / (g - g_old)
+
             delta_x_i = x_i - x_i_old
             delta_y_i = y_i - y_i_old
             delta_v_f = v_f - v_f_old

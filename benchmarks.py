@@ -88,7 +88,7 @@ def benchmark_pt_flash():
 
 # benchmark_isot_flash()
 # benchmark_pt_flash()
-# time_1 = timeit(stmt='benchmark_pt_flash()', globals=globals(), number=10)
+time_1 = timeit(stmt='benchmark_pt_flash()', globals=globals(), number=10)
 # print(time_1)
 # time_2 = timeit(stmt='benchmark_isot_flash()', globals=globals(), number=10)
 # print(time_2)
