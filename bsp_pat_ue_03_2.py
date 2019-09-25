@@ -1,6 +1,5 @@
 import numpy as np
 from scipy import optimize
-from scipy import misc
 import z_l_v
 import logging
 from numerik import nr_ls
@@ -818,12 +817,17 @@ for i in range(len(p_sat)):
             p_sat[i] * 100000.)  # m^3 / mol
         v_m_v[i] = z_v[i] * r * t_aus_tkuehler / (
             p_sat[i] * 100000.)  # m^3 / mol
-        dps_dt = misc.derivative(
-            lambda t_var: z_l_v.bubl_p(
-                t_var, p_sat[i], 1.0, tc[i], pc[i], omega_af[i],
-                alpha_tr, epsilon, sigma, psi, omega,
-                tol=1e-10, y_i_est=1.0)['p'],
-            t_aus_tkuehler)  # bar / °K
+        t_1, t_2 = t_aus_tkuehler, 1.0001 * t_aus_tkuehler
+        ps_2 = z_l_v.bubl_p(
+            t_2, p_sat[i], 1.0, tc[i], pc[i], omega_af[i],
+            alpha_tr, epsilon, sigma, psi, omega, tol=1e-10,
+                     y_i_est=1.0)['p']
+        ps_1 = z_l_v.bubl_p(
+            t_1, p_sat[i], 1.0, tc[i], pc[i], omega_af[i],
+            alpha_tr, epsilon, sigma, psi, omega, tol=1e-10,
+            y_i_est=1.0)['p']
+        dps_dt = (ps_2 - ps_1) / (t_2 - t_1) # bar / °K
+
         # Clausius-Clapeyron
         delta_h_v[i] = t_aus_tkuehler * (v_m_v[i] - v_m_l[i]) * dps_dt * \
             100000.  # J / mol
@@ -1400,12 +1404,16 @@ for i in range(len(p_sat)):
             p_sat[i] * 100000.)  # m^3 / mol
         v_m_v[i] = z_v[i] * r * t_aus_nh3_fl / (
             p_sat[i] * 100000.)  # m^3 / mol
-        dps_dt = misc.derivative(
-            lambda t_var: z_l_v.bubl_p(
-                t_var, p_sat[i], 1.0, tc[i], pc[i], omega_af[i],
-                alpha_tr, epsilon, sigma, psi, omega,
-                tol=1e-10, y_i_est=1.0)['p'],
-            t_aus_tkuehler)  # bar / °K
+        t_1, t_2 = t_aus_tkuehler, 1.0001 * t_aus_tkuehler
+        ps_2 = z_l_v.bubl_p(
+            t_2, p_sat[i], 1.0, tc[i], pc[i], omega_af[i],
+            alpha_tr, epsilon, sigma, psi, omega, tol=1e-10,
+            y_i_est=1.0)['p']
+        ps_1 = z_l_v.bubl_p(
+            t_1, p_sat[i], 1.0, tc[i], pc[i], omega_af[i],
+            alpha_tr, epsilon, sigma, psi, omega, tol=1e-10,
+            y_i_est=1.0)['p']
+        dps_dt = (ps_2 - ps_1) / (t_2 - t_1)  # bar / °K
         # Clausius-Clapeyron
         delta_h_v[i] = t_aus_nh3_fl * (v_m_v[i] - v_m_l[i]) * dps_dt * \
             100000.  # J / mol
@@ -1775,12 +1783,16 @@ for it_n in range(1, 25):
                 p_sat[i] * 100000.)  # m^3 / mol
             v_m_v[i] = z_v[i] * r * t_aus_nh3_fl / (
                 p_sat[i] * 100000.)  # m^3 / mol
-            dps_dt = misc.derivative(
-                lambda t_var: z_l_v.bubl_p(
-                    t_var, p_sat[i], 1.0, tc[i], pc[i], omega_af[i],
-                    alpha_tr, epsilon, sigma, psi, omega,
-                    tol=1e-10, y_i_est=1.0)['p'],
-                t_aus_tkuehler)  # bar / °K
+            t_1, t_2 = t_aus_tkuehler, 1.0001 * t_aus_tkuehler
+            ps_2 = z_l_v.bubl_p(
+                t_2, p_sat[i], 1.0, tc[i], pc[i], omega_af[i],
+                alpha_tr, epsilon, sigma, psi, omega, tol=1e-10,
+                y_i_est=1.0)['p']
+            ps_1 = z_l_v.bubl_p(
+                t_1, p_sat[i], 1.0, tc[i], pc[i], omega_af[i],
+                alpha_tr, epsilon, sigma, psi, omega, tol=1e-10,
+                y_i_est=1.0)['p']
+            dps_dt = (ps_2 - ps_1) / (t_2 - t_1)  # bar / °K
             # Clausius-Clapeyron
             delta_h_v[i] = t_aus_nh3_fl * (v_m_v[i] - v_m_l[i]) * dps_dt * \
                 100000.  # J / mol
