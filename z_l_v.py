@@ -1881,7 +1881,7 @@ def pt_flash(t, p, z_i, tc_i, pc_i, af_omega_i,
         v_f = 1.0
     elif p_bubl <= p:
         v_f = 0.0
-    iterations = n_it + n_fev
+    iterations = n_it
     soln = dict()
     for item in ['t', 'p', 'k_i', 'v_f', 'z_i', 'x_i', 'y_i', 'gamma_i', 'phi_coef_fun_i',
                  'dew_p_soln', 'bubl_p_soln', 'p_dew', 'p_bubl', 'poynting', 'n_it',
