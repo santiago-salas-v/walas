@@ -82,8 +82,8 @@ def benchmark_pt_flash():
     criterion = soln['criterion']
 
     print(('v_f: {:0.4f}\tcriterion: {:0.4e}\t' +
-           'iterations+backtracks: {:d}\tx_i_max: {:0.4f}'
-           ).format(v_f, criterion, iterations + backtracks + n_fev,
+           'iterations: {:d}\tn_fev: {:d}\ttotal_backtracks: {:d}\tx_i_max: {:0.4f}'
+           ).format(v_f, criterion,  iterations, n_fev, backtracks,
                     x_i[x_i == max(x_i)].item()))
 
 # benchmark_isot_flash()
