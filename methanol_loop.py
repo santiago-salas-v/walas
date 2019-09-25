@@ -57,7 +57,7 @@ mm = np.array([
     60.053
 ], dtype=float)  # g/mol
 
-z_l_v.use_pr_eos()
+alpha_tr, epsilon, sigma, psi, omega = z_l_v.use_pr_eos()
 # Parameter der Wärmekapazität-Gleichung aus dem VDI-Wärmeatlas
 cp_konstanten = np.zeros([len(namen), 7])
 cp_konstanten_text = [
@@ -287,7 +287,9 @@ def df_dt(y, _, g, d_p, l_r):
     mm_m = sum(y_i * mm) * 1 / 1000.  # kg/mol
     cp_m = sum(y_i * cp_ig_durch_r(t) * 8.3145)  # J/mol/K
     cp_g = cp_m / mm_m  # J/kg/K
-    z_realgas_f = z_l_v.z_non_sat(t, p, y_i, tc, pc, omega_af)['z']
+    z_realgas_f = z_l_v.z_non_sat(
+        t, p, y_i, tc, pc, omega_af,
+        alpha_tr, epsilon, sigma, psi, omega)['z']
     c_t = p / (8.3145 * 1e-5 * t) * 1 / z_realgas_f
     # bar * mol/bar/m^3/K*K = mol/m^3
     p_i = y_i * p  # bar
@@ -365,7 +367,8 @@ def profile(n_i_1_ein, d_p_ein, optimisieren_nach='n_t'):
     p_2 = p_soln[-1]  # bar
     z_i = y_i_soln[-1]  # dimensionslos
     verfluessigung = z_l_v.isot_flash_solve(
-        t_2, p_2, z_i, tc, pc, omega_af)
+        t_2, p_2, z_i, tc, pc, omega_af,
+        alpha_tr, epsilon, sigma, psi, omega)
     v_f_flash = verfluessigung['v_f'].item()
     x_i_flash = verfluessigung['x_i']
     y_i_flash = verfluessigung['y_i']
@@ -477,7 +480,8 @@ v_z_real = np.empty_like(v_z)
 for i in range(len(z_d_l_r)):
     z = z_l_v.z_non_sat(
         t_z[i], p_z[i], y_i_z[i],
-        tc, pc, omega_af)['z']
+        tc, pc, omega_af,
+        alpha_tr, epsilon, sigma, psi, omega)['z']
     v_z_real[i] = v_z[i] * z
 
 # Tatsächliche stöchiometrische Zahl

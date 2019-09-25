@@ -1,10 +1,11 @@
-from crt_lib import *
 import numpy as np
 from matplotlib import pyplot as plt
 from matplotlib import lines
 import ctypes
 import os
-
+from scipy.integrate import odeint
+from crt_lib import mm, namen, h_298, cp_ig_durch_r, mu, delta_h_r, tc, pc, omega_af, df_dt
+import z_l_v
 
 # Journal of Power Sources 173 (2007) 467–477
 
@@ -43,7 +44,7 @@ n_i_0 = np.array([
 y_i0 = n_i_0 / sum(n_i_0)
 m_dot = sum(n_i_0 * mm / 1000.)  # kg/s
 
-z_l_v.use_pr_eos()
+alpha_tr, epsilon, sigma, psi, omega = z_l_v.use_pr_eos()
 
 # Stoechiometrische Koeffizienten
 nuij = np.zeros([len(namen), 1])
@@ -84,7 +85,8 @@ dlr = d_z_dimlos * l_r  # m
 soln = odeint(lambda y, z0:
               df_dt(y, z0, g, d_t, l_r,
                     phi, d_p, rho_b,
-                    u, t_r),
+                    u, t_r,
+                    alpha_tr, epsilon, sigma, psi, omega ),
               y_0, z_d_l_r)
 y_i_soln = soln[:, :len(y_i0)]
 p_soln = soln[:, -2]
@@ -268,7 +270,9 @@ def df_dt(y, _, g, r_fun):
     mm_m = sum(y_i * mm) * 1 / 1000.  # kg/mol
     cp_m = sum(y_i * cp_ig_durch_r(t) * 8.3145)  # J/mol/K
     cp_g = cp_m / mm_m  # J/kg/K
-    z_realgas_f = z_l_v.z_non_sat(t, p, y_i, tc, pc, omega_af)['z']
+    z_realgas_f = z_l_v.z_non_sat(
+        t, p, y_i, tc, pc, omega_af,
+        alpha_tr, epsilon, sigma, psi, omega)['z']
     c_t = p / (8.3145 * 1e-5 * t) * 1 / z_realgas_f
     # bar * mol/bar/m^3/K*K = mol/m^3
     m_punkt = g * np.pi/4. * d_t**2
@@ -540,9 +544,11 @@ nuij[[
 delta_h_r_298 = nuij.T.dot(h_298)  # J/mol
 
 z_realgas_f_ntp = z_l_v.z_non_sat(
-    273.15, 1.0, y_i0, tc, pc, omega_af)['z'].item()
+    273.15, 1.0, y_i0, tc, pc, omega_af,
+    alpha_tr, epsilon, sigma, psi, omega)['z'].item()
 z_realgas_f_0 = z_l_v.z_non_sat(
-    t0, p0, y_i0, tc, pc, omega_af)['z'].item()
+    t0, p0, y_i0, tc, pc, omega_af,
+    alpha_tr, epsilon, sigma, psi, omega)['z'].item()
 v_punkt_0 = ghsv/60.**2 * tot_v_kat  # m^3/s
 n_i_0 = v_punkt_0 * p0 * 1e5 / (8.3145 * t0 * z_realgas_f_0) * y_i0  # mol/s
 m_punkt_0 = sum(n_i_0 * mm / 1000.)  # kg/s

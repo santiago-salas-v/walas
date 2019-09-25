@@ -234,7 +234,7 @@ def r_i(t, p_i):
 
 def df_dt(y, _, g, d_t, l_r,
           phi, d_p, rho_b,
-          u, t_r):
+          u, t_r, alpha_tr, epsilon, sigma, psi, omega):
     # FIXME: Normalize y_i on each iteration.
     # Inerts should not change at all, but there is a 0.00056% increase already
     # on the first time step. Test:
@@ -245,7 +245,9 @@ def df_dt(y, _, g, d_t, l_r,
     mm_m = sum(y_i * mm) * 1 / 1000.  # kg/mol
     cp_m = sum(y_i * cp_ig_durch_r(t) * 8.3145)  # J/mol/K
     cp_g = cp_m / mm_m  # J/kg/K
-    z_realgas_f = z_l_v.z_non_sat(t, p, y_i, tc, pc, omega_af)['z']
+    z_realgas_f = z_l_v.z_non_sat(
+        t, p, y_i, tc, pc, omega_af,
+        alpha_tr, epsilon, sigma, psi, omega)['z']
     c_t = p / (8.3145 * 1e-5 * t) * 1 / z_realgas_f
     # bar * mol/bar/m^3/K*K = mol/m^3
     p_i = y_i * p  # bar
