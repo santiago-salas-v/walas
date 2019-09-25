@@ -67,10 +67,9 @@ def solve_cubic(abcd):
     y_imag_parts = array([im_y1, im_y2, im_y3])
     positions = lexsort([-y_real_parts, y_imag_parts, abs(y_imag_parts)])
     # roots of the complete equation through substitution xk=yk-b/(3a)
-    x_list = [[
-        y_real_parts[i] - b / 3 / a,
-        y_imag_parts[i]
-    ] for i in positions]
+    x_list = []
+    for i in positions:
+        x_list += [[y_real_parts[i] - b / 3 / a, y_imag_parts[i]]]
     return dict([['roots', x_list], ['disc', disc], ['p', p], ['q', q]])
 
 
@@ -122,11 +121,9 @@ def solve_quartic(abcde):
     y_imag_parts = array([yi.imag for yi in [y1, y2, y3, y4]])
     positions = lexsort([-y_real_parts, y_imag_parts, abs(y_imag_parts)])
     # roots of the complete equation by substitution xk=yk-b/(4a)
-    x_list = [[
-        y_real_parts[i] - b / (4 * a),
-        y_imag_parts[i]
-    ] for i in positions]
-    
+    x_list = []
+    for i in positions:
+        x_list += [[y_real_parts[i] - b / (4 * a), y_imag_parts[i]]]
     return dict([['roots', x_list]])
 
 

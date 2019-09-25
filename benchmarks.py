@@ -1,18 +1,19 @@
 from numpy import array, ones, sqrt, nan
 from z_l_v import isot_flash, pt_flash, use_pr_eos, p_i_sat_ceos
+from timeit import timeit
 
 t = 293.15
 p = 180.0
 z_i = array([
-    1.745258443e-10,
-    0.7165626228,
-    2.622719869e-11,
-    0.01872460626,
-    0.02648532746,
-    0.1528714319,
-    0.002225502851,
-    8.267131539e-24,
-    0.08313050849])
+    1.74525844326899369775524e-10,
+    0.716562622816228844691011,
+    2.62271986917900010078784e-11,
+    0.0187246062565056513304906,
+    0.0264853274626257462198708,
+    0.152871431923119555085222,
+    0.00222550285133812312393653,
+    8.26713153902460841359341e-24,
+    0.0831305084894291140829026])
 tc = array([
     132.86, 33.19, 304.13,
     647.10, 190.56, 405.50,
@@ -87,10 +88,7 @@ def benchmark_pt_flash():
 
 # benchmark_isot_flash()
 # benchmark_pt_flash()
-# time_1 = timeit.timeit(stmt='z_l_v.pt_flash(t_aus_tkuehler, p, z_i, tc, pc, omega_af,'+
-#                       'alpha_tr, epsilon, sigma, psi, omega, tol=1e-10, p_est=p_est)',
-#               globals=globals(), number=4)
-# FIXME: times to 6.3 s (brute force faster than sofisticated)
-# time_2 = timeit.timeit(stmt='profile_fun(t_aus_tkuehler, p, z_i, tc, pc, omega_af,'+
-#                       'alpha_tr, epsilon, sigma, psi, omega, tol=1e-10, p_est=p_est)',
-#                     globals=globals(), number=4)
+# time_1 = timeit(stmt='benchmark_pt_flash()', globals=globals(), number=10)
+# print(time_1)
+# time_2 = timeit(stmt='benchmark_isot_flash()', globals=globals(), number=10)
+# print(time_2)
