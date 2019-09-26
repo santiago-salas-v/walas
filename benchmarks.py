@@ -73,7 +73,7 @@ def benchmark_pt_flash():
     zisat = array([z_i[i] for i in range(len(z_i)) if soln['success'][i]])
     p_est = sum(pisat * zisat / sum(zisat))
     soln = pt_flash(t, p, z_i, tc, pc, omega_af,
-                          alpha_tr, epsilon, sigma, psi, omega, tol=1e-10, p_est=p_est)
+                    alpha_tr, epsilon, sigma, psi, omega, tol=1e-10, p_est_0=p_est)
     iterations = soln['iterations']
     backtracks = soln['total_backtracks']
     v_f = soln['v_f']

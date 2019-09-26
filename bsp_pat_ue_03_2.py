@@ -1376,7 +1376,7 @@ pisat = np.array([soln['p'][i] for i in range(len(z_i)) if soln['success'][i]])
 zisat = np.array([z_i[i] for i in range(len(z_i)) if soln['success'][i]])
 p_est = sum(pisat * zisat / sum(zisat))
 soln = z_l_v.pt_flash(t_aus_tkuehler, p, z_i, tc, pc, omega_af,
-                      alpha_tr, epsilon, sigma, psi, omega, tol=1e-10, p_est=p_est)
+                      alpha_tr, epsilon, sigma, psi, omega, tol=1e-10, p_est_0=p_est)
 v_f = soln['v_f']
 x_i = soln['x_i']
 y_i = soln['y_i']
@@ -1754,7 +1754,7 @@ for it_n in range(1, 25):
     zisat = np.array([z_i[i] for i in range(len(z_i)) if soln['success'][i]])
     p_est = sum(pisat * zisat / sum(zisat))
     soln = z_l_v.pt_flash(t_aus_tkuehler, p, z_i, tc, pc, omega_af,
-                          alpha_tr, epsilon, sigma, psi, omega, tol=1e-10, p_est=p_est)
+                          alpha_tr, epsilon, sigma, psi, omega, tol=1e-10, p_est_0=p_est)
     v_f = soln['v_f']
     y_i = soln['y_i']
     x_i = soln['x_i']

@@ -1,15 +1,17 @@
 import sys
+
+from matplotlib import pyplot as plt
 from numpy import array, zeros, ones, empty, log, append, linspace, sqrt, exp, sum
 from numpy import finfo, nan, concatenate, asarray, empty_like, dot, outer, multiply
 from numpy.random import randint
 from scipy import optimize
-from matplotlib import pyplot as plt
-from setup_results_log import notify_status_func, setup_log_file
-from z_l_v import use_pr_eos, use_srk_eos, use_srk_eos_simple_alpha, isot_flash, pt_flash
-from z_l_v import bubl_p, dew_p, bubl_t, dew_t, p_sat, p_i_sat_ceos, phi, p_est, z_phase
-from z_l_v import setup_unifac_data, gamma_u, bubl_point_step_l_k, dew_point_step_l_k, State
+
 from numerik import secant_ls_3p
-from poly_3_4 import solve_cubic, solve_quartic
+from poly_3_4 import solve_cubic
+from setup_results_log import setup_log_file
+from z_l_v import bubl_p, dew_p, bubl_t, p_sat, p_i_sat_ceos, phi, p_est, z_phase
+from z_l_v import setup_unifac_data, gamma_u, bubl_point_step_l_k, dew_point_step_l_k, State
+from z_l_v import use_pr_eos, use_srk_eos, isot_flash, pt_flash
 
 r = 8.314 * 10. ** 6 / 10. ** 5  # bar cm^3/(mol K)
 rlv = 0.8  # Rücklaufverhältnis
@@ -46,9 +48,9 @@ def vdi_atlas():
     soln = secant_ls_3p(lambda p_var:
                  phi(-256.6 + 273.15, p_var, 1, 33.19, 13.13, -0.216, 'l',
                      alpha_tr, epsilon, sigma, psi, omega
-                     )['phi'].item() -
+                     )['phi_i'].item() -
                  phi(-256.6 + 273.15, p_var, 1, 33.19, 13.13, -0.216, 'v',
-                             alpha_tr, epsilon, sigma, psi, omega)['phi'].item()
+                             alpha_tr, epsilon, sigma, psi, omega)['phi_i'].item()
                  , 0.7, tol=tol, x_1=1.001 * 0.7,
                  restriction=lambda p_val: p_val > 0,
                  print_iterations=True)
@@ -381,7 +383,6 @@ def svn_14_2_behchmark():
 
 def zs_1998():
     alpha_tr, epsilon, sigma, psi, omega = use_pr_eos()
-    global r
     r = 8.3145 # Pa m^3 / (mol K)
     tc_i = array([305.32, 540.2])
     pc_i = array([48.71, 27.35]) * 1e5 # Pa
@@ -458,9 +459,9 @@ def zs_1998():
 
         for p in linspace(1e-4, max(p_range), 30):
             rho_l_phase += [
-                z_phase(t, p, z_i, tc_i, pc_i, af_omega_i, 'l', alpha_tr, epsilon, sigma, psi, omega, tol)['rho']]
+                z_phase(t, p, z_i, tc_i, pc_i, af_omega_i, 'l', alpha_tr, epsilon, sigma, psi, omega, tol, r)['rho']]
             rho_v_phase += [
-                z_phase(t, p, z_i, tc_i, pc_i, af_omega_i, 'v', alpha_tr, epsilon, sigma, psi, omega, tol)['rho']]
+                z_phase(t, p, z_i, tc_i, pc_i, af_omega_i, 'v', alpha_tr, epsilon, sigma, psi, omega, tol, r)['rho']]
             p_v_phase += [p]
 
         plot1.semilogx(v_plot, p_plot, markers[randint(0, len(markers))],
@@ -508,14 +509,15 @@ def zs_1998():
                 data += [[float(x) for x in line.replace(',', '.').replace('\n', '').split(';')]]
         f.close()
         a_data = array(data)
-        plot2.plot(a_data[:, 0], a_data[:, 1], ':', color='black')
-
+        lines = plot2.plot(a_data[:, 0], a_data[:, 1], ':', color='black')
+    lines[0].set_label(r'$pseudo-\rho_{article}$')
 
     plot1.axvline(b, linestyle='-')
     plot2.axvline(1 / b, linestyle='-')
     plot4.axvline(1 / b, linestyle='-')
     p_low = z_phase(420, p, z_i, tc_i, pc_i, af_omega_i, 'l', alpha_tr, epsilon, sigma, psi, omega, tol)['p_low']
-    plot2.axhline(p_low, linestyle='-.', color='gray', linewidth=0.5, label='$P_{low}$')
+    plot1.axhline(p_low, linestyle='-.', color='gray', linewidth=0.5, label='$P_{low}$')
+    plot2.axhline(p_low, linestyle='-.', color='gray', linewidth=0.5)
     plot4.axhline(p_low, linestyle='-.', color='gray', linewidth=0.5, label='$P_{low}$')
     plot1.set_xlabel(r'$\frac{v}{m^3/mol}$')
     plot1.set_ylabel('p / Pa')
@@ -546,8 +548,8 @@ def zs_1998():
         phi_list_l = empty([len(p_list), 2])
         phi_list_v = empty([len(p_list), 2])
         for i, p in enumerate(p_list):
-            phi_list_l[i] = phi(t, p, z_i, tc_i, pc_i, af_omega_i, 'l', alpha_tr, epsilon, sigma, psi, omega)['phi']
-            phi_list_v[i] = phi(t, p, z_i, tc_i, pc_i, af_omega_i, 'v', alpha_tr, epsilon, sigma, psi, omega)['phi']
+            phi_list_l[i] = phi(t, p, z_i, tc_i, pc_i, af_omega_i, 'l', alpha_tr, epsilon, sigma, psi, omega)['phi_i']
+            phi_list_v[i] = phi(t, p, z_i, tc_i, pc_i, af_omega_i, 'v', alpha_tr, epsilon, sigma, psi, omega)['phi_i']
 
         plt.subplot(1, 2, j)
         current_marker = markers[randint(0, len(markers))]
