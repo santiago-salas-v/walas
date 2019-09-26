@@ -34,7 +34,7 @@ labels = ['CO', 'H2', 'CO2', 'H2O', 'CH3OH', 'N2', 'CH4']
 def vdi_atlas():
     alpha_tr, epsilon, sigma, psi, omega = use_pr_eos()
     print(
-        'ref. VDI Wärmeatlas H2 Dampfdruck bei -256.6K: ' +
+        'ref. VDI Wärmeatlas H2 psat, -256.6K: ' +
         '{:.4g}'.format(
             p_sat(-256.6 + 273.15, -0.216, 33.19, 13.13,
                   alpha_tr, epsilon, sigma, psi, omega).x.item() * 1000
@@ -44,7 +44,7 @@ def vdi_atlas():
                          tol=tol)
     p_new = bubl_p(-256.6 + 273.15, 1, 1.0, 33.19, 13.13, -0.216,
                    alpha_tr, epsilon, sigma, psi, omega,
-                   max_it=100, tol=tol,print_iterations=True)['p'].item()
+                   max_it=100, tol=tol,print_iterations=False)['p'].item()
     soln = secant_ls_3p(lambda p_var:
                  phi(-256.6 + 273.15, p_var, 1, 33.19, 13.13, -0.216, 'l',
                      alpha_tr, epsilon, sigma, psi, omega
@@ -53,7 +53,7 @@ def vdi_atlas():
                              alpha_tr, epsilon, sigma, psi, omega)['phi_i'].item()
                  , 0.7, tol=tol, x_1=1.001 * 0.7,
                  restriction=lambda p_val: p_val > 0,
-                 print_iterations=True)
+                 print_iterations=False)
     phi_sat = phi(-256.6 + 273.15, soln['x'], 1, 33.19, 13.13, -0.216, 'v',
                              alpha_tr, epsilon, sigma, psi, omega)
 
@@ -72,9 +72,10 @@ def vdi_atlas():
                 p_min = p_est(t[i], p0[j], 1.0, tc[j], pc[j], omega_af[j],
                               alpha_tr, epsilon, sigma, psi, omega, 100, tol)['p_min_l']
                 if p_min < -1000:
-                    print(bubl_point_step_l_k(t[i], p0[j], 1.0, tc[j], pc[j], omega_af[j],
-                                              alpha_tr, epsilon, sigma, psi, omega,
-                                              max_it=100, tol=1e-10, full_output=True, y_i_est=1.0))
+                    pass
+                    # print(bubl_point_step_l_k(t[i], p0[j], 1.0, tc[j], pc[j], omega_af[j],
+                    #                           alpha_tr, epsilon, sigma, psi, omega,
+                    #                           max_it=100, tol=1e-10, full_output=False, y_i_est=1.0))
                 else:
                     # p_sat_vals_ceos[i, j] = bubl_p(
                     #     t[i], p0[j], 1.0, tc[j], pc[j], omega_af[j],
@@ -235,9 +236,17 @@ def svn_14_1():
     af_omega_i = array([0.038, 0.012])
 
     mm_i = zeros(2)
-    state1 = State(200, 30, x_i, mm_i, tc_i, pc_i, af_omega_i, 'srk')
-    print(state1.solve())
-
+    state1 = State(200, 30, x_i, mm_i, tc_i, pc_i, af_omega_i, 'rk')
+    soln = state1.eos.pt_flash()
+    print('\n'*2)
+    print('svn example 14.1: N2(1) , CH4(2), 30 bar, 200 K, 40%mol N2')
+    for key in soln:
+        length = asarray(soln[key]).size
+        if length > 1:
+            print(key + ': ' + ('{:0.6g}\t' * length).format(*soln[key]))
+        else:
+            print(key + ': ' + ('{:0.6g}\t').format(soln[key]))
+    print('\n' * 2)
 
 
 def svn_14_2():
@@ -251,9 +260,10 @@ def svn_14_2():
     ant_b = array([395.744, 935.773])
     ant_c = array([266.681, 238.789])
     max_it = 100
-    print(bubl_point_step_l_k(
+    soln = bubl_point_step_l_k(
         310.92, 30, x_i, tc_i, pc_i, af_omega_i, alpha_tr, epsilon, sigma, psi, omega,
-        max_it=max_it,full_output=True, y_i_est=y_i))
+        max_it=max_it,full_output=True, y_i_est=y_i)
+    # print(soln)
     y_i = bubl_point_step_l_k(
         310.92, 30, x_i, tc_i, pc_i, af_omega_i, alpha_tr, epsilon, sigma, psi, omega,
         max_it=max_it, full_output=True, y_i_est=y_i)['y_i']
@@ -263,22 +273,25 @@ def svn_14_2():
             max_it=max_it, full_output=True, y_i_est=y_i)
         y_i = soln['y_i']
         k_i = soln['k_i']
-        print(y_i)
-        print(1 - sum(y_i))
-        print(sum(k_i * x_i))
+        # print(y_i)
+        # print(1 - sum(y_i))
+        # print(sum(k_i * x_i))
     soln = bubl_p(
         310.92, 1., x_i, tc_i, pc_i, af_omega_i, alpha_tr, epsilon, sigma, psi, omega,
         max_it=max_it, tol=1e-10, y_i_est=y_i)
-    print(soln)
-    print(dew_point_step_l_k(
+    # print(soln)
+    soln_2 = dew_point_step_l_k(
         310.92, soln['p'], soln['y_i'], tc_i, pc_i, af_omega_i, alpha_tr, epsilon, sigma, psi, omega,
-        max_it=max_it))
-    print(dew_p(
+        max_it=max_it)
+    # print(soln_2)
+    soln_2 = dew_p(
         310.92, 30, soln['y_i'], tc_i, pc_i, af_omega_i, alpha_tr, epsilon, sigma, psi, omega,
-        max_it=max_it, tol=1e-10, x_i_est=x_i, print_iterations=True))
-    print(bubl_point_step_l_k(
+        max_it=max_it, tol=1e-10, x_i_est=x_i, print_iterations=False)
+    # print(soln_2)
+    soln_2 = bubl_point_step_l_k(
         310.92, soln['p'], x_i, tc_i, pc_i, af_omega_i, alpha_tr, epsilon, sigma, psi, omega,
-        max_it=max_it, full_output=True, y_i_est=y_i))
+        max_it=max_it, full_output=True, y_i_est=y_i)
+    # print(soln_2)
 
     x = linspace(0.0, 0.8, 50)
     y = empty_like(x) * nan
@@ -742,7 +755,7 @@ def svn_tab_14_1_2():
     unifac_data_dict = setup_unifac_data()
     gamma_j = gamma_u(t, z_i, sec_i, nu_ji, unifac_data_dict)
     print('\n'*2)
-    print('SVN Table 14.1 - n-hexane (1) / ethanol (2) / methylcyclopentane (3) /' +
+    print('svn table 14.1 - n-hexane (1) / ethanol (2) / methylcyclopentane (3) /' +
           'benzene (4) at {:0.2f} K'.format(t))
 
     print('i\tx_i\t\ty_i\t\tp_i_sat\tphi\t\tgamma\tK_i')
@@ -773,7 +786,7 @@ def svn_tab_14_1_2():
     phi_coef_fun_i = soln['phi_coef_fun_i']
     criterion = soln['criterion']
 
-    print('SVN Table 14.2 - n-hexane (1) / ethanol (2) / methylcyclopentane (3) /' +
+    print('svn table 14.2 - n-hexane (1) / ethanol (2) / methylcyclopentane (3) /' +
           'benzene (4) at {:0.4g} bar and {:0.4g} K'.format(p, t))
     print('i\tz_i\t\tx_i\t\ty_i\t\tK_i\t\tPhi_i\t\tgamma_i')
     for i in range(len(z_i)):
@@ -920,7 +933,7 @@ def pat_ue_03_vollstaendig(rlv, print_output=False):
         [0.050, -0.219, 0.224, 0.344, 0.563, 0.037]
     )
 
-    # Berechne delta Cp(T) mit Temperaturfunktionen für ideale Gase (SVN).
+    # Berechne delta Cp(T) mit Temperaturfunktionen für ideale Gase (svn).
 
     # Koeffizienten für Cp(T)/R = A + B*T + C*T^2 + D*T^-2, T[=]K
     # Nach rechts hin: A, B, C, D
@@ -1333,7 +1346,7 @@ def ppo_ex_8_12():
     nu_ij = array([[1, 0, 1], [2, 3, 0]])
     unifac_data_dict = setup_unifac_data()
     gamma_j = gamma_u(t, x_j, sec_j, nu_ij, unifac_data_dict)
-    print('PPO example 8-12 - acetone (1) / n-pentane (2) at 307K')
+    print('ppo example 8-12 - acetone (1) / n-pentane (2) at 307K')
     print('gamma_1: {:0.4f}\tgamma_2: {:0.4f}'.format(*gamma_j))
     print('\n')
 
@@ -1345,7 +1358,7 @@ def svn_h_1():
     nu_ij = array([[2, 1, 1], [2, 5, 0]])
     unifac_data_dict = setup_unifac_data()
     gamma_j = gamma_u(t, x_j, sec_j, nu_ij, unifac_data_dict)
-    print('SVN Example H.1 - diethylamine (1) / n-heptane (2) at 308.15K')
+    print('svn example H.1 - diethylamine (1) / n-heptane (2) at 308.15K')
     print('gamma_1: {:0.4f}\tgamma_2: {:0.4f}'.format(*gamma_j))
     print('\n')
 
@@ -1357,14 +1370,14 @@ def fredenslund_t_6():
     nu_ij = array([[0, 0, 0, 1], [0, 0, 6, 0], [2, 5, 0, 0]])
     unifac_data_dict = setup_unifac_data()
     gamma_j = gamma_u(t, x_j, sec_j, nu_ij, unifac_data_dict)
-    print('Fredenslund 1975 Table 6 - acetonitrile (1) / benzene (2) / n-heptane (3) at 318K')
+    print('Fredenslund 1975 table 6 - acetonitrile (1) / benzene (2) / n-heptane (3) at 318K')
     print('x_1: {:0.4f}\tx_2: {:0.4f}\tx_3: {:0.4f}'.format(*x_j))
     print('gamma_1: {:0.4f}\tgamma_2: {:0.4f}\tgamma_3: {:0.4f}'.format(*gamma_j))
     print('\n')
 
 
 vdi_atlas()
-# svn_14_1()
+svn_14_1()
 plt.figure()
 svn_fig_14_8()
 plt.figure()

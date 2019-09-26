@@ -1,27 +1,29 @@
+import csv
+import ctypes  # Needed to set the app icon correctly
+import io
+import locale
 import os
-import sys
 import re
 import string
-import locale
-from numpy import loadtxt, isnan, empty_like, linspace, dtype, zeros
+import sys
 from functools import partial
+from os.path import exists
+
 import lxml.etree as et
-import csv
-import io
-from pandas import DataFrame, merge, to_numeric
-import ctypes  # Needed to set the app icon correctly
-from PySide2.QtWidgets import QTableView, QApplication, QWidget
-from PySide2.QtWidgets import QDesktopWidget, QGridLayout, QLineEdit, QPushButton
-from PySide2.QtWidgets import QComboBox, QLabel, QTableWidget, QTableWidgetItem
-from PySide2.QtWidgets import QSizePolicy
-from PySide2.QtCore import QAbstractTableModel, QModelIndex, Qt, QEvent
-from PySide2.QtGui import QKeySequence, QGuiApplication, QFont, QIcon
-from PySide2.QtCore import SIGNAL
 import matplotlib
+from PySide2.QtCore import QAbstractTableModel, QModelIndex, Qt, QEvent
+from PySide2.QtGui import QKeySequence, QFont, QIcon
+from PySide2.QtWidgets import QComboBox, QLabel, QTableWidget, QTableWidgetItem
+from PySide2.QtWidgets import QDesktopWidget, QGridLayout, QLineEdit, QPushButton
+from PySide2.QtWidgets import QSizePolicy
+from PySide2.QtWidgets import QTableView, QApplication, QWidget
+from numpy import loadtxt, isnan, empty_like, linspace, zeros, ones, dtype
+from pandas import DataFrame, merge, to_numeric, read_csv
+
 matplotlib.use('Qt5Agg')
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
-
+from z_l_v import State
 
 locale.setlocale(locale.LC_ALL, '')
 burcat_xml_file = './data/BURCAT_THR.xml'
@@ -31,6 +33,7 @@ poling_basic_ii_csv = './data/basic_constants_ii_properties_of_gases_and_liquids
 poling_cp_l_ig_poly_csv = './data/ig_l_heat_capacities_properties_of_gases_and_liquids.csv'
 poling_pv_csv = './data/vapor_pressure_correlations_parameters_clean.csv'
 template = "./data/xsl_stylesheet_burcat.xsl"
+merged_df_csv = 'data/th_data_df.csv'
 linesep_b = os.linesep.encode('utf-8')
 
 
@@ -294,30 +297,52 @@ class App(QWidget):
 
     def phases_vol(self):
         self.plot_window.show()
-        t = linspace(60, 220, 30)
-        p = 101325
+        t = linspace(60, 220, 10)
+        p = 1.01325  # bar
         phase_fraction = empty_like(t)
+        v_l = empty_like(t)
+        v_v = empty_like(t)
+        z_i = self.props_i['z_i']
         # normalize z_i
-        sum_z_i = sum(self.props_i['z_i'])
-        if sum_z_i > 0:
-            self.props_i.loc[:, 'z_i'] = self.props_i['z_i'] / sum_z_i
-        z_i = self.props_i['z_i'].tolist()
-        mm_i = (self.props_i['poling_molwt']/1000).tolist() # kg/mol
-        tc_i = self.props_i['poling_tc'].tolist() # K
-        pc_i = (self.props_i['poling_pc']*10**5).tolist() # Pa
+        sum_z_i = sum(z_i)
+        if sum_z_i <= 0:
+            z_i = 1 / len(z_i) * ones(len(z_i))
+            z_i = z_i.tolist()
+        elif sum_z_i != 1.0:
+            z_i = z_i / sum_z_i
+            z_i = z_i.to_list()
+        else:
+            z_i = z_i.to_list()
+        mm_i = (self.props_i['poling_molwt']/1000).tolist()  # kg/mol
+        tc_i = self.props_i['poling_tc'].tolist()  # K
+        pc_i = (self.props_i['poling_pc']).tolist()  # bar
         omega_i = self.props_i['poling_omega'].tolist()
-        vc_i = (self.props_i['poling_vc']*10**-6).tolist() # m^3/mol
+        vc_i = (self.props_i['poling_vc']*10**-6).tolist()  # m^3/mol
+        state = State(t[0], p, z_i, mm_i, tc_i, pc_i, omega_i, 'pr')
 
         for i in range(len(t)):
-            phase_fraction[i] = pvt(p, t, z_i, pc_i, tc_i, omega_i, method='RKS')['v_f']
+            state.set_t(t[i])
+            phase_fraction[i] = state.v_f
+            v_l[i] = state.v_l
+            v_v[i] = state.v_v
+        self.plot_window.ax[0].plot(t, phase_fraction)
+        self.plot_window.ax[0].set_xlabel('T / K')
+        self.plot_window.ax[0].set_xlabel('V / F')
+        self.plot_window.ax[1].semilogy(t, v_l, label='v_l')
+        self.plot_window.ax[1].semilogy(t, v_v, label='v_v')
+        self.plot_window.ax[1].set_xlabel('T / K')
+        self.plot_window.ax[1].set_xlabel(r'$\frac{V}{m^3 / mol}$')
+        self.plot_window.ax[1].legend()
+        self.plot_window.fig.tight_layout()
+
 
 class PlotWindow(QWidget):
     def __init__(self, parent=None):
         super(PlotWindow, self).__init__(parent)
         self.dpi=50
         self.glayout_2 = QGridLayout()
-        self.fig = plt.figure(dpi=self.dpi)
-        self.ax = plt.subplot()
+        # self.fig = plt.figure(dpi=self.dpi)
+        self.fig, self.ax = plt.subplots(1, 2)
         self.p1 = FigureCanvas(self.fig)
         self.title = 'plot results'
         self.setLayout(self.glayout_2)
@@ -365,6 +390,166 @@ class thTableModel(QAbstractTableModel):
     def __init__(self):
         super(thTableModel, self).__init__()
 
+        cas_filter, name_filter, \
+        formula_filter, phase_filter = \
+            '', '', '', ''
+
+        self.column_names = [
+                                'cas_no', 'phase', 'formula',
+                                'formula_name_structure', 'ant_name',
+                                'poling_no', 'poling_formula', 'poling_name',
+                                'poling_molwt', 'poling_tfp',
+                                'poling_tb', 'poling_tc', 'poling_pc',
+                                'poling_vc', 'poling_zc', 'poling_omega',
+                                'poling_delhf0', 'poling_delgf0', 'poling_delhb',
+                                'poling_delhm', 'poling_v_liq', 'poling_t_liq',
+                                'poling_dipole',
+                                'p_ant_a', 'p_ant_b', 'p_ant_c',
+                                'p_ant_tmin', 'p_ant_tmax',
+                                'p_ant_pvpmin', 'p_ant_pvpmax',
+                                'eant_to', 'eant_n',
+                                'eant_e', 'eant_f',
+                                'eant_tmin', 'eant_tmax',
+                                'eant_pvpmin', 'eant_pvpmax',
+                                'wagn_a', 'wagn_b',
+                                'wagn_c', 'wagn_d',
+                                'wagn_tmin', 'wagn_tmax',
+                                'wagn_pvpmin', 'wagn_pvpmax',
+                                'range_tmin_to_1000',
+                                'range_1000_to_tmax', 'molecular_weight',
+                                'hf298_div_r'] + [
+                                'a' + str(i) + '_low' for i in range(1, 7 + 1)] + [
+                                'a' + str(i) + '_high' for i in range(1, 7 + 1)
+                            ] + [
+                                'reference', 'source', 'date',
+                                'ant_no', 'ant_formula', 'ant_name',
+                                'ant_a', 'ant_b',
+                                'ant_c', 'ant_tmin', 'ant_tmax',
+                                'ant_code'
+                            ]
+
+        self.column_dtypes = [
+                                 str, str, str,
+                                 str, str,
+                                 float, str, str,
+                                 float, float,
+                                 float, float, float,
+                                 float, float, float,
+                                 float, float, float,
+                                 float, float, float,
+                                 float,
+                                 float, float, float,
+                                 float, float,
+                                 float, float,
+                                 float, float,
+                                 float, float,
+                                 float, float,
+                                 float, float,
+                                 float, float,
+                                 float, float,
+                                 float, float,
+                                 float, float,
+                                 float,
+                                 float, float,
+                                 float] + [
+                                 float] * 7 + [float] * 7 + [
+                                 str, str, str,
+                                 float, str, str,
+                                 float, float,
+                                 float, float, float,
+                                 str
+                             ]
+
+        self.column_units = [
+            '', '', '',
+
+            '', '',
+            '', '', '',
+            'g/mol', 'K',
+            'K', 'K', 'bar',
+            'cm3/mol', '', '',
+            'kJ/mol', 'kJ/mol', 'kJ/mol',
+            'kJ/mol', 'cm3/mol', 'K',
+            'Debye',
+            '', 'K', 'K',
+            'K', 'K', 'bar', 'bar',
+            'K', '', '', '',
+            'K', 'K', 'bar', 'bar',
+            '', '', '', '',
+            'K', 'K', 'bar', 'bar',
+            'K',
+            'K', 'g/mol',
+            '',
+            '', 'K^-1', 'K^-2', 'K^-3', 'K^-4',
+            'K^-1', '',
+            '', 'K^-1', 'K^-2', 'K^-3', 'K^-4',
+            'K^-1', '',
+            '', '', '',
+            '', '', '',
+            '', '', '',
+            '°C', '°C',
+            ''
+        ]
+
+        self.dtypes = []
+        for units in self.column_units:
+            if len(units) > 0:
+                # numeric value with units
+                self.dtypes += [float]
+            else:
+                self.dtypes += [str]
+
+        self.df = DataFrame()
+        found_existing_df = exists(merged_df_csv)
+        dtypes_dict = {
+            'cas_no': dtype('O'), 'phase': dtype('O'), 'formula_name_structure': dtype('O'),
+            'reference': dtype('O'), 'hf298': dtype('O'), 'max_lst_sq_error': dtype('O'),
+            'formula': dtype('O'), 'source': dtype('O'), 'date': dtype('O'),
+            'range_tmin_to_1000': dtype('float64'), 'range_1000_to_tmax': dtype('float64'),
+            'molecular_weight': dtype('float64'), 'hf298_div_r': dtype('float64'),
+            'a1_low': dtype('float64'), 'a2_low': dtype('float64'), 'a3_low': dtype('float64'),
+            'a4_low': dtype('float64'), 'a5_low': dtype('float64'), 'a6_low': dtype('float64'),
+            'a7_low': dtype('float64'), 'a1_high': dtype('float64'), 'a2_high': dtype('float64'),
+            'a3_high': dtype('float64'), 'a4_high': dtype('float64'), 'a5_high': dtype('float64'),
+            'a6_high': dtype('float64'), 'a7_high': dtype('float64'), 'poling_no': dtype('float64'),
+            'poling_formula': dtype('O'), 'poling_name': dtype('O'), 'poling_molwt': dtype('float64'),
+            'poling_tfp': dtype('float64'), 'poling_tb': dtype('float64'), 'poling_tc': dtype('float64'),
+            'poling_pc': dtype('float64'), 'poling_vc': dtype('float64'), 'poling_zc': dtype('float64'),
+            'poling_omega': dtype('float64'), 'poling_delhf0': dtype('float64'), 'poling_delgf0': dtype('float64'),
+            'poling_delhb': dtype('float64'), 'poling_delhm': dtype('float64'), 'poling_v_liq': dtype('float64'),
+            'poling_t_liq': dtype('float64'), 'poling_dipole': dtype('float64'), 'poling_trange': dtype('O'),
+            'poling_a0': dtype('float64'), 'poling_a1': dtype('float64'), 'poling_a2': dtype('float64'),
+            'poling_a3': dtype('float64'), 'poling_a4': dtype('float64'), 'poling_cpig': dtype('float64'),
+            'poling_cpliq': dtype('float64'), 'p_ant_a': dtype('float64'), 'p_ant_b': dtype('float64'),
+            'p_ant_c': dtype('float64'), 'p_ant_pvpmin': dtype('float64'), 'p_ant_tmin': dtype('float64'),
+            'p_ant_pvpmax': dtype('float64'), 'p_ant_tmax': dtype('float64'), 'eant_to': dtype('float64'),
+            'eant_n': dtype('float64'), 'eant_e': dtype('float64'), 'eant_f': dtype('float64'),
+            'eant_pvpmin': dtype('float64'), 'eant_tmin': dtype('float64'), 'eant_pvpmax': dtype('float64'),
+            'eant_tmax': dtype('float64'), 'wagn_a': dtype('float64'), 'wagn_b': dtype('float64'),
+            'wagn_c': dtype('float64'), 'wagn_d': dtype('float64'), 'wagn_pvpmin': dtype('float64'),
+            'wagn_tmin': dtype('float64'), 'wagn_pvpmax': dtype('float64'), 'wagn_tmax': dtype('float64'),
+            'ant_no': dtype('float64'), 'ant_formula': dtype('O'), 'ant_name': dtype('O'),
+            'ant_a': dtype('float64'), 'ant_b': dtype('float64'), 'ant_c': dtype('float64'),
+            'ant_tmin': dtype('float64'), 'ant_tmax': dtype('float64'), 'ant_code': dtype('O')}
+
+        if found_existing_df:
+            self.df = read_csv(merged_df_csv, skiprows=1, sep=',', index_col=0,
+                               keep_default_na=False, na_values=['NaN'], dtype=dtypes_dict)
+            # test = all(a.fillna(0) == self.df.fillna(0))
+        else:
+            self.construct_df()
+            buf = open(merged_df_csv, 'w')
+            buf.write('sep=,\n')
+            buf.close()
+            self.df.to_csv(merged_df_csv, na_rep='NaN', mode='a')
+
+        self.apply_filter(
+            cas_filter, name_filter,
+            formula_filter, phase_filter
+        )
+
+
+    def construct_df(self):
         tree = et.parse(burcat_xml_file)
         root = tree.getroot()
         xsl = et.parse(template)
@@ -373,7 +558,6 @@ class thTableModel(QAbstractTableModel):
         cas_filter, name_filter, \
         formula_filter, phase_filter = \
             '', '', '', ''
-
 
         xpath = \
                     "./specie[contains(@CAS, '" + \
@@ -612,116 +796,6 @@ class thTableModel(QAbstractTableModel):
         self.df['poling_a2'] = self.df['poling_a2'] * 1e-5
         self.df['poling_a3'] = self.df['poling_a3'] * 1e-8
         self.df['poling_a4'] = self.df['poling_a4'] * 1e-11
-
-        self.column_names = [
-            'cas_no', 'phase', 'formula', 
-            'formula_name_structure', 'ant_name',
-            'poling_no', 'poling_formula', 'poling_name',
-            'poling_molwt', 'poling_tfp',
-            'poling_tb', 'poling_tc', 'poling_pc',
-            'poling_vc', 'poling_zc', 'poling_omega',
-            'poling_delhf0', 'poling_delgf0', 'poling_delhb',
-            'poling_delhm', 'poling_v_liq', 'poling_t_liq',
-            'poling_dipole',
-            'p_ant_a', 'p_ant_b', 'p_ant_c',
-            'p_ant_tmin', 'p_ant_tmax',
-            'p_ant_pvpmin', 'p_ant_pvpmax',
-            'eant_to', 'eant_n',
-            'eant_e', 'eant_f',
-            'eant_tmin', 'eant_tmax',
-            'eant_pvpmin', 'eant_pvpmax',
-            'wagn_a', 'wagn_b',
-            'wagn_c', 'wagn_d',
-            'wagn_tmin', 'wagn_tmax',
-            'wagn_pvpmin', 'wagn_pvpmax',
-            'range_tmin_to_1000',
-            'range_1000_to_tmax', 'molecular_weight',
-            'hf298_div_r'] + [
-            'a'+str(i)+'_low' for i in range(1,7+1) ] + [
-            'a'+str(i)+'_high' for i in range(1,7+1)
-            ] + [
-            'reference', 'source', 'date', 
-            'ant_no', 'ant_formula', 'ant_name', 
-            'ant_a', 'ant_b',
-            'ant_c', 'ant_tmin', 'ant_tmax',
-            'ant_code'
-            ]
-
-        self.column_dtypes = [
-             str, str, str,
-             str, str,
-             float, str, str,
-             float, float,
-             float, float, float,
-             float, float, float,
-             float, float, float,
-             float, float, float,
-             float,
-             float, float, float,
-             float, float,
-             float, float,
-             float, float,
-             float, float,
-             float, float,
-             float, float,
-             float, float,
-             float, float,
-             float, float,
-             float, float,
-             float,
-             float, float,
-             float] + [
-             float]*7 + [float]*7 + [
-             str, str, str,
-             float, str, str,
-             float, float,
-             float, float, float,
-             str
-         ]
-
-        self.column_units = [
-            '', '', '',
-
-            '', '',
-            '', '', '',
-            'g/mol', 'K',
-            'K', 'K', 'bar',
-            'cm3/mol', '', '',
-            'kJ/mol', 'kJ/mol', 'kJ/mol',
-            'kJ/mol', 'cm3/mol', 'K',
-            'Debye',
-            '', 'K', 'K',
-            'K', 'K', 'bar', 'bar',
-            'K', '', '', '',
-            'K', 'K', 'bar', 'bar',
-            '', '', '', '',
-            'K', 'K', 'bar', 'bar',
-            'K',
-            'K', 'g/mol', 
-            '',
-            '', 'K^-1', 'K^-2', 'K^-3', 'K^-4',
-            'K^-1', '',
-            '', 'K^-1', 'K^-2', 'K^-3', 'K^-4',
-            'K^-1', '',
-            '', '', '', 
-            '', '', '', 
-            '', '', '', 
-            '°C', '°C', 
-            ''
-        ]
-
-        self.dtypes = []
-        for units in self.column_units:
-            if len(units) > 0:
-                # numeric value with units
-                self.dtypes += [float]
-            else:
-                self.dtypes += [str]
-
-        self.apply_filter(
-            cas_filter, name_filter, 
-            formula_filter, phase_filter
-            )
 
     def apply_filter(
             self,

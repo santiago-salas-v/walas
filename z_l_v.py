@@ -15,8 +15,17 @@ abs_tol = finfo(float).eps
 
 class State:
     def __init__(self, t, p, z_i, mm_i, tc_i, pc_i, af_omega_i, eos_name='pr',
-                 max_it=100, tol=1e-10):
-        self.eos = Eos(t, p, z_i, mm_i, tc_i, pc_i, af_omega_i, eos_name)
+                 max_it=100, tol=1e-10, sec_j=None, nu_ij=None, unifac_data_dict=None):
+        z_i = array(z_i)
+        mm_i = array(mm_i)
+        tc_i = array(tc_i)
+        pc_i = array(pc_i)
+        af_omega_i = array(af_omega_i)
+        if sec_j is not None:
+            sec_j = array(sec_j)
+            nu_ij = array(nu_ij)
+        self.eos = Eos(t, p, z_i, mm_i, tc_i, pc_i, af_omega_i, eos_name, max_it, tol, r=r_def,
+                       sec_j=sec_j, nu_ij=nu_ij, unifac_data_dict=unifac_data_dict)
         self.v_f = 1.0
         self.z_i = z_i
         self.mm_i = mm_i
@@ -27,8 +36,25 @@ class State:
         self.af_omega_i = af_omega_i
         self.max_it = 100
         self.tol = tol
-        self.eos.solve()
-        self.z = self.eos.z
+        self.z = 0  # init
+        self.sec_j = sec_j
+        self.nu_ij = nu_ij
+        self.unifac_data_dict = unifac_data_dict
+        if sec_j is not None:
+            self.sec_j = sec_j
+            self.nu_ij = nu_ij
+            if unifac_data_dict is None:
+                self.unifac_data_dict = setup_unifac_data()
+        self.bubl_p = p
+        self.bubl_t = t
+        self.dew_p = p
+        self.dew_t = t
+        self.v_f = 1
+        self.v_l = nan
+        self.v_v = nan
+        self.phi_l = ones(len(z_i))
+        self.phi_v = ones(len(z_i))
+        self.solve()
 
     def set_t(self, t):
         self.eos.t = t
@@ -42,12 +68,20 @@ class State:
         return self.z
 
     def solve(self):
-        self.eos.solve()
+        self.eos.pt_flash()
+        self.bubl_p = self.eos.bubl_p_p
+        self.dew_p = self.eos.dew_p_p
+        self.v_f = self.eos.v_f
+        self.phi_v = self.eos.phi_v
+        self.phi_l = self.eos.phi_l
+        self.v_l = self.eos.v_l
+        self.v_v = self.eos.v_v
 
 
 class Eos:
     def __init__(self, t, p, z_i, mm_i, tc_i, pc_i, af_omega_i, eos_name,
-                 max_it=100, tol=finfo(float).eps, r=r_def):
+                 max_it=100, tol=finfo(float).eps, r=r_def,
+                 sec_j=None, nu_ij=None, unifac_data_dict=None):
         self.eos = eos_name
         if eos_name == 'pr':
             epsilon = 1 - sqrt(2)
@@ -55,18 +89,46 @@ class Eos:
             omega = 0.07780
             psi = 0.45724
             m = 0.37464 + 1.54226 * af_omega_i - 0.26992 * af_omega_i ** 2
+
+            def alpha_tr(tr, af_omega):
+                return (1 + (
+                        0.37464 + 1.54226 * af_omega - 0.26992 * af_omega ** 2
+                        ) * (1 - tr ** (1 / 2.))) ** 2
+
+            def dalpha_dt(tr, af_omega):
+                alpha_i = self.alpha_tr(tr, af_omega)
+                m_i = self.m
+                return - alpha_i ** (1 / 2.) * m_i / sqrt(tr) / tc_i
         elif eos_name == 'srk':
             epsilon = 0.
             sigma = 1.
             omega = 0.08664
             psi = 0.42748
             m = 0.480 + 1.574 * af_omega_i - 0.176 * af_omega_i ** 2
-        elif eos_name == 'srk_simple_alpha':
+
+            def alpha_tr(tr, af_omega):
+                return (1 + (
+                        0.480 + 1.574 * af_omega - 0.176 * af_omega ** 2
+                        ) * (1 - tr ** (1 / 2.))) ** 2
+
+            def dalpha_dt(tr, af_omega):
+                alpha_i = self.alpha_tr(tr, af_omega)
+                m_i = self.m
+                return - alpha_i ** (1 / 2.) * m_i / sqrt(tr) / tc_i
+        elif eos_name == 'rk':
             epsilon = 0.
             sigma = 1.
             omega = 0.08664
             psi = 0.42748
             m = 1.0
+
+            def alpha_tr(tr, _):
+                return tr ** (-1 / 2.)
+
+            def dalpha_dt(tr, af_omega):
+                alpha_i = self.alpha_tr(tr, af_omega)
+                m_i = self.m
+                return - 1 / 2 * tr**(-3 / 2) / tc_i
         else:
             # vdw
             epsilon = 0
@@ -74,178 +136,107 @@ class Eos:
             omega = 1 / 8
             psi = 27 / 64
             m = 0
+
+            def alpha_tr(_, __):
+                return 1
+
+            def dalpha_dt(_, __):
+                return 0
         self.epsilon = epsilon
         self.sigma = sigma
         self.omega = omega
         self.psi = psi
         self.m = m
+        self.alpha_tr = alpha_tr
         self.max_it = max_it
         self.tol = tol
         self.r = r
+        self.sec_j = sec_j
+        self.nu_ij = nu_ij
+        self.unifac_data_dict = unifac_data_dict
 
         self.z_i = z_i
-        self.tr_i = t / tc_i
-        self.pr_i = p / pc_i
         self.tc_i = tc_i
         self.pc_i = pc_i
         self.af_omega_i = af_omega_i
         self.t = t
         self.p = p
-        self.alpha_i = self.alpha_tr()
-        self.dalphadt_i = self.dalphadt()
         self.z = 0
+        self.bubl_p_p = p
+        self.dew_p_p = p
+        self.v_f = 1
+        self.phi_l = ones(len(z_i))
+        self.phi_v = ones(len(z_i))
+        self.k_i = ones(len(z_i))
+        self.v_l = nan
+        self.v_v = nan
 
-    def alpha_tr(self):
-        eos = self.eos
-        m = self.m
-        tr = self.tr_i
-        if eos == 'pr':
-            return \
-                (1 + m * (1 - tr ** (1 / 2.))) ** 2
-        elif eos == 'srk':
-            return \
-                (1 + m * (1 - tr ** (1 / 2.))) ** 2
-        elif eos == 'srk_simple_alpha':
-            return \
-                tr ** (-1 / 2.)
-
-    def dalphadt(self):
-        eos = self.eos
-        alpha_i = self.alpha_i
-        tr = self.tr_i
-        tc = self.tc_i
-        t = self.t
-        m = self.m
-        if eos == 'pr':
-            return - alpha_i ** (1 / 2.) * m / sqrt(t) / sqrt(tc)
-        elif eos == 'srk':
-            return - alpha_i ** (1 / 2.) * m / sqrt(t) / sqrt(tc)
-        if eos == 'srk_simple_alpha':
-            return 0
-
-    def phi(self, phase):
-        return phi(
-            self.t, self.p, self.z_i,
-            self.tc_i, self.pc_i, self.af_omega_i,
-            phase, self.alpha_tr,
-            self.epsilon, self.sigma, self.psi, self.omega
-        )
-
-    def solve(self):
-        bubl_p_val = bubl_p(
+    def bubl_p(self):
+        soln = bubl_p(
             self.t, self.p, self.z_i, self.tc_i, self.pc_i, self.af_omega_i,
             self.alpha_tr, self.epsilon, self.sigma, self.psi, self.omega,
             self.max_it)
-        return self
+        return soln
 
-    def solve_old(self):
-        epsilon = self.epsilon
-        sigma = self.sigma
-        omega = self.omega
-        psi = self.psi
-
-        omega_i = self.af_omega_i
-        tc_i = self.tc_i
-        pc_i = self.pc_i
-        tr_i = self.tr_i
-        ptr_i = self.pr_i
-        t = self.t
-        p = self.p
-        z_i = self.z_i
-        n = len(z_i)
-        r = self.r
-
-        m_i = self.m
-        alpha_i = self.alpha_i
-        dalphadt_i = self.dalphadt_i
-
-        a_i = psi * alpha_i * r ** 2 * tc_i ** 2 / pc_i
-        a_i_t = a_i.reshape([n, 1])
-        da_idt = a_i / alpha_i * dalphadt_i
-        b_i = omega * r * tc_i / pc_i
-        beta_i = b_i * p / (r * t)
-        q_i = a_i / (b_i * r * t)
-        a_ij = sqrt(a_i_t.dot(a_i_t.T))
-
-        # Variablen, die von der Phasen-Zusammensetzung abhängig sind
-        b = sum(z_i * b_i)
-        a = z_i.dot(a_ij.dot(z_i))
-
-        beta = b * p / (r * t)
-        q = a / (b * r * t)
-        s_x_j_a_ij = a_ij.dot(z_i)
-        mat_1 = 1 / 2 * diag(a_i).dot(1 / sqrt(a_i_t)).dot(
-            diag(da_idt).dot(1 / sqrt(a_i_t)).T
-        )
-        da_ijdt = mat_1 + mat_1.T
-        da_dt = z_i.dot(da_ijdt.dot(z_i))
-
-        a_mp_i = -a + 2 * s_x_j_a_ij + 2 * z_i * a_i  # partielles molares a_i
-        b_mp_i = b_i  # partielles molares b_i
-        q_mp_i = q * (1 + a_mp_i / a - b_i / b)  # partielles molares q_i
-
-        a1 = 1.0
-        a2 = beta * (epsilon + sigma) - beta - 1
-        a3 = q * beta + epsilon * sigma * beta ** 2 \
-            - beta * (epsilon + sigma) * (1 + beta)
-        a4 = -(epsilon * sigma * beta ** 2 * (1 + beta) +
-               q * beta ** 2)
-
-        soln = solve_cubic([a1, a2, a3, a4])
-        roots_z = array(soln['roots'])
-        disc = soln['disc']
-
-        if disc <= 0:
-            # 2 phases Region
-            # 3 real roots. smallest ist liq. largest is gas.
-            z_l = roots_z[-1][0]
-            z_v = roots_z[0][0]
-            phasen = 'L,V'
-
-        elif disc > 0:
-            # 1 phase region
-            # one real root, 2 complex. First root is the real one.
-            z = roots_z[0][0]
-            v = z * r * t / p
-            dp_dt = r / (v - b) - da_dt * 1 / (
-                (v + epsilon * b) * (v + sigma * b)
-            )
-            dp_dv = - r * t / (v - b) ** 2 + a * 1 / (
-                (v + epsilon * b) * (v + sigma * b)
-            ) * (1 / (v + epsilon * b) + 1 / (v + sigma * b))
-            d2p_dvdt = - r / (v - b)**2 + da_dt * 1 / (
-                (v + epsilon * b) * (v + sigma * b)
-            ) * (1 / (v + epsilon * b) + 1 / (v + sigma * b))
-            d2p_dv2 = - 2 * r * t / (v - b)**3 - 2 * a * 1 / (
-                (v + epsilon * b) * (v + sigma * b)
-            ) * (1 / (v + epsilon * b)**2 + 1 / (
-                (v + epsilon * b) * (v + sigma * b)
-            ) + 1 / (v + sigma * b)**2
-            )
-
-            # Phase parameter :
-            # Ref. Fluid Phase Equilibria 301 (2011) 225–233
-            pi_ph = v * (
-                d2p_dvdt / dp_dt - d2p_dv2 / dp_dv
-            )
-
-            if pi_ph > 1:
-                # liquid or liquid-like vapor
-                v_f = 0.0
-                phasen = 'L'
-            elif pi_ph <= 1:
+    def pt_flash(self):
+        r = r_def
+        # mechanical critical point
+        z_mc = -1 / 3 * ((self.epsilon + self.sigma)
+                         * self.omega - self.omega - 1)
+        p_mc = sum(self.z_i * self.pc_i)
+        t_mc = self.z_i.dot(sqrt(
+            outer(self.tc_i, self.tc_i))).dot(
+            self.z_i).item()
+        if self.t > t_mc:
+            # no saturation point possible, supercritical mixture
+            self.bubl_p_p = None
+            self.dew_p_p = None
+            self.v_f = 1
+            soln_v = phi(self.t, self.p, self.z_i, self.tc_i, self.pc_i, self.af_omega_i, 'v',
+                         self.alpha_tr, self.epsilon, self.sigma, self.psi, self.omega)
+            self.phi_v = soln_v['phi_i']
+            self.phi_l = None
+            self.v_l = None
+            self.v_v = soln_v['v']
+            return soln_v
+        else:
+            soln_p_sat = p_i_sat_ceos(self.t, self.p, self.tc_i, self.pc_i, self.af_omega_i,
+                                      self.alpha_tr, self.epsilon, self.sigma, self.psi, self.omega,
+                                      tol=self.tol)
+            pisat = array([soln_p_sat['p'][i] for i in range(
+                len(self.z_i)) if soln_p_sat['success'][i]])
+            zisat = array([self.z_i[i] for i in range(
+                len(self.z_i)) if soln_p_sat['success'][i]])
+            p_est_0 = sum(pisat * zisat / sum(zisat))
+            soln = pt_flash(self.t, self.p, self.z_i, self.tc_i, self.pc_i, self.af_omega_i,
+                            self.alpha_tr, self.epsilon, self.sigma, self.psi, self.omega,
+                            sec_j=self.sec_j, nu_ij=self.nu_ij, unifac_data_dict=self.unifac_data_dict,
+                            max_it=self.max_it, tol=self.tol, p_est_0=p_est_0)
+            self.bubl_p_p = soln['bubl_p_soln']['p']
+            self.dew_p_p = soln['dew_p_soln']['p']
+            self.v_f = soln['v_f']
+            if self.v_f == 0:
+                # liquid
+                soln_phi_l = phi(self.t, self.p, self.z_i, self.tc_i, self.pc_i, self.af_omega_i, 'l',
+                                 self.alpha_tr, self.epsilon, self.sigma, self.psi, self.omega)
+                self.phi_l = soln_phi_l['phi_i']
+                self.phi_v = None
+                self.v_v = soln_phi_l['v']
+                self.v_l = None
+            elif self.v_f == 1:
                 # vapor
-                v_f = 1.0
-                phasen = 'V'
-
-        result = dict()
-        for item in [
-            'v_f', 'phasen', 'z', 'a', 'b',
-            'phi', 'ln_phi', 'i_int'
-        ]:
-            result[item] = locals().get(item)
-
-        return result
+                soln_phi_v = phi(self.t, self.p, self.z_i, self.tc_i, self.pc_i, self.af_omega_i, 'v',
+                                 self.alpha_tr, self.epsilon, self.sigma, self.psi, self.omega)
+                self.phi_l = None
+                self.phi_v = soln_phi_v['phi_i']
+                self.v_l = None
+                self.v_v = soln_phi_v['v']
+            else:
+                self.phi_l = soln['phi_i_l']
+                self.phi_v = soln['phi_i_v']
+                self.v_v = soln['soln_phi_v']['v']
+                self.v_l = soln['soln_phi_l']['v']
+            return soln
 
 
 def use_pr_eos():
@@ -669,11 +660,13 @@ def phi(t, p, z_i, tc_i, pc_i, af_omega_i, phase,
     else:
         phi_i = phi_i_calc
 
+    v = z * r * t / p
+    rho = 1 / v
     soln = dict()
     for item in ['a_i', 'b_i',
                  'b', 'a', 'q',
                  'a_mp_i', 'b_mp_i', 'q_mp_i',
-                 'beta', 'z', 'i_int', 'ln_phi_i', 'phi_i']:
+                 'beta', 'z', 'v', 'rho',  'i_int', 'ln_phi_i', 'phi_i']:
         soln[item] = locals().get(item)
     return soln
 
@@ -1649,8 +1642,9 @@ def pt_flash(t, p, z_i, tc_i, pc_i, af_omega_i,
             x_i_old = x_i
             v_f_old = v_f
             if sec_j is None:
-                phi_i_l = phi(t, p, x_i, tc_i, pc_i, af_omega_i, 'l',
-                              alpha_tr, epsilon, sigma, psi, omega)['phi_i']
+                soln_phi_l = phi(t, p, x_i, tc_i, pc_i, af_omega_i, 'l',
+                              alpha_tr, epsilon, sigma, psi, omega)
+                phi_i_l = soln_phi_l['phi_i']
                 k_i = phi_i_l / phi_i_v
             else:
                 phi_coef_fun_i = phi_i_v / phi_i_sat * poynting_i
@@ -1660,7 +1654,8 @@ def pt_flash(t, p, z_i, tc_i, pc_i, af_omega_i,
             v_f = v_f - 1 / df_dv_f * f
             if not 0 < v_f < 1:
                 ls_approach = line_search(
-                    lambda v_f_var: sum(z_i * (k_i - 1) / (1 + v_f_var * (k_i - 1))),
+                    lambda v_f_var: sum(
+                        z_i * (k_i - 1) / (1 + v_f_var * (k_i - 1))),
                     lambda v_f_var: -sum(z_i * (k_i - 1) ** 2 /
                                          (1 + v_f_var * (k_i - 1)) ** 2),
                     v_f_old, additional_restrictions=lambda v_f_var: 0 < v_f_var < 1)
@@ -1686,8 +1681,9 @@ def pt_flash(t, p, z_i, tc_i, pc_i, af_omega_i,
             else:
                 # gamma-phi
                 gamma_i = gamma_u(t, x_i, sec_j, nu_ij, unifac_data_dict)
-            phi_i_v = phi(t, p, y_i, tc_i, pc_i, af_omega_i, 'v',
-                          alpha_tr, epsilon, sigma, psi, omega)['phi_i']
+            soln_phi_v = phi(t, p, y_i, tc_i, pc_i, af_omega_i, 'v',
+                          alpha_tr, epsilon, sigma, psi, omega)
+            phi_i_v = soln_phi_v['phi_i']
     elif p_dew >= p:
         v_f = 1.0
     elif p_bubl <= p:
@@ -1697,7 +1693,7 @@ def pt_flash(t, p, z_i, tc_i, pc_i, af_omega_i,
     for item in ['t', 'p', 'k_i', 'v_f', 'z_i', 'x_i', 'y_i', 'gamma_i', 'phi_coef_fun_i',
                  'dew_p_soln', 'bubl_p_soln', 'p_dew', 'p_bubl', 'poynting', 'n_it',
                  'mag_delta_x_i', 'mag_delta_y_i', 'mag_delta_v_f', 'sum_rr', 'criterion',
-                 'iterations', 'total_backtracks']:
+                 'iterations', 'total_backtracks', 'phi_i_l', 'phi_i_v', 'soln_phi_l', 'soln_phi_v']:
         soln[item] = locals().get(item)
     return soln
 
