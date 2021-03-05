@@ -264,7 +264,7 @@ class App(QWidget):
             for index in selection:
                 row = index.row() - rows[0]
                 column = index.column() - columns[0]
-                table[row + 1][column] = index.data()
+                table[row + 1][column] = index.data().replace(chr(34),'') # ensure string can be read as csv by removing quotation mark (ascii character 34)
             stream = io.StringIO()
             csv.writer(
                 stream,
