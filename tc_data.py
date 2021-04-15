@@ -77,11 +77,11 @@ class App(QWidget):
         self.psat_button = QPushButton()
 
         self.tableView1.setModel(self.model)
-        self.tableWidget1.setColumnCount(self.tableView1.model().columnCount()+1+1+1+1)
-        widget_col_names=['z_i','dh_ig','ds_ig','dg_ig'] + self.tableView1.model().column_names
-        widget_col_units=['-','J/mol','J/mol/K','J/mol'] + self.tableView1.model().column_units
-        widget_col_names=[widget_col_names[i]+'\n'+widget_col_units[i] for i in range(len(widget_col_names))]
-        self.tableWidget1.setHorizontalHeaderLabels(widget_col_names)
+        self.tableWidget1.setColumnCount(self.tableView1.model().columnCount()+1+1+1+1+1)
+        self.widget_col_names=['z_i','dh_ig','ds_ig','dg_ig','cp_ig'] + self.tableView1.model().column_names
+        self.widget_col_units=['-','J/mol','J/mol/K','J/mol','J/mol/K'] + self.tableView1.model().column_units
+        self.widget_col_names_units=[self.widget_col_names[i]+'\n'+self.widget_col_units[i] for i in range(len(self.widget_col_names))]
+        self.tableWidget1.setHorizontalHeaderLabels(self.widget_col_names_units)
         self.phase_filter.addItems(['', 'G', 'L', 'S', 'C'])
         self.tableWidget1.setEnabled(False)
         self.tableWidget1.setSelectionBehavior(QTableWidget.SelectRows)
@@ -140,6 +140,7 @@ class App(QWidget):
         self.props_i['dh_ig'] = zeros(0)
         self.props_i['ds_ig'] = zeros(0)
         self.props_i['dg_ig'] = zeros(0)
+        self.props_i['cp_ig'] = zeros(0)
 
         # Show widget
         self.show()
@@ -166,7 +167,7 @@ class App(QWidget):
         already_in_table = False
         for item in self.tableWidget1.findItems(cas, Qt.MatchExactly):
             if phase == self.tableWidget1.item(
-                    item.row(), column_of_phase+1+1+1+1).text():
+                    item.row(), column_of_phase+1+1+1+1+1).text():
                 already_in_table = True
         if not already_in_table:
             row_index = int(self.tableView1.model().headerData(index.row(), Qt.Vertical))
@@ -178,6 +179,7 @@ class App(QWidget):
             dh_ig_orig = self.props_i['dh_ig']
             ds_ig_orig = self.props_i['ds_ig']
             dg_ig_orig = self.props_i['dg_ig']
+            cp_ig_orig = self.props_i['cp_ig']
             index_orig = self.props_i.index
             self.props_i = self.tableView1.model().df.loc[
                 [int(self.tableWidget1.verticalHeaderItem(i).text())
@@ -188,10 +190,12 @@ class App(QWidget):
             self.props_i['dh_ig'] = zeros(len(self.props_i))
             self.props_i['ds_ig'] = zeros(len(self.props_i))
             self.props_i['dg_ig'] = zeros(len(self.props_i))
+            self.props_i['cp_ig'] = zeros(len(self.props_i))
             self.props_i.loc[index_orig, 'z_i'] = z_i_orig
             self.props_i.loc[index_orig, 'dh_ig'] = dh_ig_orig
             self.props_i.loc[index_orig, 'ds_ig'] = ds_ig_orig
             self.props_i.loc[index_orig, 'dg_ig'] = dg_ig_orig
+            self.props_i.loc[index_orig, 'cp_ig'] = cp_ig_orig
             
             self.props_i.loc[row_index, 'z_i'] = float(0)
 
@@ -201,7 +205,7 @@ class App(QWidget):
                     self.tableWidget1.rowCount() - 1,
                     header_to_add)
             for i in range(len(column_names)):
-                # columns in TableWidget shifted by 1+1+1+1 vs. Tableview due to first columns z_i, dh_ig, ds_ig, dg_ig
+                # columns in TableWidget shifted by 1+1+1+1+1 vs. Tableview due to first columns z_i, dh_ig, ds_ig, dg_ig, cp_ig
                 data = self.tableView1.model().index(index.row(), i).data()
                 if isinstance(data, str) or data is None:
                     item_to_add = QTableWidgetItem(data)
@@ -210,7 +214,7 @@ class App(QWidget):
                 item_to_add.setFlags(
                     Qt.ItemIsSelectable | Qt.ItemIsEnabled | Qt.ItemIsEditable)
                 self.tableWidget1.setItem(
-                    self.tableWidget1.rowCount() - 1, i+1+1+1+1,
+                    self.tableWidget1.rowCount() - 1, i+1+1+1+1+1,
                     item_to_add)
 
             # additional column with z_i
@@ -259,8 +263,10 @@ class App(QWidget):
 
         if t>1000: # poly a_low is for 200 - 1000 K; a_high is for 1000 - 6000 K
             a=a_high
+            cp_ig==[8.3145*cp_r_high[i] for i in range(len(self.props_i))] # J/mol/K
         else:
             a=a_low
+            cp_ig=[8.3145*cp_r_low[i] for i in range(len(self.props_i))] # J/mol/K
         
         s_cp_r_dt=[
         sum([1/(j+1)*a[j][i]*t**(j+1) for j in range(4+1)]) 
@@ -276,9 +282,8 @@ class App(QWidget):
         ds_ig=[delsf0[i]+8.3145*s_cp_r_t_dt[i] for i in range(len(self.props_i))]
         dg_ig=[delhf0[i]-t/298.15*delsf0[i]+8.3145*s_cp_r_dt[i]-8.3145*s_cp_r_t_dt[i] for i in range(len(self.props_i))]
 
-        var_labels=['dh_ig','ds_ig','dg_ig']
         for i in range(len(self.props_i)):
-            for j,col in enumerate([dh_ig,ds_ig,dg_ig]):
+            for j,col in enumerate([dh_ig,ds_ig,dg_ig,cp_ig]):
                 #print(col)
                 item_to_add = QTableWidgetItem(locale.str(col[i]))
                 item_to_add.setFlags(
@@ -287,25 +292,22 @@ class App(QWidget):
                         i, j+1, item_to_add)
 
     def copy_selection(self):
-        col_names = self.tableView1.model().column_names
-        col_units = [''] + self.tableView1.model().column_units
         selection = self.tableWidget1.selectedIndexes()
         if selection:
             rows = sorted(index.row() for index in selection)
-            columns = range(len(col_names))
+            columns = range(len(self.widget_col_names))
             rowcount = rows[-1] - rows[0] + 1
             colcount = columns[-1] - columns[0] + 1 + 1
             table = [[''] * colcount for _ in range(rowcount + 1)]
             table[0] = []
-            for i in range(len(col_units)):
-                text_to_add = self.tableWidget1.horizontalHeaderItem(i).text()
-                if len(col_units[i]) > 0:
-                    text_to_add += ' [' + col_units[i] + '] '
+            for i in range(len(self.widget_col_names)):
+                text_to_add = self.widget_col_names[i]+'/('+self.widget_col_units[i]+')'
                 table[0] += [text_to_add]
             for index in selection:
                 row = index.row() - rows[0]
                 column = index.column() - columns[0]
                 table[row + 1][column] = index.data().replace(chr(34),'') # ensure string can be read as csv by removing quotation mark (ascii character 34)
+            table=table+[['T='+self.temp_text.placeholderText()]+['' for _ in range(colcount-1)]]
             stream = io.StringIO()
             csv.writer(
                 stream,
