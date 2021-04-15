@@ -12,12 +12,12 @@ from os.path import exists
 import lxml.etree as et
 import matplotlib
 from PySide2.QtCore import QAbstractTableModel, QModelIndex, Qt, QEvent
-from PySide2.QtGui import QKeySequence, QFont, QIcon
+from PySide2.QtGui import QKeySequence, QFont, QIcon, QDoubleValidator
 from PySide2.QtWidgets import QComboBox, QLabel, QTableWidget, QTableWidgetItem
 from PySide2.QtWidgets import QDesktopWidget, QGridLayout, QLineEdit, QPushButton
 from PySide2.QtWidgets import QSizePolicy
 from PySide2.QtWidgets import QTableView, QApplication, QWidget
-from numpy import loadtxt, isnan, empty_like, linspace, zeros, ones, dtype
+from numpy import loadtxt, isnan, empty_like, linspace, zeros, ones, dtype, log
 from pandas import DataFrame, merge, to_numeric, read_csv
 
 matplotlib.use('Qt5Agg')
@@ -54,6 +54,7 @@ class App(QWidget):
         self.height = height
         self.left = x
         self.top = y
+        self.ignore_events = False
         self.initUI()
 
     def initUI(self):
@@ -70,16 +71,17 @@ class App(QWidget):
         self.delete_selected_button = QPushButton()
         self.copy_selected_button = QPushButton()
         self.phases_vol_button = QPushButton()
+        self.temp_text = QLineEdit()
         self.plot_window = PlotWindow()
         self.cp_button = QPushButton()
         self.psat_button = QPushButton()
 
         self.tableView1.setModel(self.model)
-        self.tableWidget1.added_column_names = ['']
-        self.tableWidget1.setColumnCount(self.tableView1.model().columnCount()+1)
-        self.tableWidget1.setHorizontalHeaderLabels(
-            ['z_i'] + self.tableView1.model().column_names
-        )
+        self.tableWidget1.setColumnCount(self.tableView1.model().columnCount()+1+1+1+1)
+        widget_col_names=['z_i','dh_ig','ds_ig','dg_ig'] + self.tableView1.model().column_names
+        widget_col_units=['-','J/mol','J/mol/K','J/mol'] + self.tableView1.model().column_units
+        widget_col_names=[widget_col_names[i]+'\n'+widget_col_units[i] for i in range(len(widget_col_names))]
+        self.tableWidget1.setHorizontalHeaderLabels(widget_col_names)
         self.phase_filter.addItems(['', 'G', 'L', 'S', 'C'])
         self.tableWidget1.setEnabled(False)
         self.tableWidget1.setSelectionBehavior(QTableWidget.SelectRows)
@@ -87,6 +89,8 @@ class App(QWidget):
         self.delete_selected_button.setText('delete selected')
         self.copy_selected_button.setText('copy selected')
         self.phases_vol_button.setText('ph, v')
+        self.temp_text.setValidator(QDoubleValidator(0,6000,16))
+        self.temp_text.setPlaceholderText('1000 K')
 
         # Add box layout, add table to box layout and add box layout to widget
         self.layout = QGridLayout()
@@ -104,6 +108,7 @@ class App(QWidget):
         self.layout.addWidget(self.delete_selected_button, 6, 4, 1, 1)
         self.layout.addWidget(self.copy_selected_button, 6, 1, 1, 1)
         self.layout.addWidget(self.phases_vol_button, 6, 2, 1, 1)
+        self.layout.addWidget(self.temp_text, 6, 3, 1, 1)
 
         self.setLayout(self.layout)
 
@@ -125,41 +130,16 @@ class App(QWidget):
         self.phases_vol_button.clicked.connect(partial(
             self.phases_vol
         ))
+        self.temp_text.editingFinished.connect(partial(
+            self.update_temp
+        ))
         #self.tableView1.horizontalHeader().setClickable(False)
 
         self.props_i = self.tableView1.model().df.iloc[[]]
         self.props_i['z_i'] = zeros(0)
-
-        # init set for testing
-        self.phase_filter.setCurrentIndex(self.phase_filter.findText('G'))
-        self.cas_filter.setText('7727-37-9')
-        self.name_filter.setText('nitrogen')
-        self.formula_filter.setText('N2')
-        self.tableView1.selectRow(0)
-
-        self.phase_filter.setCurrentIndex(self.phase_filter.findText('G'))
-        self.cas_filter.setText('74-82-8')
-        self.name_filter.setText('methane')
-        self.formula_filter.setText('ch4')
-        self.tableView1.selectRow(0)
-
-        self.phase_filter.setCurrentIndex(self.phase_filter.findText('G'))
-        self.cas_filter.setText('74-84-0')
-        self.name_filter.setText('ethane')
-        self.formula_filter.setText('c2h6')
-        self.tableView1.selectRow(0)
-
-        self.phase_filter.setCurrentIndex(self.phase_filter.findText('G'))
-        self.cas_filter.setText('74-98-6')
-        self.name_filter.setText('propane')
-        self.formula_filter.setText('c3h8')
-        self.tableView1.selectRow(0)
-        self.tableView1.selectRow(-1)
-
-        self.phase_filter.setCurrentIndex(self.phase_filter.findText(''))
-        self.cas_filter.setText('')
-        self.name_filter.setText('')
-        self.formula_filter.setText('')
+        self.props_i['dh_ig'] = zeros(0)
+        self.props_i['ds_ig'] = zeros(0)
+        self.props_i['dg_ig'] = zeros(0)
 
         # Show widget
         self.show()
@@ -186,7 +166,7 @@ class App(QWidget):
         already_in_table = False
         for item in self.tableWidget1.findItems(cas, Qt.MatchExactly):
             if phase == self.tableWidget1.item(
-                    item.row(), column_of_phase+1).text():
+                    item.row(), column_of_phase+1+1+1+1).text():
                 already_in_table = True
         if not already_in_table:
             row_index = int(self.tableView1.model().headerData(index.row(), Qt.Vertical))
@@ -195,6 +175,9 @@ class App(QWidget):
 
             # save df with new props
             z_i_orig = self.props_i['z_i']
+            dh_ig_orig = self.props_i['dh_ig']
+            ds_ig_orig = self.props_i['ds_ig']
+            dg_ig_orig = self.props_i['dg_ig']
             index_orig = self.props_i.index
             self.props_i = self.tableView1.model().df.loc[
                 [int(self.tableWidget1.verticalHeaderItem(i).text())
@@ -202,7 +185,14 @@ class App(QWidget):
                     row_index], :
             ]
             self.props_i['z_i'] = zeros(len(self.props_i))
+            self.props_i['dh_ig'] = zeros(len(self.props_i))
+            self.props_i['ds_ig'] = zeros(len(self.props_i))
+            self.props_i['dg_ig'] = zeros(len(self.props_i))
             self.props_i.loc[index_orig, 'z_i'] = z_i_orig
+            self.props_i.loc[index_orig, 'dh_ig'] = dh_ig_orig
+            self.props_i.loc[index_orig, 'ds_ig'] = ds_ig_orig
+            self.props_i.loc[index_orig, 'dg_ig'] = dg_ig_orig
+            
             self.props_i.loc[row_index, 'z_i'] = float(0)
 
             # add item to widget
@@ -211,7 +201,7 @@ class App(QWidget):
                     self.tableWidget1.rowCount() - 1,
                     header_to_add)
             for i in range(len(column_names)):
-                # columns in TableWidget shifted by one vs. Tableview due to first column z_i
+                # columns in TableWidget shifted by 1+1+1+1 vs. Tableview due to first columns z_i, dh_ig, ds_ig, dg_ig
                 data = self.tableView1.model().index(index.row(), i).data()
                 if isinstance(data, str) or data is None:
                     item_to_add = QTableWidgetItem(data)
@@ -220,7 +210,7 @@ class App(QWidget):
                 item_to_add.setFlags(
                     Qt.ItemIsSelectable | Qt.ItemIsEnabled | Qt.ItemIsEditable)
                 self.tableWidget1.setItem(
-                    self.tableWidget1.rowCount() - 1, i+1,
+                    self.tableWidget1.rowCount() - 1, i+1+1+1+1,
                     item_to_add)
 
             # additional column with z_i
@@ -244,6 +234,57 @@ class App(QWidget):
             self.props_i.loc[df_index, 'z_i'] = new_value
         else:
             pass
+
+    def update_temp(self):
+        if self.temp_text.hasAcceptableInput():
+            self.temp_text.setPlaceholderText(self.temp_text.text()+' K')
+            t=float(self.temp_text.text().replace(',','.')) # K      
+            self.temp_text.clear()
+        else:
+            t=1000 # K
+            self.temp_text.clear()
+        mm_i = (self.props_i['poling_molwt']/1000).tolist()  # kg/mol
+        tc_i = self.props_i['poling_tc'].tolist()  # K
+        pc_i = (self.props_i['poling_pc']*1e5).tolist()  # Pa
+        omega_i = self.props_i['poling_omega'].tolist()
+        vc_i = (self.props_i['poling_vc']*10**-6).tolist()  # m^3/mol
+        delhf0 = (self.props_i['poling_delhf0']*1000).tolist()  # J/mol
+        delgf0 = (self.props_i['poling_delgf0']*1000).tolist()  # J/mol
+        delsf0 = [(delhf0[i]-delgf0[i])/298.15 for i in range(len(self.props_i))] # J/mol/K
+        a_low = [self.props_i['a'+str(i)+'_low'].tolist() for i in range(1,7+1)]
+        a_high = [self.props_i['a'+str(i)+'_high'].tolist() for i in range(1,7+1)]
+
+        cp_r_low=[sum([a_low[j][i]*t**j for j in range(4+1)]) for i in range(len(self.props_i))] # cp/R
+        cp_r_high=[sum([a_high[j][i]*t**j for j in range(4+1)]) for i in range(len(self.props_i))] # cp/R
+
+        if t>1000: # poly a_low is for 200 - 1000 K; a_high is for 1000 - 6000 K
+            a=a_high
+        else:
+            a=a_low
+        
+        s_cp_r_dt=[
+        sum([1/(j+1)*a[j][i]*t**(j+1) for j in range(4+1)]) 
+        -sum([1/(j+1)*a[j][i]*298.15**(j+1) for j in range(4+1)]) 
+        for i in range(len(self.props_i))] # int(Cp/R*dT,298,15K,T)
+        # int(Cp/R/T*dT,298.15K,T)
+        s_cp_r_t_dt=[a[0][i]*log(t/298.15)+
+        sum([1/(j)*a[j][i]*t**(j) for j in range(1,3+1)])
+        -sum([1/(j)*a[j][i]*298.15**(j) for j in range(1,3+1)]) 
+        for i in range(len(self.props_i))] # int(Cp/(RT)*dT,298,15K,T)
+        
+        dh_ig=[delhf0[i]+8.3145*s_cp_r_dt[i] for i in range(len(self.props_i))]
+        ds_ig=[delsf0[i]+8.3145*s_cp_r_t_dt[i] for i in range(len(self.props_i))]
+        dg_ig=[delhf0[i]-t/298.15*delsf0[i]+8.3145*s_cp_r_dt[i]-8.3145*s_cp_r_t_dt[i] for i in range(len(self.props_i))]
+
+        var_labels=['dh_ig','ds_ig','dg_ig']
+        for i in range(len(self.props_i)):
+            for j,col in enumerate([dh_ig,ds_ig,dg_ig]):
+                #print(col)
+                item_to_add = QTableWidgetItem(locale.str(col[i]))
+                item_to_add.setFlags(
+                        Qt.ItemIsSelectable | Qt.ItemIsEnabled | Qt.ItemIsEditable)
+                self.tableWidget1.setItem(
+                        i, j+1, item_to_add)
 
     def copy_selection(self):
         col_names = self.tableView1.model().column_names
@@ -273,11 +314,13 @@ class App(QWidget):
             QApplication.clipboard().setText(stream.getvalue())
 
     def eventFilter(self, source, event):
-        if (event.type() == QEvent.KeyPress and
+        if self.ignore_events:
+            pass
+        elif (event.type() == QEvent.KeyPress and
                 event.matches(QKeySequence.Copy)):
             self.copy_selection()
             return True
-        if (event.type() == QEvent.KeyPress and
+        elif (event.type() == QEvent.KeyPress and
                 event.matches(QKeySequence.Delete)):
             if len(self.tableWidget1.selectedIndexes()) > 1:
                 self.delete_selected()
@@ -890,4 +933,159 @@ if __name__ == '__main__':
     # ended lines for setting app icon correctly
     QApplication.setWindowIcon(QIcon('utils/icon_batch_32X32.png'))
     ex = App()
+
+    # init set for testing
+    ex.phase_filter.setCurrentIndex(ex.phase_filter.findText('G'))
+    ex.cas_filter.setText('1333-74-0')
+    ex.name_filter.setText('hydrogen')
+    ex.formula_filter.setText('H2')
+    ex.tableView1.selectRow(0)
+
+    ex.phase_filter.setCurrentIndex(ex.phase_filter.findText('G'))
+    ex.cas_filter.setText('74-82-8')
+    ex.name_filter.setText('methane')
+    ex.formula_filter.setText('CH4')
+    ex.tableView1.selectRow(0)
+
+    ex.phase_filter.setCurrentIndex(ex.phase_filter.findText('G'))
+    ex.cas_filter.setText('124-38-9')
+    ex.name_filter.setText('carbon dioxide')
+    ex.formula_filter.setText('CO2')
+    ex.tableView1.selectRow(0)
+
+    ex.phase_filter.setCurrentIndex(ex.phase_filter.findText('G'))
+    ex.cas_filter.setText('630-08-0')
+    ex.name_filter.setText('carbon monoxide')
+    ex.formula_filter.setText('CO')
+    ex.tableView1.selectRow(0)
+
+    ex.phase_filter.setCurrentIndex(ex.phase_filter.findText('G'))
+    ex.cas_filter.setText('7732-18-5')
+    ex.name_filter.setText('water')
+    ex.formula_filter.setText('H2O')
+    ex.tableView1.selectRow(0)
+
+    ex.phase_filter.setCurrentIndex(ex.phase_filter.findText('G'))
+    ex.cas_filter.setText('7727-37-9')
+    ex.name_filter.setText('nitrogen')
+    ex.formula_filter.setText('N2')
+    ex.tableView1.selectRow(0)
+
+    ex.phase_filter.setCurrentIndex(ex.phase_filter.findText('G'))
+    ex.cas_filter.setText('7782-44-7')
+    ex.name_filter.setText('oxygen')
+    ex.formula_filter.setText('O2')
+    ex.tableView1.selectRow(0)
+
+    ex.phase_filter.setCurrentIndex(ex.phase_filter.findText('G'))
+    ex.cas_filter.setText('7440-37-1')
+    ex.name_filter.setText('argon')
+    ex.formula_filter.setText('Ar')
+    ex.tableView1.selectRow(0)
+
+    ex.phase_filter.setCurrentIndex(ex.phase_filter.findText('G'))
+    ex.cas_filter.setText('7440-59-7')
+    ex.name_filter.setText('helium')
+    ex.formula_filter.setText('He')
+    ex.tableView1.selectRow(0)
+
+    ex.phase_filter.setCurrentIndex(ex.phase_filter.findText('G'))
+    ex.cas_filter.setText('71-43-2')
+    ex.name_filter.setText('benzene')
+    ex.formula_filter.setText('C6H6')
+    ex.tableView1.selectRow(0)
+
+    ex.phase_filter.setCurrentIndex(ex.phase_filter.findText('G'))
+    ex.cas_filter.setText('110-82-7')
+    ex.name_filter.setText('cyclohexane')
+    ex.formula_filter.setText('C6H12')
+    ex.tableView1.selectRow(0)
+
+    ex.phase_filter.setCurrentIndex(ex.phase_filter.findText('G'))
+    ex.cas_filter.setText('110-54-3')
+    ex.name_filter.setText('n-hexane')
+    ex.formula_filter.setText('C6H14')
+    ex.tableView1.selectRow(0)
+
+    ex.phase_filter.setCurrentIndex(ex.phase_filter.findText('G'))
+    ex.cas_filter.setText('67-56-1')
+    ex.name_filter.setText('methanol')
+    ex.formula_filter.setText('CH3OH')
+    ex.tableView1.selectRow(0)
+
+    ex.phase_filter.setCurrentIndex(ex.phase_filter.findText('G'))
+    ex.cas_filter.setText('107-31-3')
+    ex.name_filter.setText('methyl formate')
+    ex.formula_filter.setText('C2H4O2')
+    ex.tableView1.selectRow(0)
+
+    ex.phase_filter.setCurrentIndex(ex.phase_filter.findText('G'))
+    ex.cas_filter.setText('64-18-6')
+    ex.name_filter.setText('formic acid')
+    ex.formula_filter.setText('CH2O2')
+    ex.tableView1.selectRow(0)
+
+    ex.phase_filter.setCurrentIndex(ex.phase_filter.findText('G'))
+    ex.cas_filter.setText('107-31-3')
+    ex.name_filter.setText('methyl formate')
+    ex.formula_filter.setText('C2H4O2')
+    ex.tableView1.selectRow(0)
+
+    ex.phase_filter.setCurrentIndex(ex.phase_filter.findText('G'))
+    ex.cas_filter.setText('74-84-0')
+    ex.name_filter.setText('ethane')
+    ex.formula_filter.setText('c2h6')
+    ex.tableView1.selectRow(0)
+
+    ex.phase_filter.setCurrentIndex(ex.phase_filter.findText('G'))
+    ex.cas_filter.setText('74-85-1')
+    ex.name_filter.setText('ethene')
+    ex.formula_filter.setText('c2h4')
+    ex.tableView1.selectRow(0)
+
+    ex.phase_filter.setCurrentIndex(ex.phase_filter.findText('G'))
+    ex.cas_filter.setText('74-98-6')
+    ex.name_filter.setText('propane')
+    ex.formula_filter.setText('c3h8')
+    ex.tableView1.selectRow(0)
+
+    ex.phase_filter.setCurrentIndex(ex.phase_filter.findText('G'))
+    ex.cas_filter.setText('115-07-1')
+    ex.name_filter.setText('propene')
+    ex.formula_filter.setText('c3h6')
+    ex.tableView1.selectRow(0)
+
+    ex.phase_filter.setCurrentIndex(ex.phase_filter.findText('G'))
+    ex.cas_filter.setText('7783-06-4')
+    ex.name_filter.setText('')
+    ex.formula_filter.setText('h2s')
+    ex.tableView1.selectRow(0)
+
+    ex.phase_filter.setCurrentIndex(ex.phase_filter.findText('G'))
+    ex.cas_filter.setText('7664-93-9')
+    ex.name_filter.setText('sulfuric acid')
+    ex.formula_filter.setText('h2so4')
+    ex.tableView1.selectRow(0)
+
+    ex.phase_filter.setCurrentIndex(ex.phase_filter.findText('G'))
+    ex.cas_filter.setText('7446-11-9')
+    ex.name_filter.setText('')
+    ex.formula_filter.setText('SO3')
+    ex.tableView1.selectRow(0)
+
+    ex.phase_filter.setCurrentIndex(ex.phase_filter.findText('G'))
+    ex.cas_filter.setText('7446-09-5')
+    ex.name_filter.setText('')
+    ex.formula_filter.setText('SO2')
+    ex.tableView1.selectRow(0)
+
+    ex.phase_filter.setCurrentIndex(ex.phase_filter.findText(''))
+    ex.cas_filter.setText('')
+    ex.name_filter.setText('')
+    ex.formula_filter.setText('')
+
+    ex.update_temp()
+
+    ex.tableView1.selectRow(-1)
+
     sys.exit(app.exec_())
