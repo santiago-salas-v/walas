@@ -78,7 +78,7 @@ class App(QWidget):
 
         self.tableView1.setModel(self.model)
         self.tableWidget1.setColumnCount(self.tableView1.model().columnCount()+1+1+1+1+1)
-        self.widget_col_names=['z_i','dh_ig','s_ig','g_ig','cp_ig'] + self.tableView1.model().column_names
+        self.widget_col_names=['z_i','h_ig','s_ig','g_ig','cp_ig'] + self.tableView1.model().column_names
         self.widget_col_units=['-','J/mol','J/mol/K','J/mol','J/mol/K'] + self.tableView1.model().column_units
         self.widget_col_names_units=[self.widget_col_names[i]+'\n'+self.widget_col_units[i] for i in range(len(self.widget_col_names))]
         self.tableWidget1.setHorizontalHeaderLabels(self.widget_col_names_units)
@@ -137,7 +137,7 @@ class App(QWidget):
 
         self.props_i = self.tableView1.model().df.iloc[[]]
         self.props_i['z_i'] = zeros(0)
-        self.props_i['dh_ig'] = zeros(0)
+        self.props_i['h_ig'] = zeros(0)
         self.props_i['s_ig'] = zeros(0)
         self.props_i['g_ig'] = zeros(0)
         self.props_i['cp_ig'] = zeros(0)
@@ -176,7 +176,7 @@ class App(QWidget):
 
             # save df with new props
             z_i_orig = self.props_i['z_i']
-            dh_ig_orig = self.props_i['dh_ig']
+            h_ig_orig = self.props_i['h_ig']
             s_ig_orig = self.props_i['s_ig']
             g_ig_orig = self.props_i['g_ig']
             cp_ig_orig = self.props_i['cp_ig']
@@ -187,12 +187,12 @@ class App(QWidget):
                     row_index], :
             ]
             self.props_i['z_i'] = zeros(len(self.props_i))
-            self.props_i['dh_ig'] = zeros(len(self.props_i))
+            self.props_i['h_ig'] = zeros(len(self.props_i))
             self.props_i['s_ig'] = zeros(len(self.props_i))
             self.props_i['g_ig'] = zeros(len(self.props_i))
             self.props_i['cp_ig'] = zeros(len(self.props_i))
             self.props_i.loc[index_orig, 'z_i'] = z_i_orig
-            self.props_i.loc[index_orig, 'dh_ig'] = dh_ig_orig
+            self.props_i.loc[index_orig, 'h_ig'] = h_ig_orig
             self.props_i.loc[index_orig, 's_ig'] = s_ig_orig
             self.props_i.loc[index_orig, 'g_ig'] = g_ig_orig
             self.props_i.loc[index_orig, 'cp_ig'] = cp_ig_orig
@@ -205,7 +205,7 @@ class App(QWidget):
                     self.tableWidget1.rowCount() - 1,
                     header_to_add)
             for i in range(len(column_names)):
-                # columns in TableWidget shifted by 1+1+1+1+1 vs. Tableview due to first columns z_i, dh_ig, s_ig, g_ig, cp_ig
+                # columns in TableWidget shifted by 1+1+1+1+1 vs. Tableview due to first columns z_i, h_ig, s_ig, g_ig, cp_ig
                 data = self.tableView1.model().index(index.row(), i).data()
                 if isinstance(data, str) or data is None:
                     item_to_add = QTableWidgetItem(data)
@@ -278,12 +278,12 @@ class App(QWidget):
         sum([1/(j)*a[j][i]*t**(j) for j in range(1,3+1)])
         for i in range(len(self.props_i))] # int(Cp/(RT)*dT,0,T)
 
-        dh_ig=[delhf0_poling[i]+8.3145*s_cp_r_dt[i] for i in range(len(self.props_i))]
+        h_ig=[delhf0_poling[i]+8.3145*s_cp_r_dt[i] for i in range(len(self.props_i))]
         s_ig=[8.3145*s_cp_r_t_dt[i] for i in range(len(self.props_i))]
-        g_ig=[dh_ig[i]-t*s_ig[i] for i in range(len(self.props_i))]
+        g_ig=[h_ig[i]-t*s_ig[i] for i in range(len(self.props_i))]
 
         for i in range(len(self.props_i)):
-            for j,col in enumerate([dh_ig,s_ig,g_ig,cp_ig]):
+            for j,col in enumerate([h_ig,s_ig,g_ig,cp_ig]):
                 #print(col)
                 item_to_add = QTableWidgetItem(locale.str(col[i]))
                 item_to_add.setFlags(
