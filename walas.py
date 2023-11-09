@@ -11,14 +11,14 @@ import matplotlib.pyplot
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 import pyqtgraph as pg
 from pyqtgraph.dockarea import DockArea, Dock
-from pyqtgraph.Qt import QtGui, QtCore
+from pyqtgraph.Qt import QtGui, QtCore, QtWidgets
 from scipy.integrate import ode, quad
 from scipy.optimize import root, leastsq
 
 
-app = QtGui.QApplication([])
+app = QtWidgets.QApplication([])
 dpi_res = 250
-window_size = QtGui.QDesktopWidget().screenGeometry()
+window_size = QtWidgets.QDesktopWidget().screenGeometry()
 app_width = window_size.width() * 2 / 5.0
 app_height = window_size.height() * 2 / 5.0
 
@@ -285,8 +285,8 @@ def gui_docks_p2_04_01(d_area, timer, title=None):
     vlayout_2 = pg.LayoutWidget()
     p_2 = pg.PlotWidget(name='Plot_2')
     p_1 = pg.PlotWidget(name='Plot_1')
-    btn_1 = QtGui.QPushButton('Run Linear')
-    btn_2 = QtGui.QPushButton('Run non-Linear')
+    btn_1 = QtWidgets.QPushButton('Run Linear')
+    btn_2 = QtWidgets.QPushButton('Run non-Linear')
     d1 = Dock('Non-Linear', size=(1, 1), closable=True)
     d2 = Dock('Linear', size=(1, 1), closable=True)
     d_area.addDock(d1, 'left')
@@ -381,8 +381,8 @@ def gui_docks_p2_04_02(d_area, _, title=None):
         ['c', '1/r', 't_simple', 't_quadfunc']
     )
     tab_1.sortByColumn(2, QtCore.Qt.AscendingOrder)
-    tab_1.horizontalHeader().setResizeMode(
-        QtGui.QHeaderView.ResizeToContents
+    tab_1.horizontalHeader().setSectionResizeMode(
+        QtWidgets.QHeaderView.ResizeToContents
     )
 
 
@@ -543,7 +543,7 @@ def gui_docks_p4_03_04(d_area, timer, title=None):
 def gui_docks_p4_03_06(d_area, timer, title=None, use_mpl=False):
     d1 = Dock('ADDITION POLYMERIZATION', size=(1, 1), closable=True)
     vlayout = pg.LayoutWidget()
-    b1 = QtGui.QPushButton()
+    b1 = QtWidgets.QPushButton()
     # Establish initial conditions before curve numbers
     time_interval = [0, 150]
     y0 = [1.0, 0, 0, 0, 0, 0]
@@ -667,7 +667,7 @@ def gui_docks_p4_03_06(d_area, timer, title=None, use_mpl=False):
 def gui_docks_p4_04_41(d_area, _, title=None):
     d1 = Dock('CSTR WITH HEATED RECYCLE 2A ==>> 2B',
               size=(1, 1), closable=True)
-    tab_1 = QtGui.QTableView()
+    tab_1 = QtWidgets.QTableView()
     d1.addWidget(tab_1)
     d_area.addDock(d1, 'bottom')
 
@@ -757,15 +757,15 @@ def gui_docks_p4_04_41(d_area, _, title=None):
         column_names=['R', 'na_1', 'T_1', 'k', 'x'],
         column_formats=['.2%', '1.2f', '1.2f', '1.2f', '1.3f']
     ))
-    tab_1.horizontalHeader().setResizeMode(
-        QtGui.QHeaderView.ResizeToContents
+    tab_1.horizontalHeader().setSectionResizeMode(
+        QtWidgets.QHeaderView.ResizeToContents
     )
 
 
 def gui_docks_p4_04_53(d_area, _, title=None):
     d1 = Dock('PUMPAROUND SYSTEM A<<==>>B',
               size=(1, 1), closable=True)
-    tab_1 = QtGui.QTableView()
+    tab_1 = QtWidgets.QTableView()
     d1.addWidget(tab_1)
     d_area.addDock(d1, 'bottom')
 
@@ -863,8 +863,8 @@ def gui_docks_p4_04_53(d_area, _, title=None):
         column_names=['n', 'T', 'k', 'K_e', 'S'],
         column_formats=['1.5g'] * 6
     ))
-    tab_1.horizontalHeader().setResizeMode(
-        QtGui.QHeaderView.ResizeToContents
+    tab_1.horizontalHeader().setSectionResizeMode(
+        QtWidgets.QHeaderView.ResizeToContents
     )
 
 
@@ -873,7 +873,7 @@ def gui_docks_p3_02_58(d_area, _, title=None):
               size=(1, 1), closable=True)
     d2 = Dock('IODINATION, FOURTH ORDER',
               size=(1, 1), closable=True)
-    tab_1 = QtGui.QTableView()
+    tab_1 = QtWidgets.QTableView()
     matplotlib.pyplot.style.use('dark_background')
     fig, ax = matplotlib.pyplot.subplots()
     p1 = FigureCanvas(fig)
@@ -986,8 +986,8 @@ def gui_docks_p3_02_58(d_area, _, title=None):
         column_formats=['g', '1.3f', '1.3f', '1.3f', '1.3f',
                         '1.3f']
     ))
-    tab_1.horizontalHeader().setResizeMode(
-        QtGui.QHeaderView.ResizeToContents
+    tab_1.horizontalHeader().setSectionResizeMode(
+        QtWidgets.QHeaderView.ResizeToContents
     )
 
     d1.addWidget(tab_1)
@@ -1030,8 +1030,8 @@ def gui_docks_ue3_1(d_area, _, title=None):
     d1 = Dock(title,
               size=(1, 1), closable=True
               )
-    tab_1 = QtGui.QTableView()
-    text1 = QtGui.QPlainTextEdit()
+    tab_1 = QtWidgets.QTableView()
+    text1 = QtWidgets.QPlainTextEdit()
     vlayout1 = pg.LayoutWidget()
 
     x0so2 = 0.078
@@ -1106,8 +1106,8 @@ def gui_docks_ue3_1(d_area, _, title=None):
         )
     )
 
-    tab_1.horizontalHeader().setResizeMode(
-        QtGui.QHeaderView.ResizeToContents
+    tab_1.horizontalHeader().setSectionResizeMode(
+        QtWidgets.QHeaderView.ResizeToContents
     )
 
     vlayout1.addWidget(tab_1, row=0, col=0)
@@ -1139,24 +1139,24 @@ def add_which_dock(text, d_area, timer, title):
     elif text == u'Ü3.1':
         gui_docks_ue3_1(d_area, timer, title)
 
-wind = QtGui.QWidget()
+wind = QtWidgets.QWidget()
 area = DockArea()
 tree = pg.TreeWidget()
-btn_3 = QtGui.QPushButton('STOP')
-vlayout_0 = QtGui.QVBoxLayout()
-splitter = QtGui.QSplitter()
+btn_3 = QtWidgets.QPushButton('STOP')
+vlayout_0 = QtWidgets.QVBoxLayout()
+splitter = QtWidgets.QSplitter()
 shared_timer = pg.QtCore.QTimer()
 
 splitter.addWidget(tree)
 splitter.addWidget(area)
-splitter.setSizes([app_width * 1 / 3.0, app_width * 2 / 3.0])
+splitter.setSizes([int(app_width * 1 / 3.0), int(app_width * 2 / 3.0)])
 
 vlayout_0.addWidget(splitter)
 vlayout_0.addWidget(btn_3)
 
 wind.setLayout(vlayout_0)
 wind.setWindowTitle('Walas problems')
-wind.resize(app_width, app_height)
+wind.resize(int(app_width), int(app_height))
 
 chapter_layout = [
     [
@@ -1211,7 +1211,7 @@ for chapter in chapter_layout:
         chapter_title = 'CHAPTER ' + str(chapter_code) + '. '
     else:
         chapter_title = chapter_code
-    locals()['ti' + str(chapter_code)] = QtGui.QTreeWidgetItem()
+    locals()['ti' + str(chapter_code)] = QtWidgets.QTreeWidgetItem()
     tix = locals()['ti' + str(chapter_code)]
     tix.setText(
         0, chapter_title)
@@ -1223,8 +1223,8 @@ for chapter in chapter_layout:
         problem_counter += 1
         name_item = 'ti' + str(chapter_code) + str(problem_counter) + str(1)
         name_label = 'lab_' + str(chapter_code) + str(problem_counter) + str(1)
-        locals()[name_item] = QtGui.QTreeWidgetItem([problem[0]])
-        locals()[name_label] = QtGui.QLabel(problem[1])
+        locals()[name_item] = QtWidgets.QTreeWidgetItem([problem[0]])
+        locals()[name_label] = QtWidgets.QLabel(problem[1])
         tix.addChild(locals()[name_item])
         tree.setItemWidget(
             locals()[name_item],
@@ -1259,4 +1259,4 @@ if __name__ == '__main__':
     if (sys.flags.interactive != 1) or \
             not hasattr(QtCore, 'PYQT_VERSION'):
         # noinspection PyArgumentList
-        QtGui.QApplication.instance().exec_()
+        QtWidgets.QApplication.instance().exec_()
