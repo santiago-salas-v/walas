@@ -1,4 +1,4 @@
-from numpy import array, lexsort, pi, cos, arccos, log10, complex
+from numpy import array, lexsort, pi, cos, arccos, log10
 
 
 def solve_cubic(abcd):

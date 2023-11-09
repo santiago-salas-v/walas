@@ -931,7 +931,7 @@ if __name__ == '__main__':
     QApplication.setFont(QFont('Consolas', 10))
     # following 2 lines for setting app icon correctly
     myappid = u'mycompany.myproduct.subproduct.version'  # arbitrary string
-    ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(myappid)
+    #ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(myappid)
     # ended lines for setting app icon correctly
     QApplication.setWindowIcon(QIcon('utils/icon_batch_32X32.png'))
     ex = App()
