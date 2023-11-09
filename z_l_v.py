@@ -379,6 +379,7 @@ def p_i_sat_ceos(t, p, tc_i, pc_i, af_omega_i,
                 n_fev[i] += second_step_soln['n_fev']
                 inv_slope = -(p1_it - p0_it) / (disc_1 - disc_0)
                 p1_it = p0_it * (1 + sign(-inv_slope) * 0.001)
+            phi_sat_ceos(t, 3e-8, tc, pc, af_omega, alpha_tr, epsilon, sigma, psi, omega)['zero_fun']
             soln_temp = secant_ls_3p(
                 lambda p_var: phi_sat_ceos(
                     t, p_var, tc, pc, af_omega,
@@ -563,10 +564,15 @@ def phi_sat_ceos(t, p, tc_i, pc_i, af_omega_i,
     i_i_v = +1 / (sigma - epsilon) * log(
         (z_v + sigma * beta) / (z_v + epsilon * beta)
     )
-    ln_phi_l = + z_l - 1 - \
-        log(z_l - beta) - q * i_i_l
-    ln_phi_v = + z_v - 1 - \
-        log(z_v - beta) - q * i_i_v
+    if z_l - beta > 0:
+        # $G^R/(RT) = Z - 1 - ln(1-\rho b) - ln(Z) - q I$
+        # and $\beta = \rho b Z$
+        ln_phi_l = + z_l - 1 - log(z_l - beta) - q * i_i_l
+    else:
+        # $G^R/(RT) = Z - 1 - ln(1-\rho b) + ln(-Z) - q I$
+        # and $\beta = \rho b Z$
+        ln_phi_l = + z_l - 1 - log(beta / z_l**2 - 1 / z_l) - q * i_i_l
+    ln_phi_v = + z_v - 1 - log(z_v - beta) - q * i_i_v
     phi_l = exp(ln_phi_l)
     phi_v = exp(ln_phi_v)
     zero_fun = -ln_phi_v + ln_phi_l
@@ -641,7 +647,7 @@ def phi(t, p, z_i, tc_i, pc_i, af_omega_i, phase,
     elif epsilon == sigma:
         # only vdw
         i_int = beta / (z + epsilon * beta)
-    if z >= 0:
+    if z - beta > 0:
         # $G^R/(RT) = Z - 1 - ln(1-\rho b) - ln(Z) - q I$
         # and $\beta = \rho b Z$
         ln_phi_i = b_i / b * (z - 1) - log(z - beta) - q_mp_i * i_int
