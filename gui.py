@@ -10,8 +10,11 @@ template_path = sep.join(['data', 'xsl_stylesheet_burcat.xsl'])
 
 markdown('# thr')
 sidebar.markdown('# thr')
-text_input('', key='name', placeholder='formula')
-
+sidebar.write('filter by:')
+sidebar.text_input(label='cas', key='cas', placeholder='cas', help='type cas no.')
+sidebar.text_input(label='name', key='name', placeholder='name', help='type name')
+sidebar.text_input(label='formula', key='formula', placeholder='formula', help='type formula')
+sidebar.selectbox('phase',['','G','L','S','C'])
 
 
 @streamlit.cache_data
