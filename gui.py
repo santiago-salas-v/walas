@@ -1,5 +1,5 @@
 import streamlit
-from streamlit import write
+from streamlit import write, markdown, sidebar, text_input
 from lxml import etree
 from os.path import sep
 from pandas import DataFrame
@@ -7,6 +7,10 @@ import string
 
 data_path = sep.join(['data', 'BURCAT_THR.xml'])
 template_path = sep.join(['data', 'xsl_stylesheet_burcat.xsl'])
+
+markdown('# thr')
+sidebar.markdown('# thr')
+text_input('', key='name')
 
 @streamlit.cache_data
 def load_data():
