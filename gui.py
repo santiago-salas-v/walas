@@ -10,7 +10,9 @@ template_path = sep.join(['data', 'xsl_stylesheet_burcat.xsl'])
 
 markdown('# thr')
 sidebar.markdown('# thr')
-text_input('', key='name')
+text_input('', key='name', placeholder='formula')
+
+
 
 @streamlit.cache_data
 def load_data():
