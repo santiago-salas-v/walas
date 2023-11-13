@@ -25,5 +25,7 @@ docs/*
 #!docs/*.png
 #!docs/*.css
 */BURCAT_THR.xml
+*/BURCAT.THR
+*/Thermodyn2XML_vanilla_7_11_05.py
 data/*.csv
 utils/icon_batch_32X32.png
