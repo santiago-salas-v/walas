@@ -302,7 +302,104 @@ def load_data():
     for j in range(4):
         poling_burcat_ant_df[f'poling_a{j+1}'] = poling_burcat_ant_df[f'poling_a{j+1}']*[1e-3,1e-5,1e-8,1e-11][j]
 
-    return poling_burcat_ant_df
+    column_names = [
+        'cas_no', 'phase', 'formula',
+        'formula_name_structure', 'ant_name',
+        'poling_no', 'poling_formula', 'poling_name',
+        'poling_molwt', 'poling_tfp',
+        'poling_tb', 'poling_tc', 'poling_pc',
+        'poling_vc', 'poling_zc', 'poling_omega',
+        'poling_delhf0', 'poling_delgf0', 'poling_delhb',
+        'poling_delhm', 'poling_v_liq', 'poling_t_liq',
+        'poling_dipole',
+        'p_ant_a', 'p_ant_b', 'p_ant_c',
+        'p_ant_tmin', 'p_ant_tmax',
+        'p_ant_pvpmin', 'p_ant_pvpmax',
+        'eant_to', 'eant_n',
+        'eant_e', 'eant_f',
+        'eant_tmin', 'eant_tmax',
+        'eant_pvpmin', 'eant_pvpmax',
+        'wagn_a', 'wagn_b',
+        'wagn_c', 'wagn_d',
+        'wagn_tmin', 'wagn_tmax',
+        'wagn_pvpmin', 'wagn_pvpmax',
+        'range_tmin_to_1000',
+        'range_1000_to_tmax', 'molecular_weight',
+        'hf298_div_r'] + [
+        'a' + str(i) + '_low' for i in range(1, 7 + 1)] + [
+        'a' + str(i) + '_high' for i in range(1, 7 + 1)
+    ] + [
+        'reference', 'source', 'date',
+        'ant_no', 'ant_formula', 'ant_name',
+        'ant_a', 'ant_b',
+        'ant_c', 'ant_tmin', 'ant_tmax',
+        'ant_code'
+    ]
+
+    column_dtypes = [
+        str, str, str,
+        str, str,
+        float, str, str,
+        float, float,
+        float, float, float,
+        float, float, float,
+        float, float, float,
+        float, float, float,
+        float,
+        float, float, float,
+        float, float,
+        float, float,
+        float, float,
+        float, float,
+        float, float,
+        float, float,
+        float, float,
+        float, float,
+        float, float,
+        float, float,
+        float,
+        float, float,
+        float] + [
+        float] * 7 + [float] * 7 + [
+        str, str, str,
+        float, str, str,
+        float, float,
+        float, float, float,
+        str
+    ]
+
+    column_units = [
+        '', '', '',
+
+        '', '',
+        '', '', '',
+        'g/mol', 'K',
+        'K', 'K', 'bar',
+        'cm3/mol', '', '',
+        'kJ/mol', 'kJ/mol', 'kJ/mol',
+        'kJ/mol', 'cm3/mol', 'K',
+        'Debye',
+        '', 'K', 'K',
+        'K', 'K', 'bar', 'bar',
+        'K', '', '', '',
+        'K', 'K', 'bar', 'bar',
+        '', '', '', '',
+        'K', 'K', 'bar', 'bar',
+        'K',
+        'K', 'g/mol',
+        '',
+        '', 'K^-1', 'K^-2', 'K^-3', 'K^-4',
+        'K^-1', '',
+        '', 'K^-1', 'K^-2', 'K^-3', 'K^-4',
+        'K^-1', '',
+        '', '', '',
+        '', '', '',
+        '', '', '',
+        '°C', '°C',
+        ''
+    ]
+
+    return poling_burcat_ant_df[column_names]
 
 df = load_data()
 df = df[df['cas_no'].str.contains(cas_filter, na=False, case=False)]
@@ -313,3 +410,4 @@ df = df[df['phase'].str.contains(phase_filter, na=False, case=False)]
 write(df)
 
 write('filtered to', str(len(df)), 'records')
+
