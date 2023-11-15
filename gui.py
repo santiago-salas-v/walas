@@ -384,6 +384,10 @@ names_units_dtypes=array([
 
 if 'idx_sel' not in session_state:
     idx_sel = []
+    idx_unsel = []
+else:
+    idx_sel = session_state['idx_sel']
+    idx_unsel = session_state['idx_unsel']
 
 df = load_data()[names_units_dtypes[:,0]]
 df = df[df['cas_no'].str.contains(cas_filter, na=False, case=False)]
@@ -391,30 +395,51 @@ df = df[df['formula'].str.contains(formula_filter, na=False, case=False)]
 df = df[df['formula_name_structure'].str.contains(name_filter, na=False, case=False)]
 df = df[df['phase'].str.contains(phase_filter, na=False, case=False)]
 
-def make_df_with_selection(df, idx_sel):
-    df_with_selections = df.copy()
-    df_with_selections.insert(0, 'Select', False)
-    edited_df = data_editor(
-            df_with_selections, hide_index=True, 
-            column_config={'Select':column_config.CheckboxColumn(required=True)},
-            disabled=df.columns
-            )
-    print('selected',idx_sel)
-    edited_df[idx_sel].Select = True # does nothing when len(idx_sel)==0
-    selected_indices = list(where(edited_df.Select)[0])
-    selected_rows = df[edited_df.Select]
-    unselected_idx = df[~edited_df.Select].index.to_list()
-    print('unselected',unselected_idx)
-    return {'selected_indices':selected_indices, 'selected_rows':selected_rows, 'unselected_idx':unselected_idx}
-
-selection = make_df_with_selection(df, idx_sel)
-idx_sel = list(set(
-    [i for i in idx_sel if not i in selection['unselected_idx']]+
-    selection['selected_rows'].index.to_list()
-    )) # persist list accross updates of df rows
+print('selected 1',idx_sel)
+#print('unselected',idx_unsel)
+df_with_selections = df.copy()
+df_with_selections.insert(0, 'Select', False)
+edited_df = data_editor(
+        df_with_selections, hide_index=True, 
+        column_config={'Select':column_config.CheckboxColumn(required=True)},
+        disabled=df.columns,
+        on_change=print('on_change')
+        )
+selected_indices = list(where(edited_df.Select)[0])
+selected_rows = df[edited_df.Select]
+idx_unsel = df[~edited_df.Select].index.to_list()
+idx_sel = selected_rows.index.to_list()
+if 'idx_unsel' in session_state:
+    print("len(idx_unsel) - len(session_state['idx_unsel'])=",len(idx_unsel) - len(session_state['idx_unsel']))
+    if abs(len(idx_unsel) - len(session_state['idx_unsel'])) ==1: # only change single element
+        # persist selection when table modified by several elements
+        print('hi')
+        if len(idx_unsel) > len(session_state['idx_unsel']): # single element unchecked
+            new_unsel = set(idx_unsel).difference(session_state['idx_unsel'])
+            print(new_unsel)
+            idx_sel = [i for i in idx_sel if i!=new_unsel]
+            idx_unsel = list(set(idx_unsel+list(new_unsel)))
+        elif len(session_state['idx_unsel']) > len(idx_unsel): # single element checked
+            new_sel = set(session_state['idx_unsel']).difference(idx_unsel)
+            print(new_sel)
+            idx_unsel = [i for i in idx_unsel if i!=new_sel]
+            idx_sel = list(set(idx_sel+list(new_sel)))
+    else: # reflect previous selection
+        print('skip')
+        idx_sel = session_state['idx_sel']
+        idx_unsel = session_state['idx_unsel']
+        for i in idx_sel:
+            if i in edited_df.index.to_list():
+                edited_df[i, 'Select'] = True
+                #edited_df.update(edited_df)
+                #print(i,edited_df.Select[i])
+#print('idx',df[edited_df.Select].index,edited_df['Select'].loc[idx_sel])
+#print('selected', edited_df['Select'].loc[[i for i in idx_sel if i in edited_df.index.to_list()]])
+print('selected 2',idx_sel)#,df['cas_no'].loc[idx_sel])
+#print('unselected 2',idx_unsel)
+print('=============\n')
 write('filtered to', str(len(df)), 'records')
 write(idx_sel)
-#write(selection['unselected_idx'])
-#if 'idx_sel' in session_state:
-#    write(session_state['idx_sel'])
-
+session_state['idx_sel'] = idx_sel
+session_state['idx_unsel'] = idx_unsel
+#write(selection['idx_unsel'])
