@@ -1,9 +1,9 @@
 import streamlit
-from streamlit import write, markdown, sidebar, text_input
+from streamlit import write, markdown, sidebar, text_input, data_editor, column_config, session_state
 from lxml import etree
 from os.path import sep
 from pandas import DataFrame, to_numeric, merge
-from numpy import loadtxt
+from numpy import loadtxt, array, where
 import string
 from re import search
 from os import linesep
@@ -304,114 +304,117 @@ def load_data():
 
     return poling_burcat_ant_df
 
-column_names = [
-    'cas_no', 'phase', 'formula',
-    'formula_name_structure', 'ant_name',
-    'poling_no', 'poling_formula', 'poling_name',
-    'poling_molwt', 'poling_tfp',
-    'poling_tb', 'poling_tc', 'poling_pc',
-    'poling_vc', 'poling_zc', 'poling_omega',
-    'poling_delhf0', 'poling_delgf0', 'poling_delhb',
-    'poling_delhm', 'poling_v_liq', 'poling_t_liq',
-    'poling_dipole',
-    'p_ant_a', 'p_ant_b', 'p_ant_c',
-    'p_ant_tmin', 'p_ant_tmax',
-    'p_ant_pvpmin', 'p_ant_pvpmax',
-    'eant_to', 'eant_n',
-    'eant_e', 'eant_f',
-    'eant_tmin', 'eant_tmax',
-    'eant_pvpmin', 'eant_pvpmax',
-    'wagn_a', 'wagn_b',
-    'wagn_c', 'wagn_d',
-    'wagn_tmin', 'wagn_tmax',
-    'wagn_pvpmin', 'wagn_pvpmax',
-    'range_tmin_to_1000',
-    'range_1000_to_tmax', 'molecular_weight',
-    'hf298_div_r'] + [
-    'a' + str(i) + '_low' for i in range(1, 7 + 1)] + [
-    'a' + str(i) + '_high' for i in range(1, 7 + 1)
-] + [
-    'reference', 'source', 'date',
-    'ant_no', 'ant_formula',
-    'ant_a', 'ant_b',
-    'ant_c', 'ant_tmin', 'ant_tmax',
-    'ant_code'
-]
+names_units_dtypes=array([
+    ['cas_no','',str],
+    ['phase','',str],
+    ['formula','',str],
+    ['formula_name_structure','',str],
+    ['ant_name','',str],
+    ['poling_no','',float],
+    ['poling_formula','',str],
+    ['poling_name','',str],
+    ['poling_molwt','g/mol',float],
+    ['poling_tfp','K',float],
+    ['poling_tb','K',float],
+    ['poling_tc','K',float],
+    ['poling_pc','bar',float],
+    ['poling_vc','cm3/mol',float],
+    ['poling_zc','-',float],
+    ['poling_omega','-',float],
+    ['poling_delhf0','kJ/mol',float],
+    ['poling_delgf0','kJ/mol',float],
+    ['poling_delhb','kJ/mol',float],
+    ['poling_delhm','kJ/mol',float],
+    ['poling_v_liq','cm3/mol',float],
+    ['poling_t_liq','K',float],
+    ['poling_dipole','Debye',float],
+    ['p_ant_a','-',float],
+    ['p_ant_b','K',float],
+    ['p_ant_c','K',float],
+    ['p_ant_tmin','K',float],
+    ['p_ant_tmax','K',float],
+    ['p_ant_pvpmin','bar',float],
+    ['p_ant_pvpmax','bar',float],
+    ['eant_to','K',float],
+    ['eant_n','-',float],
+    ['eant_e','-',float],
+    ['eant_f','-',float],
+    ['eant_tmin','K',float],
+    ['eant_tmax','K',float],
+    ['eant_pvpmin','bar',float],
+    ['eant_pvpmax','bar',float],
+    ['wagn_a','-',float],
+    ['wagn_b','-',float],
+    ['wagn_c','-',float],
+    ['wagn_d','-',float],
+    ['wagn_tmin','K',float],
+    ['wagn_tmax','K',float],
+    ['wagn_pvpmin','bar',float],
+    ['wagn_pvpmax','bar',float],
+    ['range_tmin_to_1000','K',float],
+    ['range_1000_to_tmax','K',float],
+    ['molecular_weight','g/mol',float],
+    ['hf298_div_r','K',float],
+    ['a1_low','-',float],
+    ['a2_low','K^-1',float],
+    ['a3_low','K^-2',float],
+    ['a4_low','K^-3',float],
+    ['a5_low','K^-4',float],
+    ['a6_low','K^-1',float],
+    ['a7_low','-',float],
+    ['a1_high','-',float],
+    ['a2_high','K^-1',float],
+    ['a3_high','K^-2',float],
+    ['a4_high','K^-3',float],
+    ['a5_high','K^-4',float],
+    ['a6_high','K^-1',float],
+    ['a7_high','-',float],
+    ['reference','',str],
+    ['source','',str],
+    ['date','',str],
+    ['ant_no','',float],
+    ['ant_formula','',str],
+    ['ant_a','',float],
+    ['ant_b','',float],
+    ['ant_c','',float],
+    ['ant_tmin','',float],
+    ['ant_tmax','°C',float],
+    ['ant_code','°C',str]
+])
 
-column_dtypes = [
-    str, str, str,
-    str, str,
-    float, str, str,
-    float, float,
-    float, float, float,
-    float, float, float,
-    float, float, float,
-    float, float, float,
-    float,
-    float, float, float,
-    float, float,
-    float, float,
-    float, float,
-    float, float,
-    float, float,
-    float, float,
-    float, float,
-    float, float,
-    float, float,
-    float, float,
-    float,
-    float, float,
-    float] + [
-    float] * 7 + [float] * 7 + [
-    str, str, str,
-    float, str,
-    float, float,
-    float, float, float,
-    str
-]
+if 'idx_sel' not in session_state:
+    idx_sel = []
 
-column_units = [
-    '', '', '',
-    '', '',
-    '', '', '',
-    'g/mol', 'K',
-    'K', 'K', 'bar',
-    'cm3/mol', '-', '-',
-    'kJ/mol', 'kJ/mol', 'kJ/mol',
-    'kJ/mol', 'cm3/mol', 'K',
-    'Debye',
-    '-', 'K', 'K',
-    'K', 'K', 
-    'bar', 'bar',
-    'K', '-', 
-    '-', '-',
-    'K', 'K', 
-    'bar', 'bar',
-    '-', '-', 
-    '-', '-',
-    'K', 'K', 
-    'bar', 'bar',
-    'K',
-    'K', 'g/mol',
-    'K',
-    '-', 'K^-1', 'K^-2', 'K^-3', 'K^-4',
-    'K^-1', '-',
-    '-', 'K^-1', 'K^-2', 'K^-3', 'K^-4',
-    'K^-1', '-',
-    '', '', '',
-    '', '', '',
-    '', '', 
-    '', '°C', '°C',
-    ''
-]
-
-df = load_data()[column_names]
+df = load_data()[names_units_dtypes[:,0]]
 df = df[df['cas_no'].str.contains(cas_filter, na=False, case=False)]
 df = df[df['formula'].str.contains(formula_filter, na=False, case=False)]
 df = df[df['formula_name_structure'].str.contains(name_filter, na=False, case=False)]
 df = df[df['phase'].str.contains(phase_filter, na=False, case=False)]
 
-write(df)
+def make_df_with_selection(df, idx_sel):
+    df_with_selections = df.copy()
+    df_with_selections.insert(0, 'Select', False)
+    edited_df = data_editor(
+            df_with_selections, hide_index=True, 
+            column_config={'Select':column_config.CheckboxColumn(required=True)},
+            disabled=df.columns
+            )
+    print('selected',idx_sel)
+    edited_df[idx_sel].Select = True # does nothing when len(idx_sel)==0
+    selected_indices = list(where(edited_df.Select)[0])
+    selected_rows = df[edited_df.Select]
+    unselected_idx = df[~edited_df.Select].index.to_list()
+    print('unselected',unselected_idx)
+    return {'selected_indices':selected_indices, 'selected_rows':selected_rows, 'unselected_idx':unselected_idx}
 
+selection = make_df_with_selection(df, idx_sel)
+idx_sel = list(set(
+    [i for i in idx_sel if not i in selection['unselected_idx']]+
+    selection['selected_rows'].index.to_list()
+    )) # persist list accross updates of df rows
 write('filtered to', str(len(df)), 'records')
+write(idx_sel)
+#write(selection['unselected_idx'])
+#if 'idx_sel' in session_state:
+#    write(session_state['idx_sel'])
 
