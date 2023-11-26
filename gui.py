@@ -391,8 +391,8 @@ if 'idx_sel' not in session_state:
 else:
     idx_sel = session_state['idx_sel']
     idx_unsel = session_state['idx_unsel']
-#if 'edited_df_zi' in session_state:
-#    edited_df_zi = session_state['edited_df_zi']
+if 'edited_df_zi' in session_state:
+    edited_df_zi = session_state['edited_df_zi']
 
 df = load_data()[names_units_dtypes[:,0]]
 df = df[df['cas_no'].str.contains(cas_filter, na=False, case=False)]
@@ -407,7 +407,7 @@ for j in range(len(ed_cols[0])):
         df_zi[col] = None
 df_zi = df_zi[[x for x in ed_cols[0] if x != 'z_i']+[x for x in df_zi.columns if not x in ed_cols[0]]] # order
 
-def add_selection_to_widget(edited_df_zi):
+def add_selection_to_widget():
     for idx in idx_sel:
         if not idx in edited_df_zi.index:
             new_row = df.loc[idx].copy()
@@ -429,7 +429,7 @@ edited_df = data_editor(
         df_with_selections, hide_index=True, 
         column_config={'Select':column_config.CheckboxColumn(required=True)},
         disabled=df.columns,
-        on_change=add_selection_to_widget
+        #on_change=add_selection_to_widget
         )
 selected_indices = list(where(edited_df.Select)[0])
 selected_rows = df[edited_df.Select]
