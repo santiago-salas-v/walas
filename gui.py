@@ -2,7 +2,7 @@ import streamlit
 from streamlit import write, markdown, sidebar, text_input, data_editor, column_config, session_state
 from lxml import etree
 from os.path import sep
-from pandas import DataFrame, to_numeric, merge
+from pandas import DataFrame, to_numeric, merge, concat
 from numpy import loadtxt, array, where
 import string
 from re import search
@@ -382,12 +382,17 @@ names_units_dtypes=array([
     ['ant_code','°C',str]
 ])
 
+ed_cols=[['z_i','h_ig','s_ig','g_ig','cp_ig'],
+        ['-','J/mol','J/mol/K','J/mol','J/mol/K']]
+
 if 'idx_sel' not in session_state:
     idx_sel = []
     idx_unsel = []
 else:
     idx_sel = session_state['idx_sel']
     idx_unsel = session_state['idx_unsel']
+#if 'edited_df_zi' in session_state:
+#    edited_df_zi = session_state['edited_df_zi']
 
 df = load_data()[names_units_dtypes[:,0]]
 df = df[df['cas_no'].str.contains(cas_filter, na=False, case=False)]
@@ -395,51 +400,43 @@ df = df[df['formula'].str.contains(formula_filter, na=False, case=False)]
 df = df[df['formula_name_structure'].str.contains(name_filter, na=False, case=False)]
 df = df[df['phase'].str.contains(phase_filter, na=False, case=False)]
 
-print('selected 1',idx_sel)
-#print('unselected',idx_unsel)
+df_zi = DataFrame(columns=df.columns)
+for j in range(len(ed_cols[0])):
+    col = ed_cols[0][j]
+    if not col in df_zi.columns and col != 'z_i':
+        df_zi[col] = None
+df_zi = df_zi[[x for x in ed_cols[0] if x != 'z_i']+[x for x in df_zi.columns if not x in ed_cols[0]]] # order
+
+def add_selection_to_widget(edited_df_zi):
+    for idx in idx_sel:
+        if not idx in edited_df_zi.index:
+            new_row = df.loc[idx].copy()
+            #new_row['z_i'] = 0 
+            edited_df_zi = concat([edited_df_zi,new_row])
+
+df_zi_with_selections = df_zi.copy()
+df_zi_with_selections.insert(0, 'z_i',0)
+edited_df_zi = data_editor(
+        df_zi_with_selections, hide_index=True,
+        column_config={'z_i':column_config.NumberColumn(required=True)},
+        disabled=df_zi.columns,
+        num_rows='dynamic'
+        );
+
 df_with_selections = df.copy()
 df_with_selections.insert(0, 'Select', False)
 edited_df = data_editor(
         df_with_selections, hide_index=True, 
         column_config={'Select':column_config.CheckboxColumn(required=True)},
         disabled=df.columns,
-        on_change=print('on_change')
+        on_change=add_selection_to_widget
         )
 selected_indices = list(where(edited_df.Select)[0])
 selected_rows = df[edited_df.Select]
 idx_unsel = df[~edited_df.Select].index.to_list()
 idx_sel = selected_rows.index.to_list()
-if 'idx_unsel' in session_state:
-    print("len(idx_unsel) - len(session_state['idx_unsel'])=",len(idx_unsel) - len(session_state['idx_unsel']))
-    if abs(len(idx_unsel) - len(session_state['idx_unsel'])) ==1: # only change single element
-        # persist selection when table modified by several elements
-        print('hi')
-        if len(idx_unsel) > len(session_state['idx_unsel']): # single element unchecked
-            new_unsel = set(idx_unsel).difference(session_state['idx_unsel'])
-            print(new_unsel)
-            idx_sel = [i for i in idx_sel if i!=new_unsel]
-            idx_unsel = list(set(idx_unsel+list(new_unsel)))
-        elif len(session_state['idx_unsel']) > len(idx_unsel): # single element checked
-            new_sel = set(session_state['idx_unsel']).difference(idx_unsel)
-            print(new_sel)
-            idx_unsel = [i for i in idx_unsel if i!=new_sel]
-            idx_sel = list(set(idx_sel+list(new_sel)))
-    else: # reflect previous selection
-        print('skip')
-        idx_sel = session_state['idx_sel']
-        idx_unsel = session_state['idx_unsel']
-        for i in idx_sel:
-            if i in edited_df.index.to_list():
-                edited_df[i, 'Select'] = True
-                #edited_df.update(edited_df)
-                #print(i,edited_df.Select[i])
-#print('idx',df[edited_df.Select].index,edited_df['Select'].loc[idx_sel])
-#print('selected', edited_df['Select'].loc[[i for i in idx_sel if i in edited_df.index.to_list()]])
-print('selected 2',idx_sel)#,df['cas_no'].loc[idx_sel])
-#print('unselected 2',idx_unsel)
-print('=============\n')
-write('filtered to', str(len(df)), 'records')
 write(idx_sel)
+
 session_state['idx_sel'] = idx_sel
 session_state['idx_unsel'] = idx_unsel
-#write(selection['idx_unsel'])
+session_state['edited_df_zi'] = edited_df_zi
