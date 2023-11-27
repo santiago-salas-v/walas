@@ -24,6 +24,7 @@ cas_filter = sidebar.text_input(label='cas', key='cas', placeholder='cas', help=
 name_filter = sidebar.text_input(label='name', key='name', placeholder='name', help='type name')
 formula_filter = sidebar.text_input(label='formula', key='formula', placeholder='formula', help='type formula')
 phase_filter = sidebar.selectbox('phase',['','G','L','S','C'])
+sidebar.markdown('# composition')
 
 def helper_func1(x):
     # helper function for csv reading
@@ -55,7 +56,7 @@ def helper_func4(x):
     return x.replace(b' ', b'')
 
 @streamlit.cache_data
-def load_data():
+def load_data(cas_filter='', name_filter='', formula_filter='', phase_filter=''):
     tree = etree.parse(data_path)
     root = tree.getroot()
     xsl = etree.parse(template_path)
@@ -304,6 +305,16 @@ def load_data():
 
     return poling_burcat_ant_df
 
+@streamlit.cache_data
+def filter_data(df, cas_filter='', name_filter='', formula_filter='', phase_filter=''):
+    df_out = df.copy()
+    df_out = df[df['cas_no'].str.contains(cas_filter, na=False, case=False) &
+            df['formula'].str.contains(formula_filter, na=False, case=False) &
+            df['formula_name_structure'].str.contains(name_filter, na=False, case=False) &
+            df['phase'].str.contains(phase_filter, na=False, case=False)
+            ]
+    return df_out
+
 names_units_dtypes=array([
     ['cas_no','',str],
     ['phase','',str],
@@ -385,58 +396,56 @@ names_units_dtypes=array([
 ed_cols=[['z_i','h_ig','s_ig','g_ig','cp_ig'],
         ['-','J/mol','J/mol/K','J/mol','J/mol/K']]
 
-if 'idx_sel' not in session_state:
-    idx_sel = []
-    idx_unsel = []
-else:
-    idx_sel = session_state['idx_sel']
-    idx_unsel = session_state['idx_unsel']
-if 'edited_df_zi' in session_state:
-    edited_df_zi = session_state['edited_df_zi']
-
 df = load_data()[names_units_dtypes[:,0]]
-df = df[df['cas_no'].str.contains(cas_filter, na=False, case=False)]
-df = df[df['formula'].str.contains(formula_filter, na=False, case=False)]
-df = df[df['formula_name_structure'].str.contains(name_filter, na=False, case=False)]
-df = df[df['phase'].str.contains(phase_filter, na=False, case=False)]
+df_filtered = filter_data(df, cas_filter=cas_filter, name_filter=name_filter, formula_filter=formula_filter, phase_filter=phase_filter)
+if not 'Select' in df_filtered.keys():
+    df_filtered['Select']=False
+    df_filtered=df_filtered[['Select']+[x for x in df_filtered.keys() if x != 'Select']]
 
-df_zi = DataFrame(columns=df.columns)
+df_with_selections = df_filtered.copy()
+edited_df = data_editor(
+        df_with_selections, hide_index=True, 
+        column_config={'Select':column_config.CheckboxColumn(required=True)},
+        disabled=[x for x in df.columns if x!= 'Select'],
+        key='edited_df_key'
+        )
+selected_indices = edited_df.where(edited_df.Select).index.to_list() #list(where(edited_df.Select)[0])
+selected_rows = df_filtered[edited_df.Select]
+
+if sidebar.button('clear'):
+    idx_sel = []
+    session_state['idx_sel'] = []
+
+if 'edited_df' in session_state:
+    if len(edited_df) != len(session_state['edited_df']):
+        # keep selections immediately after filtering
+        idx_sel = session_state['idx_sel']
+    else:
+        edited_dict = session_state['edited_df_key'].get('edited_rows') # dict such as e.g. {'7':{'Select':True},'8':{'Select':False}}
+        idx_deselected = [edited_df.iloc[x[0]].name for x in edited_dict.items() if not x[1]['Select']]
+        #write('idx_deselected',idx_deselected)
+        idx_sel = list(set(selected_rows.index.to_list()+session_state['idx_sel']))
+        idx_sel = [x for x in idx_sel if not x in idx_deselected] # remove newly unselected
+else:
+    idx_sel = selected_rows.index.to_list()
+
+df_zi = df.loc[idx_sel].copy()
 for j in range(len(ed_cols[0])):
     col = ed_cols[0][j]
     if not col in df_zi.columns and col != 'z_i':
         df_zi[col] = None
-df_zi = df_zi[[x for x in ed_cols[0] if x != 'z_i']+[x for x in df_zi.columns if not x in ed_cols[0]]] # order
-
-def add_selection_to_widget():
-    for idx in idx_sel:
-        if not idx in edited_df_zi.index:
-            new_row = df.loc[idx].copy()
-            #new_row['z_i'] = 0 
-            edited_df_zi = concat([edited_df_zi,new_row])
+df_zi = df_zi[['formula_name_structure']+[x for x in ed_cols[0] if x != 'z_i']+[x for x in df_zi.columns if not x in ed_cols[0]+['formula_name_structure']]] # order
 
 df_zi_with_selections = df_zi.copy()
-df_zi_with_selections.insert(0, 'z_i',0)
-edited_df_zi = data_editor(
+df_zi_with_selections.insert(0, 'z_i',0.0)
+edited_df_zi = sidebar.data_editor(
         df_zi_with_selections, hide_index=True,
-        column_config={'z_i':column_config.NumberColumn(required=True)},
+        column_config={'z_i':column_config.NumberColumn(required=True,min_value=0,max_value=1)},
         disabled=df_zi.columns,
-        num_rows='dynamic'
         );
 
-df_with_selections = df.copy()
-df_with_selections.insert(0, 'Select', False)
-edited_df = data_editor(
-        df_with_selections, hide_index=True, 
-        column_config={'Select':column_config.CheckboxColumn(required=True)},
-        disabled=df.columns,
-        #on_change=add_selection_to_widget
-        )
-selected_indices = list(where(edited_df.Select)[0])
-selected_rows = df[edited_df.Select]
-idx_unsel = df[~edited_df.Select].index.to_list()
-idx_sel = selected_rows.index.to_list()
-write(idx_sel)
-
 session_state['idx_sel'] = idx_sel
-session_state['idx_unsel'] = idx_unsel
 session_state['edited_df_zi'] = edited_df_zi
+session_state['edited_df'] = edited_df
+
+
