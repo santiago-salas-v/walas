@@ -3,10 +3,14 @@ from streamlit import write, markdown, sidebar, text_input, data_editor, column_
 from lxml import etree
 from os.path import sep
 from pandas import DataFrame, to_numeric, merge, concat
-from numpy import loadtxt, array, where
+from numpy import loadtxt, array, where, log, empty_like, ones, linspace
+from z_l_v import State
 import string
 from re import search
 from os import linesep
+
+r = 8.3145 # Pa m^3/mol
+t_ref = 298.15 # K
 
 data_path = sep.join(['data', 'BURCAT_THR.xml'])
 template_path = sep.join(['data', 'xsl_stylesheet_burcat.xsl'])
@@ -25,7 +29,11 @@ name_filter = sidebar.text_input(label='name', key='name', placeholder='name', h
 formula_filter = sidebar.text_input(label='formula', key='formula', placeholder='formula', help='type formula')
 phase_filter = sidebar.selectbox('phase',['','G','L','S','C'])
 sidebar.markdown('# composition')
-col1, col2 = sidebar.columns(2)
+col1, col2, col3, col4 = sidebar.columns(4)
+col1.text('', help='clear non-selected from composition')
+col3.text('', help='reset composition to default')
+col4.text('', help='plot')
+temp_input = col2.number_input(label='T_ref/K', key='T_ref', placeholder='1000 K', value=1000.0, min_value=0.0, max_value=6000.0, help='Reference temperature for diyplay of h_ig, s_ig, g_ig, cp_ig')
 
 def helper_func1(x):
     # helper function for csv reading
@@ -218,9 +226,9 @@ def load_data(cas_filter='', name_filter='', formula_filter='', phase_filter='')
                 'n/Pc',
                 'E',
                 'F',
-                'poling_pvpmin',
+                'poling_pv_pmin',
                 'poling_pv_tmin',
-                'poling_pvpmax',
+                'poling_pv_pmax',
                 'poling_pv_tmax'],
             'formats': [
                            int, object, object, object, int] + [float] * 12},
@@ -229,39 +237,34 @@ def load_data(cas_filter='', name_filter='', formula_filter='', phase_filter='')
 
     poling_pv_df_eq_3 = poling_pv_df[poling_pv_df['poling_pv_eq'] == 3][
         [x for x in poling_pv_df.keys() if x not in [
-            'E', 'F', 'poling_name', 'poling_formula']]
+            'E', 'F', 'poling_name', 'poling_formula', 'poling_pv_pmin', 'poling_pv_tmin']]
     ].rename(columns={
-        'A/A/Tc': 'poling_tc', 'B/B/a': 'wagn_a', 'C/C/b': 'wagn_b',
-        'Tc/c': 'wagn_c', 'to/d': 'wagn_d', 'n/Pc': 'poling_pc'})
+        'A/A/Tc': 'wagn_tc', 'B/B/a': 'wagn_a', 'C/C/b': 'wagn_b',
+        'Tc/c': 'wagn_c', 'to/d': 'wagn_d', 'n/Pc': 'wagn_pc',
+        'poling_pv_pmin':'wagn_pmin', 'poling_pv_pmax':'wagn_pmax',
+        'poling_pv_tmin':'wagn_tmin', 'poling_pv_tmax':'wagn_tmax'})
     poling_pv_df_eq_2 = poling_pv_df[poling_pv_df['poling_pv_eq'] == 2][
         [x for x in poling_pv_df.keys() if x not in [
-            'A/A/Tc', 'B/B/a', 'C/C/b', 'poling_name', 'poling_formula']]
+            'poling_name', 'poling_formula']]
     ].rename(columns={
-        'A/A/Tc': 'p_ant_a', 'B/B/a': 'p_ant_b',
-        'C/C/b': 'p_ant_c', 'Tc/c': 'poling_tc', 'to/d': 'eant_to',
-        'n/Pc': 'eant_n', 'E': 'eant_e', 'F': 'eant_f'})
+        'A/A/Tc': 'p_ant2_a', 'B/B/a': 'p_ant2_b',
+        'C/C/b': 'p_ant2_c', 'Tc/c': 'p_ant2_tc', 'to/d': 'p_ant2_to',
+        'n/Pc': 'p_ant2_n', 'E': 'p_ant2_e', 'F': 'p_ant2_f',
+        'poling_pv_pmin':'p_ant2_pmin', 'poling_pv_pmax':'p_ant2_pmax',
+        'poling_pv_tmin':'p_ant2_tmin', 'poling_pv_tmax':'p_ant2_tmax'})
     poling_pv_df_eq_1 = poling_pv_df[poling_pv_df['poling_pv_eq'] == 1][
         [x for x in poling_pv_df.keys() if x not in [
             'E', 'F', 'Tc/c', 'to/d', 'n/Pc', 'poling_name', 'poling_formula']]
     ].rename(columns={
-        'A/A/Tc': 'p_ant_a', 'B/B/a': 'p_ant_b', 'C/C/b': 'p_ant_c'})
+        'A/A/Tc': 'p_ant1_a', 'B/B/a': 'p_ant1_b', 'C/C/b': 'p_ant1_c',
+        'poling_pv_pmin':'p_ant1_pmin','poling_pv_pmax':'p_ant1_pmax',
+        'poling_pv_tmin':'p_ant1_tmin','poling_pv_tmax':'p_ant1_tmax'})
 
     poling_pv_df = merge(merge(
         poling_pv_df_eq_1, poling_pv_df_eq_2,
         how='outer', on=['poling_no', 'cas_no'], suffixes=['_1', '_2']),
           poling_pv_df_eq_3, how='outer', on=['poling_no', 'cas_no'],
         suffixes=['', '_3'])
-
-    poling_pv_df.update(
-        poling_pv_df.rename(
-            columns={'poling_tc': 'poling_tc_4',
-                     'poling_tc_3': 'poling_tc',
-                     'poling_pc': 'poling_pc_4',
-                     'poling_pc_3': 'poling_pc'}))
-    poling_pv_df.update(
-        poling_pv_df.rename(columns={
-            'poling_tc': 'poling_tc_4',
-            'poling_tc_3': 'poling_tc'}))
 
     poling_df = merge(merge(    
         poling_basic_i_df, poling_basic_ii_df,
@@ -272,29 +275,6 @@ def load_data(cas_filter='', name_filter='', formula_filter='', phase_filter='')
     poling_df = poling_df.rename(columns={'poling_no_x': 'poling_no'})
     poling_df = merge(poling_df, poling_pv_df, on=['cas_no', 'poling_no'], how='outer')
 
-    poling_df = poling_df.rename(
-        columns={'poling_pc_x': 'poling_pc', 'poling_tc_x': 'poling_tc',
-                 'poling_pv_tmin_1': 'p_ant_tmin',
-                 'poling_pv_tmax_1': 'p_ant_tmax',
-                 'poling_pvpmin_1': 'p_ant_pvpmin',
-                 'poling_pvpmax_1': 'p_ant_pvpmax',
-                 'poling_pv_tmin_2': 'eant_tmin',
-                 'poling_pv_tmax_2': 'eant_tmax',
-                 'poling_pvpmin_2': 'eant_pvpmin',
-                 'poling_pvpmax_2': 'eant_pvpmax',
-                 'poling_pv_tmin': 'wagn_tmin',
-                 'poling_pv_tmax': 'wagn_tmax',
-                 'poling_pvpmin': 'wagn_pvpmin',
-                 'poling_pvpmax': 'wagn_pvpmax'
-                 })
-    poling_df.update(poling_df.rename(
-        columns={'poling_pc': 'poling_pc_x', 'poling_pc_y': 'poling_pc'}))
-
-    del poling_df['poling_tc_y']
-    del poling_df['poling_pc_y']
-    del poling_df['poling_tc_3']
-    del poling_df['poling_pv_eq_1']
-    del poling_df['poling_pv_eq_2']
     del poling_df['poling_pv_eq']
 
     poling_burcat_df = merge(burcat_df, poling_df, on='cas_no', how='outer')
@@ -315,6 +295,73 @@ def filter_data(df, cas_filter='', name_filter='', formula_filter='', phase_filt
         df['phase'].str.contains(phase_filter, na=False, case=False)
         ]
     return df_out
+
+def update_temp(df):
+    t = temp_input
+
+    mm_i = df['poling_molwt']/1000  # kg/mol
+    tc_i = df['poling_tc']  # K
+    pc_i = df['poling_pc']*1e5  # Pa
+    omega_i = df['poling_omega']
+    vc_i = df['poling_vc']*10**-6  # m^3/mol
+    delhf0_poling = df['poling_delhf0']*1000  # J/mol
+    delgf0_poling = df['poling_delgf0']*1000  # J/mol
+    delsf0_poling = (delhf0_poling - delgf0_poling)/t_ref # J/mol/K
+    a_low = df[['a'+str(i)+'_low' for i in range(1, 7+1)]]
+    a_high = df[['a'+str(i)+'_high' for i in range(1, 7+1)]]
+
+    if t>1000: # poly a_low is for 200 - 1000 K; a_high is for 1000 - 6000 K
+        cp_r=concat([df[f'a{j+1}_high']*t**j for j in range(4+1)],axis=1).sum(axis=1)  # cp/R
+        s_cp_r_dt = concat([
+            1/(j+1)*df[f'a{j+1}_high']*t**(j+1)-1/(j+1)*df[f'a{j+1}_low']*t_ref**(j+1)
+            for j in range(4+1)], axis=1).sum(axis=1) # int(Cp/R*dT,t_refK,T)
+        s_cp_r_t_dt=df['a1_high']*log(t)+df['a7_high']+concat([
+            1/(j+1)*df[f'a{j+1+1}_high']*t**(j+1)
+            for j in range(2+1)],axis=1).sum(axis=1)  # int(Cp/(RT)*dT,0,T)
+    else:
+        cp_r = concat([df[f'a{j+1}_low']*t**j for j in range(4+1)],axis=1).sum(axis=1)  # cp/R
+        s_cp_r_dt=concat([
+            1/(j+1)*df[f'a{j+1}_low']*t**(j+1)-1/(j+1)*df[f'a{j+1}_low']*t_ref**(j+1)
+            for j in range(4+1)],axis=1).sum(axis=1) # int(Cp/R*dT,t_refK,T)
+        s_cp_r_t_dt=df['a1_low']*log(t)+df['a7_low']+concat([
+            1/(j+1)*df[f'a{j+1+1}_low']*t**(j+1)
+            for j in range(2+1)],axis=1).sum(axis=1)  # int(Cp/(RT)*dT,0,T)
+
+    cp_ig=r*cp_r  # J/mol/K
+    h_ig=delhf0_poling+r*s_cp_r_dt # J/mol
+    s_ig=r*s_cp_r_t_dt # J/mol
+    g_ig=h_ig-t*s_ig # J/mol
+
+    df['cp_ig'] = cp_ig
+    df['h_ig'] = h_ig
+    df['s_ig'] = s_ig
+    df['g_ig'] = g_ig
+
+    return df
+
+def plot(df):
+    t = linspace(60, 220, 10)
+    p = 1.01325  # bar
+    phase_fraction = empty_like(t)
+    v_l = empty_like(t)
+    v_v = empty_like(t)
+    z_i = df['z_i']
+    # normalize z_i
+    sum_z_i = sum(z_i)
+    if sum_z_i <= 0:
+        z_i = 1 / len(z_i) * ones(len(z_i))
+        z_i = z_i.tolist()
+    elif sum_z_i != 1.0:
+        z_i = z_i / sum_z_i
+        z_i = z_i.to_list()
+    else:
+        z_i = z_i.to_list()
+    mm_i = (df['poling_molwt']/1000).tolist()  # kg/mol
+    tc_i = df['poling_tc'].tolist()  # K
+    pc_i = (df['poling_pc']).tolist()  # bar
+    omega_i = df['poling_omega'].tolist()
+    vc_i = (df['poling_vc']*10**-6).tolist()  # m^3/mol
+    state = State(t[0], p, z_i, mm_i, tc_i, pc_i, omega_i, 'pr')
 
 names_units_dtypes=array([
     ['cas_no','',str],
@@ -340,29 +387,33 @@ names_units_dtypes=array([
     ['poling_v_liq','cm3/mol',float],
     ['poling_t_liq','K',float],
     ['poling_dipole','Debye',float],
-    ['p_ant_a','-',float],
-    ['p_ant_b','K',float],
-    ['p_ant_c','K',float],
-    ['p_ant_tmin','K',float],
-    ['p_ant_tmax','K',float],
-    ['p_ant_pvpmin','bar',float],
-    ['p_ant_pvpmax','bar',float],
-    ['eant_to','K',float],
-    ['eant_n','-',float],
-    ['eant_e','-',float],
-    ['eant_f','-',float],
-    ['eant_tmin','K',float],
-    ['eant_tmax','K',float],
-    ['eant_pvpmin','bar',float],
-    ['eant_pvpmax','bar',float],
+    ['p_ant1_a','-',float],
+    ['p_ant1_b','K',float],
+    ['p_ant1_c','K',float],
+    ['p_ant1_tmin','K',float],
+    ['p_ant1_tmax','K',float],
+    ['p_ant1_pmin','bar',float],
+    ['p_ant1_pmax','bar',float],
+    ['p_ant2_a','-',float],
+    ['p_ant2_b','K',float],
+    ['p_ant2_c','K',float],
+    ['p_ant2_tc','K',float],
+    ['p_ant2_to','K',float],
+    ['p_ant2_n','-',float],
+    ['p_ant2_e','-',float],
+    ['p_ant2_f','-',float],
+    ['p_ant2_tmin','K',float],
+    ['p_ant2_tmax','K',float],
+    ['p_ant2_pmin','bar',float],
+    ['p_ant2_pmax','bar',float],
     ['wagn_a','-',float],
     ['wagn_b','-',float],
     ['wagn_c','-',float],
     ['wagn_d','-',float],
-    ['wagn_tmin','K',float],
+    ['wagn_tc','K',float],
+    ['wagn_pc','bar',float],
     ['wagn_tmax','K',float],
-    ['wagn_pvpmin','bar',float],
-    ['wagn_pvpmax','bar',float],
+    ['wagn_pmax','bar',float],
     ['range_tmin_to_1000','K',float],
     ['range_1000_to_tmax','K',float],
     ['molecular_weight','g/mol',float],
@@ -423,7 +474,7 @@ elems=[
         ['G','7446-11-9','','SO3'],
         ['G','7446-09-5','','SO2']
 ]
-elems = [[x[j] for j in [1,2,3,0]] for x in elems]
+elems = [[x[j] for j in [1,2,3,0]] for x in elems if 'sulfuric acid' not in x]
 
 df = load_data()[names_units_dtypes[:,0]]
 df['combined_formula'] = df['formula_name_structure'].fillna('').astype(str)+df['formula'].fillna('').astype(str)+df['poling_formula'].fillna('').astype(str)+df['ant_formula'].fillna('').astype(str)
@@ -434,7 +485,7 @@ if not 'Select' in df_filtered.keys():
     df_filtered.loc[:, 'Select']=False
     df_filtered=df_filtered[['Select']+[x for x in df_filtered.keys() if not x in ['Select', 'combined_name', 'combined_formula']]]
 
-if not 'idx_sel' in session_state or col2.button('default'):
+if col3.button('default') or not 'idx_sel' in session_state: 
     idx_sel = [int(filter_data(df,*x).iloc[0].name) for x in elems]
     session_state['idx_sel'] = idx_sel
 
@@ -463,7 +514,9 @@ if 'edited_df' in session_state:
         idx_sel = list(set(selected_rows.index.to_list()+session_state['idx_sel']))
         idx_sel = [x for x in idx_sel if not x in idx_deselected] # remove newly unselected
 
+
 df_zi = df.loc[idx_sel].copy()
+df_zi = df_zi[[x for x in df_zi.keys() if not x in ['combined_formula', 'combined_name']]]
 for j in range(len(ed_cols[0])):
     col = ed_cols[0][j]
     if not col in df_zi.columns and col != 'z_i':
@@ -472,6 +525,7 @@ df_zi = df_zi[['formula_name_structure']+[x for x in ed_cols[0] if x != 'z_i']+[
 
 df_zi_with_selections = df_zi.copy()
 df_zi_with_selections.insert(0, 'z_i',0.0)
+df_zi_with_selections = update_temp(df_zi_with_selections)
 edited_df_zi = sidebar.data_editor(
         df_zi_with_selections, hide_index=True,
         column_config={'z_i':column_config.NumberColumn(required=True,min_value=0,max_value=1)},
@@ -481,6 +535,9 @@ edited_df_zi = sidebar.data_editor(
 session_state['idx_sel'] = idx_sel
 session_state['edited_df_zi'] = edited_df_zi
 session_state['edited_df'] = edited_df
+session_state['temp_input'] = temp_input
 
-write('idx_sel', idx_sel)
+#write('idx_sel', idx_sel)
 
+if True or col4.button('⟳'):
+    plot(edited_df_zi)
