@@ -308,11 +308,15 @@ def load_data(cas_filter='', name_filter='', formula_filter='', phase_filter='')
 @streamlit.cache_data
 def filter_data(df, cas_filter='', name_filter='', formula_filter='', phase_filter=''):
     df_out = df.copy()
-    df_out = df[df['cas_no'].str.contains(cas_filter, na=False, case=False) &
-            df['formula'].str.contains(formula_filter, na=False, case=False) &
-            df['formula_name_structure'].str.contains(name_filter, na=False, case=False) &
-            df['phase'].str.contains(phase_filter, na=False, case=False)
-            ]
+    df_out = df[df['cas_no'].str.contains(cas_filter, na=False, case=False) & (
+        df['formula'].str.contains(formula_filter, na=False, case=False) |
+        df['poling_formula'].str.contains(formula_filter, na=False, case=False) |
+        df['ant_formula'].str.contains(formula_filter, na=False, case=False)  ) & (
+            df['formula_name_structure'].str.contains(name_filter, na=False, case=False) | 
+            df['ant_name'].str.contains(name_filter, na=False, case=False) | 
+            df['poling_name'].str.contains(name_filter, na=False, case=False) ) &
+        df['phase'].str.contains(phase_filter, na=False, case=False)
+        ]
     return df_out
 
 names_units_dtypes=array([
@@ -396,11 +400,41 @@ names_units_dtypes=array([
 ed_cols=[['z_i','h_ig','s_ig','g_ig','cp_ig'],
         ['-','J/mol','J/mol/K','J/mol','J/mol/K']]
 
+elems=[
+        ['G','1333-74-0','hydrogen','H2'],
+        ['G','74-82-8','methane','CH4'],
+        ['G','124-38-9','carbon dioxide','CO2'],
+        ['G','630-08-0','carbon monoxide','CO'],
+        ['G','7732-18-5','water','H2O'],
+        ['G','7727-37-9','nitrogen','N2'],
+        ['G','7782-44-7','oxygen','O2'],
+        ['G','7440-37-1','argon','Ar'],
+        ['G','7440-59-7','helium','He'],
+        ['G','71-43-2','benzene','C6H6'],
+        ['G','110-82-7','cyclohexane','C6H12'],
+        ['G','110-54-3','n-hexane','C6H14'],
+        ['G','67-56-1','methanol','CH3OH'],
+        ['G','107-31-3','methyl formate','C2H4O2'],
+        ['G','64-18-6','formic acid','CH2O2'],
+        ['G','107-31-3','methyl formate','C2H4O2'],
+        ['G','74-84-0','ethane','c2h6'],
+        ['G','74-85-1','ethene','c2h4'],
+        ['G','74-98-6','propane','c3h8'],
+        ['G','115-07-1','propene','c3h6'],
+        ['G','7783-06-4','','h2s'],
+        ['G','7664-93-9','sulfuric acid','h2so4'],
+        ['G','7446-11-9','','SO3'],
+        ['G','7446-09-5','','SO2']
+]
+elems = [[x[j] for j in [1,2,3,0]] for x in elems]
+
 df = load_data()[names_units_dtypes[:,0]]
 df_filtered = filter_data(df, cas_filter=cas_filter, name_filter=name_filter, formula_filter=formula_filter, phase_filter=phase_filter)
 if not 'Select' in df_filtered.keys():
-    df_filtered['Select']=False
+    df_filtered.loc[:, 'Select']=False
     df_filtered=df_filtered[['Select']+[x for x in df_filtered.keys() if x != 'Select']]
+
+idx_sel = [int(filter_data(df,*x).iloc[0].name) for x in elems]
 
 df_with_selections = df_filtered.copy()
 edited_df = data_editor(
@@ -426,8 +460,6 @@ if 'edited_df' in session_state:
         #write('idx_deselected',idx_deselected)
         idx_sel = list(set(selected_rows.index.to_list()+session_state['idx_sel']))
         idx_sel = [x for x in idx_sel if not x in idx_deselected] # remove newly unselected
-else:
-    idx_sel = selected_rows.index.to_list()
 
 df_zi = df.loc[idx_sel].copy()
 for j in range(len(ed_cols[0])):
@@ -448,4 +480,5 @@ session_state['idx_sel'] = idx_sel
 session_state['edited_df_zi'] = edited_df_zi
 session_state['edited_df'] = edited_df
 
+write('idx_sel', idx_sel)
 
