@@ -25,6 +25,7 @@ name_filter = sidebar.text_input(label='name', key='name', placeholder='name', h
 formula_filter = sidebar.text_input(label='formula', key='formula', placeholder='formula', help='type formula')
 phase_filter = sidebar.selectbox('phase',['','G','L','S','C'])
 sidebar.markdown('# composition')
+col1, col2 = sidebar.columns(2)
 
 def helper_func1(x):
     # helper function for csv reading
@@ -308,13 +309,9 @@ def load_data(cas_filter='', name_filter='', formula_filter='', phase_filter='')
 @streamlit.cache_data
 def filter_data(df, cas_filter='', name_filter='', formula_filter='', phase_filter=''):
     df_out = df.copy()
-    df_out = df[df['cas_no'].str.contains(cas_filter, na=False, case=False) & (
-        df['formula'].str.contains(formula_filter, na=False, case=False) |
-        df['poling_formula'].str.contains(formula_filter, na=False, case=False) |
-        df['ant_formula'].str.contains(formula_filter, na=False, case=False)  ) & (
-            df['formula_name_structure'].str.contains(name_filter, na=False, case=False) | 
-            df['ant_name'].str.contains(name_filter, na=False, case=False) | 
-            df['poling_name'].str.contains(name_filter, na=False, case=False) ) &
+    df_out = df[df['cas_no'].str.contains(cas_filter, na=False, case=False) & 
+        df['combined_formula'].str.contains(formula_filter, na=False, case=False) & 
+        df['combined_name'].str.contains(name_filter, na=False, case=False) &
         df['phase'].str.contains(phase_filter, na=False, case=False)
         ]
     return df_out
@@ -429,12 +426,17 @@ elems=[
 elems = [[x[j] for j in [1,2,3,0]] for x in elems]
 
 df = load_data()[names_units_dtypes[:,0]]
+df['combined_formula'] = df['formula_name_structure'].fillna('').astype(str)+df['formula'].fillna('').astype(str)+df['poling_formula'].fillna('').astype(str)+df['ant_formula'].fillna('').astype(str)
+df['combined_name'] = df['formula_name_structure'].fillna('').astype(str)+df['ant_name'].fillna('').astype(str)+df['poling_name'].fillna('').astype(str)
+
 df_filtered = filter_data(df, cas_filter=cas_filter, name_filter=name_filter, formula_filter=formula_filter, phase_filter=phase_filter)
 if not 'Select' in df_filtered.keys():
     df_filtered.loc[:, 'Select']=False
-    df_filtered=df_filtered[['Select']+[x for x in df_filtered.keys() if x != 'Select']]
+    df_filtered=df_filtered[['Select']+[x for x in df_filtered.keys() if not x in ['Select', 'combined_name', 'combined_formula']]]
 
-idx_sel = [int(filter_data(df,*x).iloc[0].name) for x in elems]
+if not 'idx_sel' in session_state or col2.button('default'):
+    idx_sel = [int(filter_data(df,*x).iloc[0].name) for x in elems]
+    session_state['idx_sel'] = idx_sel
 
 df_with_selections = df_filtered.copy()
 edited_df = data_editor(
@@ -446,7 +448,7 @@ edited_df = data_editor(
 selected_indices = edited_df.where(edited_df.Select).index.to_list() #list(where(edited_df.Select)[0])
 selected_rows = df_filtered[edited_df.Select]
 
-if sidebar.button('clear'):
+if col1.button('clear'):
     idx_sel = []
     session_state['idx_sel'] = []
 
