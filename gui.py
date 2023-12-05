@@ -284,7 +284,7 @@ def load_data(cas_filter='', name_filter='', formula_filter='', phase_filter='')
     for j in range(4):
         poling_burcat_ant_df[f'poling_a{j+1}'] = poling_burcat_ant_df[f'poling_a{j+1}']*[1e-3,1e-5,1e-8,1e-11][j]
 
-    df = poling_burcat_ant_df.copy()
+    df = poling_burcat_ant_df
     # estimate acentric factor where missing. Def. w=-log10(prsat)-1, at Tr=0.7
     tr = 0.7
     tau = 1-tr
@@ -321,16 +321,24 @@ def load_data(cas_filter='', name_filter='', formula_filter='', phase_filter='')
 
     # test: (df['yaws_omega'][~df['ant_a'].isna() & ~df['poling_omega'].isna()]-df.loc[~df['ant_a'].isna() & ~df['poling_omega'].isna(),'poling_omega'])/df['yaws_omega'][~df['ant_a'].isna() & ~df['poling_omega'].isna()]*100
 
-    return poling_burcat_ant_df
+    # priority for omega: Poling db, calc. Wagner, calc. Ant.2, calc. Ant.1, calc. Yaws
+    df.loc[~df['poling_omega'].isna(), 'omega'] = df.loc[~df['poling_omega'].isna(), 'poling_omega']
+    df.loc[df['poling_omega'].isna() & ~df['wagn_omega'].isna(),'omega'] = df.loc[df['poling_omega'].isna() & ~df['wagn_omega'].isna(), 'wagn_omega']
+    df.loc[df['poling_omega'].isna() & df['wagn_omega'].isna() & ~df['p_ant2_omega'].isna(), 'omega'] = df.loc[df['poling_omega'].isna() & df['wagn_omega'].isna() & ~df['p_ant2_omega'].isna(), 'p_ant2_omega']
+    df.loc[df['poling_omega'].isna() & df['wagn_omega'].isna() & df['p_ant2_omega'].isna() & ~df['p_ant1_omega'].isna(), 'omega'] = df.loc[
+        df['poling_omega'].isna() & df['wagn_omega'].isna() & df['p_ant2_omega'].isna() & ~df['p_ant1_omega'].isna(), 'p_ant1_omega']
+    df.loc[df['poling_omega'].isna() & df['wagn_omega'].isna() & df['p_ant2_omega'].isna() & df['p_ant1_omega'].isna() & ~df['yaws_omega'].isna(), 'omega'] = df.loc[
+        df['poling_omega'].isna() & df['wagn_omega'].isna() & df['p_ant2_omega'].isna() & df['p_ant1_omega'].isna() & ~df['yaws_omega'].isna(), 'yaws_omega']
+
+    return df
 
 @streamlit.cache_data
 def filter_data(df, cas_filter='', name_filter='', formula_filter='', phase_filter=''):
-    df_out = df.copy()
     df_out = df[df['cas_no'].str.contains(cas_filter, na=False, case=False) & 
         df['combined_formula'].str.contains(formula_filter, na=False, case=False) & 
         df['combined_name'].str.contains(name_filter, na=False, case=False) &
         df['phase'].str.contains(phase_filter, na=False, case=False)
-        ]
+        ].copy() # .copy() ensures that SettingWithCopyWarning is not thrown when/if new column Select is added
     return df_out
 
 def update_temp(df):
@@ -339,7 +347,7 @@ def update_temp(df):
     mm_i = df['poling_molwt']/1000  # kg/mol
     tc_i = df['poling_tc']  # K
     pc_i = df['poling_pc']*1e5  # Pa
-    omega_i = df['poling_omega']
+    omega_i = df['omega']
     vc_i = df['poling_vc']*10**-6  # m^3/mol
     delhf0_poling = df['poling_delhf0']*1000  # J/mol
     delgf0_poling = df['poling_delgf0']*1000  # J/mol
@@ -396,9 +404,9 @@ def plot(df):
     mm_i = (df['poling_molwt']/1000).tolist()  # kg/mol
     tc_i = df['poling_tc'].tolist()  # K
     pc_i = (df['poling_pc']).tolist()  # bar
-    omega_i = df['poling_omega'].tolist()
+    omega_i = df['omega'].tolist()
     vc_i = (df['poling_vc']*10**-6).tolist()  # m^3/mol
-    state = State(t[0], p, z_i, mm_i, tc_i, pc_i, omega_i, 'pr')
+    #state = State(t[0], p, z_i, mm_i, tc_i, pc_i, omega_i, 'pr')
 
 names_units_dtypes=array([
     ['cas_no','',str],
@@ -479,7 +487,12 @@ names_units_dtypes=array([
     ['ant_c','',float],
     ['ant_tmin','',float],
     ['ant_tmax','°C',float],
-    ['ant_code','°C',str]
+    ['ant_code','°C',str],
+    ['wagn_omega','-',float],
+    ['p_ant1_omega','-',float],
+    ['p_ant2_omega','-',float],
+    ['yaws_omega','-',float],
+    ['omega','-',float]
 ])
 
 ed_cols=[['z_i','h_ig','s_ig','g_ig','cp_ig'],
@@ -518,9 +531,9 @@ df['combined_formula'] = df['formula_name_structure'].fillna('').astype(str)+df[
 df['combined_name'] = df['formula_name_structure'].fillna('').astype(str)+df['ant_name'].fillna('').astype(str)+df['poling_name'].fillna('').astype(str)
 
 df_filtered = filter_data(df, cas_filter=cas_filter, name_filter=name_filter, formula_filter=formula_filter, phase_filter=phase_filter)
-if not 'Select' in df_filtered.keys():
-    df_filtered.loc[:, 'Select']=False
-    df_filtered=df_filtered[['Select']+[x for x in df_filtered.keys() if not x in ['Select', 'combined_name', 'combined_formula']]]
+if 'Select' not in df_filtered.keys():
+    df_filtered['Select'] = False
+df_filtered = df_filtered[['Select']+[x for x in df_filtered.keys() if not x in ['Select', 'combined_name', 'combined_formula']]]
 
 if col3.button('default') or not 'idx_sel' in session_state: 
     idx_sel = [int(filter_data(df,*x).iloc[0].name) for x in elems]
@@ -551,7 +564,6 @@ if 'edited_df' in session_state:
         idx_sel = list(set(selected_rows.index.to_list()+session_state['idx_sel']))
         idx_sel = [x for x in idx_sel if not x in idx_deselected] # remove newly unselected
 
-
 df_zi = df.loc[idx_sel].copy()
 df_zi = df_zi[[x for x in df_zi.keys() if not x in ['combined_formula', 'combined_name']]]
 for j in range(len(ed_cols[0])):
@@ -567,7 +579,7 @@ edited_df_zi = sidebar.data_editor(
         df_zi_with_selections, hide_index=True,
         column_config={'z_i':column_config.NumberColumn(required=True,min_value=0,max_value=1)},
         disabled=df_zi.columns,
-        );
+        )
 
 session_state['idx_sel'] = idx_sel
 session_state['edited_df_zi'] = edited_df_zi
