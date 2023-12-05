@@ -3,7 +3,7 @@ from streamlit import write, markdown, sidebar, text_input, data_editor, column_
 from lxml import etree
 from os.path import sep
 from pandas import DataFrame, to_numeric, merge, concat
-from numpy import loadtxt, array, where, log, empty_like, ones, linspace
+from numpy import loadtxt, array, where, log, empty_like, ones, linspace, exp, log10
 from z_l_v import State
 import string
 from re import search
@@ -283,6 +283,43 @@ def load_data(cas_filter='', name_filter='', formula_filter='', phase_filter='')
 
     for j in range(4):
         poling_burcat_ant_df[f'poling_a{j+1}'] = poling_burcat_ant_df[f'poling_a{j+1}']*[1e-3,1e-5,1e-8,1e-11][j]
+
+    df = poling_burcat_ant_df.copy()
+    # estimate acentric factor where missing. Def. w=-log10(prsat)-1, at Tr=0.7
+    tr = 0.7
+    tau = 1-tr
+    prsat_tr_0_7 = exp(
+        1/tr*(df['wagn_a']*tau+df['wagn_b']*tau**1.5+df['wagn_c']*tau**2.5+df['wagn_d']*tau**5)
+    )  # Wagner: ln(Pvp)=ln(Pc)+(Tc/T)*(a*tau+b*tau^1.5+c*tau^2.5+d*tau^5); tau=(1-T/Tc); (For H2O, last two terms are c*tau^3+d*tau^6)
+    water_idx = df[df['poling_name'].fillna('').str.contains('water',case=False)].index
+    prsat_tr_0_7[water_idx] = exp(
+        1/tr*(df['wagn_a']*tau+df['wagn_b']*tau**1.5+df['wagn_c']*tau**3+df['wagn_d']*tau**6)[water_idx]
+    )  # Wagner: ln(Pvp)=ln(Pc)+(Tc/T)*(a*tau+b*tau^1.5+c*tau^2.5+d*tau^5); tau=(1-T/Tc); (For H2O, last two terms are c*tau^3+d*tau^6)
+    df['wagn_omega'] = -log10(prsat_tr_0_7)-1
+
+    # test: w=df['wagn_omega']; (w[~df['wagn_a'].isna() & ~df['poling_omega'].isna()]-df.loc[~df['wagn_a'].isna() & ~df['poling_omega'].isna(),'poling_omega'])/w[~df['wagn_a'].isna() & ~df['poling_omega'].isna()]*100
+
+    prsat_tr_0_7=10**(
+            df['p_ant1_a']-df['p_ant1_b']/(tr*df['poling_tc']+df['p_ant1_c']-273.15)
+    )/df['poling_pc']  # extended Antoine: log10(Pvp)=A-B/(T+C-273.15)+0.43429*x^n+E*x^8+F*x^12; x=(T-to-273.15)/Tc
+    df['p_ant1_omega']=-log10(prsat_tr_0_7)-1
+
+    # test: (df['p_ant1_omega'][~df['p_ant1_a'].isna()]-df.loc[~df['p_ant1_a'].isna(),'poling_omega'])/df['p_ant1_omega'][~df['p_ant1_a'].isna()]*100
+
+    x = tr-df['p_ant2_to']/df['p_ant2_tc']-273.15/df['p_ant2_tc']
+    prsat_tr_0_7 = 10**(
+        df['p_ant2_a']-df['p_ant2_b']/(tr*df['p_ant2_tc']+df['p_ant2_c']-273.15)+0.43429*x**df['p_ant2_n']+df['p_ant2_e']*x**8+df['p_ant2_f']*x**12
+    )/df['poling_pc'] # extended Antoine: log10(Pvp)=A-B/(T+C-273.15)+0.43429*x^n+E*x^8+F*x^12; x=(T-to-273.15)/Tc
+    df['p_ant2_omega']=-log10(prsat_tr_0_7)-1
+
+    # test: (df['p_ant2_omega'][~df['p_ant2_a'].isna()]-df.loc[~df['p_ant2_a'].isna(),'poling_omega'])/df['p_ant2_omega'][~df['p_ant2_a'].isna()]*100
+
+    prsat_tr_0_7=10**(
+            df['ant_a']-df['ant_b']/(tr*df['poling_tc']+df['ant_c']-273.15)
+    )*1.01325/760/df['poling_pc']  # extended Antoine: log10(Pvp)=A-B/(T+C-273.15)+0.43429*x^n+E*x^8+F*x^12; x=(T-to-273.15)/Tc
+    df['yaws_omega']=-log10(prsat_tr_0_7)-1
+
+    # test: (df['yaws_omega'][~df['ant_a'].isna() & ~df['poling_omega'].isna()]-df.loc[~df['ant_a'].isna() & ~df['poling_omega'].isna(),'poling_omega'])/df['yaws_omega'][~df['ant_a'].isna() & ~df['poling_omega'].isna()]*100
 
     return poling_burcat_ant_df
 
