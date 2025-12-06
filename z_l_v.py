@@ -380,6 +380,8 @@ def p_i_sat_ceos(t, p, tc_i, pc_i, af_omega_i,
                 inv_slope = -(p1_it - p0_it) / (disc_1 - disc_0)
                 p1_it = p0_it * (1 + sign(-inv_slope) * 0.001)
             phi_sat_ceos(t, 3e-8, tc, pc, af_omega, alpha_tr, epsilon, sigma, psi, omega)['zero_fun']
+            from scipy.optimize import fsolve
+            S1 = fsolve(lambda pvar:phi_sat_ceos(t, pvar, tc, pc, af_omega, alpha_tr, epsilon, sigma, psi, omega)['zero_fun'],x0=p0_it)
             soln_temp = secant_ls_3p(
                 lambda p_var: phi_sat_ceos(
                     t, p_var, tc, pc, af_omega,
@@ -553,7 +555,7 @@ def phi_sat_ceos(t, p, tc_i, pc_i, af_omega_i,
     a3 = -(epsilon * sigma * beta ** 2 * (1 + beta) +
            q * beta ** 2)
 
-    soln = solve_cubic([1, a1, a2, a3])
+    soln = solve_cubic(array([asarray(x).flatten() for x in [1, a1, a2, a3]]).flatten())
     success = soln['disc'] <= 0
     z_l = soln['roots'][-1][0]
     z_v = soln['roots'][0][0]

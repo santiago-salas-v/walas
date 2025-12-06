@@ -63,7 +63,7 @@ def solve_cubic(abcd):
             re_y3 = -1 / 2 * (au + bv)
             im_y1, im_y2, im_y3 = 0, 0, 0
     # sort the roots by real (descending), then imaginary part (0 first)
-    y_real_parts = array([re_y1, re_y2, re_y3])
+    y_real_parts = array([re_y1, re_y2, re_y3]).flatten()
     y_imag_parts = array([im_y1, im_y2, im_y3])
     positions = lexsort([-y_real_parts, y_imag_parts, abs(y_imag_parts)])
     # roots of the complete equation through substitution xk=yk-b/(3a)

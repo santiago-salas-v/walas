@@ -406,7 +406,7 @@ def plot(df):
     pc_i = (df['poling_pc']).tolist()  # bar
     omega_i = df['omega'].tolist()
     vc_i = (df['poling_vc']*10**-6).tolist()  # m^3/mol
-    #state = State(t[0], p, z_i, mm_i, tc_i, pc_i, omega_i, 'pr')
+    state = State(t[0], p, z_i, mm_i, tc_i, pc_i, omega_i, 'pr')
 
 names_units_dtypes=array([
     ['cas_no','',str],
