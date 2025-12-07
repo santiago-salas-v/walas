@@ -1,11 +1,13 @@
 from html.parser import HTMLParser
 from urllib.request import urlretrieve, urlopen
-from subprocess import check_call
+from subprocess import check_call, CalledProcessError
 from lxml import etree as et
 import string
 from pandas import DataFrame
 from os.path import sep
 from os import chdir, getcwd
+from pathlib import Path
+#import ipdb
 
 # 1. burcat tc
 # ref. https://gist.github.com/santiago-salas-v/6f408779c65a0267372c0ed66ff21fe4
@@ -17,23 +19,37 @@ template = 'xsl_stylesheet_burcat.xsl'
 thermodyn2xml = 'Thermodyn2XML_vanilla_7_11_05.py'
 burcat_thr = 'BURCAT.THR'
 
-url = 'http://garfield.chem.elte.hu/Burcat/BURCAT.THR'
-patch = 'patch_BURCAT_THR.diff'
+if not Path(burcat_thr).exists():
+    url = 'https://respecth.elte.hu/burcat/BURCAT.THR.txt'
+    patch = 'patch_BURCAT_THR.diff'
 
-path, headers = urlretrieve(url, burcat_thr)
-print(check_call(['git', 'apply', patch]))
+    path, headers = urlretrieve(url, burcat_thr)
+    print(f'file produced successfully: {burcat_thr}')
+    try:
+        print(check_call(['patch', '-p1', burcat_thr, patch])) # newer version with fixes already available
+        print(f'patch applied successfully: {burcat_thr}.')
+    except CalledProcessError as e:
+        print(f'called process error: {burcat_thr}')
+else:
+    print(f'file already exists: {burcat_thr}')
 
-url = 'http://garfield.chem.elte.hu/Burcat/dist/Thermodyn2XML_vanilla_7_11_05.py'
-patch = 'patch_Thermodyn2XML_vanilla_7_11_05_py.diff'
+if not Path(outfile).exists():
+    url = 'https://gist.githubusercontent.com/santiago-salas-v/6f408779c65a0267372c0ed66ff21fe4/raw/38f1621ea9dc03e265468f4d3ab5e8f5ce2515d4/Thermodyn2XML_vanilla_7_11_05.py' # original py script was removed (only exe remaining) from the original path in https://respecth.elte.hu/burcat/dist.zip
+    patch = 'patch_Thermodyn2XML_vanilla_7_11_05_py.diff'
 
-path, headers = urlretrieve(url, thermodyn2xml)
-print(check_call(['git', 'apply', patch]))
+    path, headers = urlretrieve(url, thermodyn2xml)
+    #ipdb.set_trace()
+    try:
+        print(check_call(['patch', '-p1', thermodyn2xml,  patch]))
+        print('patch applied successfully.')
+    except CalledProcessError as e:
+        print(f'called process error: {thermodyn2xml}')
 
-print('both patches applied successfully.')
+    check_call(['python', thermodyn2xml, burcat_thr])
 
-check_call(['python', thermodyn2xml, burcat_thr])
-
-print(f'file produced successfully: {outfile}')
+    print(f'file produced successfully: {outfile}')
+else:
+    print(f'file already exists: {outfile}')
 
 print(et.parse(outfile))
 

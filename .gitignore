@@ -9,6 +9,7 @@
 *~$.*
 *~
 *.prof
+*.swp
 .idea/
 borrar/
 bu/
@@ -28,4 +29,5 @@ docs/*
 */BURCAT.THR
 */Thermodyn2XML_vanilla_7_11_05.py
 data/*.csv
+data/*.bak
 utils/icon_batch_32X32.png
