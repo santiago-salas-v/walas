@@ -1,7 +1,7 @@
-diff --git a/data/Thermodyn2XML_vanilla_7_11_05.py b/data/Thermodyn2XML_vanilla_7_11_05.py
-index 116033a..81d4c9a 100644
---- a/data/Thermodyn2XML_vanilla_7_11_05.py
-+++ b/data/Thermodyn2XML_vanilla_7_11_05.py
+diff --git a/Thermodyn2XML_vanilla_7_11_05.py b/Thermodyn2XML_vanilla_7_11_05.py
+index 116033a..243ba47 100644
+--- a/Thermodyn2XML_vanilla_7_11_05.py
++++ b/Thermodyn2XML_vanilla_7_11_05.py
 @@ -61,9 +61,9 @@ pattern_C0='(?P<c0>(?<=C0=)(?:\d+.\d+|.\d+))'
  pattern_A0_B0='(?P<a0_b0>(?<=A0=B0=)(?:\d+.\d+|.\d+))'
  pattern_Ir='(?P<ir>(?<=IR=)(?:\+|\-|\~|)\d+.\d+|(?<=IR=).\d+|(?<=IR)(?:\([A-Z0-9\-\*]*\)=)*(?:\+|\-|\~|)\d+.\d+|(?<=IR = )(?:\+|\-|\~|)\d+.\d+|(?<=IR = )(?:\+|\-|\~|).\d+|(?<=IR)(?:\([A-Z0-9\-\*]*\)\s+=)*(?:\+|\-|\~|)\s+\d+.\d+)'
@@ -46,19 +46,21 @@ index 116033a..81d4c9a 100644
 +'(?P<date>(?:/)?(?:\d\d|\d)?(?:/?)(?:\d\d|A)?)' + \
  '\s*' + \
 -'(?:((?:\s*|\*+|\s*\*+)WARNING(?:!|\*+)\s*0?\.?)|' + \
-+'(?:((?:\s*|\*+|\s*\*+)WARNING(?:(?:\s*.)?!|\*+)\s*0?\.?)|' + \
- '(?P<elem1>[A-Z]{1,2})\s*(?P<num_atoms1>-?\d+)(?:\.|\s)?(?:\s|\d+)?' + \
- '(?P<elem2>[A-Z]{0,2})\s*(?P<num_atoms2>-?\d+)(?:\.|\s)?(?:\s|\d+)?' + \
+-'(?P<elem1>[A-Z]{1,2})\s*(?P<num_atoms1>-?\d+)(?:\.|\s)?(?:\s|\d+)?' + \
+-'(?P<elem2>[A-Z]{0,2})\s*(?P<num_atoms2>-?\d+)(?:\.|\s)?(?:\s|\d+)?' + \
 -'(?P<elem3>[A-Z]{0,2})\s*(?P<num_atoms3>-?\d+)(?:\.|\s)?(?:\s|\d+)?' + \
 -'(?P<elem4>[A-Z]{0,2})\s*(?P<num_atoms4>-?\d+)(?:\.|\s)?(?:\s|\d+)?' + \
-+'(?P<elem3>[A-Z]{0,2})\s*(?P<num_atoms3>-?\d*)(?:\.|\s)?(?:\s|\d+)?' + \
-+'(?P<elem4>[A-Z]{0,2})\s*(?P<num_atoms4>-?\d*)(?:\.|\s)?(?:\s|\d+)?' + \
++'(?:((?:\s*|\*+|\s*\*+)WARNING\s*\.?\s*!?\s*(?:(?:5 (?:elements|species))|\*+|see Therm\.dat|Missing E)?\s*0?\.?)|' + \
++'(?P<elem1>[a-zA-Z]{1,2})\s*(?P<num_atoms1>-?\d+)(?:\.|\s)?(?:\s|\d+)?' + \
++'(?P<elem2>[a-zA-Z]{0,2})\s*(?P<num_atoms2>-?\d+)(?:\.|\s)?(?:\s|\d+)?' + \
++'(?P<elem3>[a-zA-Z]{0,2})\s*(?P<num_atoms3>-?\d*)(?:\.|\s)?(?:\s|\d+)?' + \
++'(?P<elem4>[a-zA-Z]{0,2})\s*(?P<num_atoms4>-?\d*)(?:\.|\s)?(?:\s|\d+)?' + \
  ')' + \
  '(?P<phase>G|L|S|C)\s*' + \
  '(?P<t_low>\d*\.\d*)\s*' + \
  '(?P<t_high>\d*\.\d*)\s*' + \
 -'(?P<calc_quality>A|B|C|D|E|F)?\s*' + \
-+'(?P<calc_quality>A|B|b|BQr|C|D|E|F|\?)?\s*' + \
++'(?P<calc_quality>A|B|b|BQr|Bx|C|D|E|F|\?)?\s*' + \
  '(?P<molecular_weight>\d*\.\d*)\s*'
  # (?P<formula>.{17}.?.?)(?P<source>TT?|RUS|IU|P|G|J|B|L|CODA|R|S|HF|D|A|E|F)\s*(?P<date>(?:/)?(?:\d\d|\d)?(?:/?)(?:\d\d))\s*(?:(\s*WARNING!\s*0?\.?)|(?P<elem1>[A-Z]{1,2})\s*(?P<num_atoms1>-?\d+)\.?(?P<elem2>[A-Z]{0,2})\s*(?P<num_atoms2>-?\d+)\.?(?P<elem3>[A-Z]{0,2})\s*(?P<num_atoms3>-?\d+)\.?(?P<elem4>[A-Z]{0,2})\s*(?P<num_atoms4>-?\d+)\.?)(?P<phase>G|L|S|C)\s*(?P<t_low>\d*\.\d*)\s*(?P<t_high>\d*\.\d*)\s*(?P<calc_quality>A|B|C|D|E|F)?\s*(?P<molecular_weight>\d*\.\d*)\s*
  ###########################################################################################################
