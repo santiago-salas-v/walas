@@ -8,15 +8,16 @@ import string
 import sys
 from functools import partial
 from os.path import exists
+import ipdb
 
 import lxml.etree as et
 import matplotlib
-from PySide2.QtCore import QAbstractTableModel, QModelIndex, Qt, QEvent
-from PySide2.QtGui import QKeySequence, QFont, QIcon, QDoubleValidator
-from PySide2.QtWidgets import QComboBox, QLabel, QTableWidget, QTableWidgetItem
-from PySide2.QtWidgets import QDesktopWidget, QGridLayout, QLineEdit, QPushButton
-from PySide2.QtWidgets import QSizePolicy
-from PySide2.QtWidgets import QTableView, QApplication, QWidget
+from PySide6.QtCore import QAbstractTableModel, QModelIndex, Qt, QEvent
+from PySide6.QtGui import QKeySequence, QFont, QIcon, QDoubleValidator, QGuiApplication
+from PySide6.QtWidgets import QComboBox, QLabel, QTableWidget, QTableWidgetItem
+from PySide6.QtWidgets import QGridLayout, QLineEdit, QPushButton
+from PySide6.QtWidgets import QSizePolicy
+from PySide6.QtWidgets import QTableView, QApplication, QWidget
 from numpy import loadtxt, isnan, empty_like, linspace, zeros, ones, dtype, log
 from pandas import DataFrame, merge, to_numeric, read_csv
 
@@ -42,8 +43,8 @@ class App(QWidget):
         super().__init__()
         self.title = 'Thermodynamic data'
 
-        qd = QDesktopWidget()
-        screen = qd.screenGeometry(qd)
+        qd = QGuiApplication.primaryScreen()
+        screen = qd.geometry()
         width = 600
         height = 300
 
@@ -58,7 +59,7 @@ class App(QWidget):
         self.initUI()
 
     def initUI(self):
-        self.setWindowTitle(self.title)
+        self.setWindowTitle('Thermodynamic data')
         self.setGeometry(self.left, self.top, self.width, self.height)
 
         self.tableView1 = QTableView()
@@ -404,30 +405,30 @@ def helper_func1(x):
     # helper function for csv reading
     # replace dot in original file for minus in some cases ocr'd like .17.896
     str_with_dot_actually_minus = x
-    matches = re.search(b'(\.(\d+\.\d+))', x)
+    matches = re.search('(\.(\d+\.\d+))', x)
     if matches:
-        str_with_dot_actually_minus = b'-' + matches.groups()[1]
-    return str_with_dot_actually_minus.replace(b' ', b'')
+        str_with_dot_actually_minus = '-' + matches.groups()[1]
+    return str_with_dot_actually_minus.replace(' ', '')
 
 
 def helper_func2(x):
     # helper function 2 for csv reading.
     # Return None when empty string
     if len(x) == 0 or x == linesep_b:
-        return b'nan'
-    return x.replace(b' ', b'')
+        return 'nan'
+    return x.replace(' ', '')
 
 
 def helper_func3(x):
     # helper function 3 for csv reading.
     # replace - for . in cas numbers (Antoine coeff)
-    return x.replace(b'.', b'-').decode('utf-8')
+    return x.replace('.', '-')
 
 
 def helper_func4(x):
     # helper function 4 for csv reading.
     # replace whitespace ' ' for '' in float numbers
-    return x.replace(b' ', b'')
+    return x.replace(' ', '')
 
 
 class thTableModel(QAbstractTableModel):
@@ -643,7 +644,7 @@ class thTableModel(QAbstractTableModel):
                 )
 
         ant_df = DataFrame(loadtxt(
-            open(antoine_csv, 'rb'),
+            open(antoine_csv, 'r'),
             delimiter='|',
             skiprows=9,
             dtype={
@@ -729,12 +730,12 @@ class thTableModel(QAbstractTableModel):
             }
         ))
 
-        conv = dict([[i, lambda x: helper_func4(helper_func2(x)).decode('utf-8')]
+        conv = dict([[i, lambda x: helper_func4(helper_func2(x))]
                      for i in [0, 1, 2, 4, 5,
                                ]+[8, 9, 10, 11, 12, 13, 14, 15, 16]])
         conv[3] = lambda x: helper_func3(x)
-        conv[6] = lambda x: helper_func4(helper_func2(x)).decode('utf-8')
-        conv[7] = lambda x: helper_func4(helper_func2(x)).decode('utf-8')
+        conv[6] = lambda x: helper_func4(helper_func2(x))
+        conv[7] = lambda x: helper_func4(helper_func2(x))
 
         poling_pv_df = DataFrame(loadtxt(
             open(poling_pv_csv, 'rb'),
