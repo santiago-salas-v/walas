@@ -1080,11 +1080,13 @@ if __name__ == '__main__':
     ex.formula_filter.setText('h2s')
     ex.tableView1.selectRow(0)
 
+    """
     ex.phase_filter.setCurrentIndex(ex.phase_filter.findText('G'))
     ex.cas_filter.setText('7664-93-9')
     ex.name_filter.setText('sulfuric acid')
     ex.formula_filter.setText('h2so4')
     ex.tableView1.selectRow(0)
+    """
 
     ex.phase_filter.setCurrentIndex(ex.phase_filter.findText('G'))
     ex.cas_filter.setText('7446-11-9')
