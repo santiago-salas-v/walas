@@ -200,6 +200,16 @@ class App(QWidget):
             
             self.props_i.loc[row_index, 'z_i'] = float(0)
 
+            # estimate acentric factor if missing
+            #ipdb.set_trace()
+            idx=isnan(self.props_i['poling_omega'])
+            if sum(idx)>0:
+                #ipdb.set_trace()
+                pc_bar=self.props_i.loc[idx,'poling_pc']
+                tbr=self.props_i.loc[idx,'poling_tb']/self.props_i.loc[idx,'poling_tc']
+                f0_tbr,f1_tbr,f2_tbr=(-5.97616*(1-tbr)+1.29874*(1-tbr)**1.5-0.60394*(1-tbr)**2.5-1.06841*(1-tbr)**5)/tbr,(-5.03365*(1-tbr)+1.11505*(1-tbr)**1.5-5.41217*(1-tbr)**2.5-7.46628*(1-tbr)**5)/tbr,(-0.64771*(1-tbr)+2.41539*(1-tbr)**1.5-4.26979*(1-tbr)**2.5+3.25259*(1-tbr)**5)/tbr # Ambrose-Walton 1989
+                self.props_i.loc[idx,'poling_omega']=-(log(pc_bar/1.01325)+f0_tbr)/f1_tbr
+
             # add item to widget
             self.tableWidget1.setRowCount(self.tableWidget1.rowCount() + 1)
             self.tableWidget1.setVerticalHeaderItem(
@@ -343,8 +353,8 @@ class App(QWidget):
 
     def phases_vol(self):
         self.plot_window.show()
-        t = linspace(60, 220, 10)
-        p = 1.01325  # bar
+        t = linspace(196, 405, 10)
+        p = 1.01325  # Pa
         phase_fraction = empty_like(t)
         v_l = empty_like(t)
         v_v = empty_like(t)
@@ -584,9 +594,8 @@ class thTableModel(QAbstractTableModel):
             # test = all(a.fillna(0) == self.df.fillna(0))
         else:
             self.construct_df()
-            buf = open(merged_df_csv, 'w')
-            buf.write('sep=,\n')
-            buf.close()
+            with open(merged_df_csv, 'w') as buf:
+                buf.write('sep=,\n')
             self.df.to_csv(merged_df_csv, na_rep='NaN', mode='a')
 
         self.apply_filter(
@@ -664,7 +673,7 @@ class thTableModel(QAbstractTableModel):
             }))
 
         poling_basic_i_df = DataFrame(loadtxt(
-            open(poling_basic_i_csv, 'rb'),
+            open(poling_basic_i_csv, 'r'),
             delimiter='|',
             skiprows=3,
             dtype={
@@ -686,7 +695,7 @@ class thTableModel(QAbstractTableModel):
         ))
 
         poling_basic_ii_df = DataFrame(loadtxt(
-            open(poling_basic_ii_csv, 'rb'),
+            open(poling_basic_ii_csv, 'r'),
             delimiter='|',
             skiprows=3,
             usecols=(3, 4, 5, 6, 7, 8, 9, 10, 0),
@@ -709,7 +718,7 @@ class thTableModel(QAbstractTableModel):
 
 
         poling_cp_ig_l_df = DataFrame(loadtxt(
-            open(poling_cp_l_ig_poly_csv, 'rb'),
+            open(poling_cp_l_ig_poly_csv, 'r'),
             delimiter='|',
             skiprows=4,
             usecols=(3, 4, 5, 6, 7, 8, 9, 10, 11, 0),
@@ -738,7 +747,7 @@ class thTableModel(QAbstractTableModel):
         conv[7] = lambda x: helper_func4(helper_func2(x))
 
         poling_pv_df = DataFrame(loadtxt(
-            open(poling_pv_csv, 'rb'),
+            open(poling_pv_csv, 'r'),
             delimiter='|',
             skiprows=3,
             dtype={
@@ -842,6 +851,13 @@ class thTableModel(QAbstractTableModel):
         self.df['poling_a2'] = self.df['poling_a2'] * 1e-5
         self.df['poling_a3'] = self.df['poling_a3'] * 1e-8
         self.df['poling_a4'] = self.df['poling_a4'] * 1e-11
+
+        ipdb.set_trace()
+        idx=isnan(self.df['poling_omega'])
+        pc_bar=self.df.loc[idx,'poling_pc']
+        tbr=self.df.loc[idx,'poling_tb']/self.df.loc[idx,'poling_tc']
+        f0_tbr,f1_tbr,f2_tbr=(-5.97616*(1-tbr)+1.29874*(1-tbr)**1.5-0.60394*(1-tbr)**2.5-1.06841*(1-tbr)**5)/tbr,(-5.03365*(1-tbr)+1.11505*(1-tbr)**1.5-5.41217*(1-tbr)**2.5-7.46628*(1-tbr)**5)/tbr,(-0.64771*(1-tbr)+2.41539*(1-tbr)**1.5-4.26979*(1-tbr)**2.5+3.25259*(1-tbr)**5)/tbr # Ambrose-Walton 1989
+        self.df.loc[idx,'poling_omega']=-(log(pc_bar/1.01325)+f0_tbr)/f1_tbr
 
     def apply_filter(
             self,
@@ -1082,6 +1098,12 @@ if __name__ == '__main__':
     ex.formula_filter.setText('SO2')
     ex.tableView1.selectRow(0)
 
+    ex.phase_filter.setCurrentIndex(ex.phase_filter.findText('G'))
+    ex.cas_filter.setText('')
+    ex.name_filter.setText('ammonia')
+    ex.formula_filter.setText('NH3')
+    ex.tableView1.selectRow(0)
+
     ex.phase_filter.setCurrentIndex(ex.phase_filter.findText(''))
     ex.cas_filter.setText('')
     ex.name_filter.setText('')
@@ -1091,4 +1113,4 @@ if __name__ == '__main__':
 
     ex.tableView1.selectRow(-1)
 
-    sys.exit(app.exec_())
+    sys.exit(app.exec())
