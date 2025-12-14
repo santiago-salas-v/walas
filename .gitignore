@@ -31,3 +31,4 @@ docs/*
 data/*.csv
 data/*.bak
 utils/icon_batch_32X32.png
+!data/th_data_df.csv
