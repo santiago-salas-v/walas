@@ -649,7 +649,7 @@ class thTableModel(QAbstractTableModel):
             'range_tmin_to_1000'
             ]:
             burcat_df[column_name] = to_numeric(
-                burcat_df[column_name].str.replace(' ', '')
+                burcat_df[column_name].str.replace(' ', ''),errors='coerce'
                 )
 
         ant_df = DataFrame(loadtxt(
@@ -852,7 +852,6 @@ class thTableModel(QAbstractTableModel):
         self.df['poling_a3'] = self.df['poling_a3'] * 1e-8
         self.df['poling_a4'] = self.df['poling_a4'] * 1e-11
 
-        ipdb.set_trace()
         idx=isnan(self.df['poling_omega'])
         pc_bar=self.df.loc[idx,'poling_pc']
         tbr=self.df.loc[idx,'poling_tb']/self.df.loc[idx,'poling_tc']
