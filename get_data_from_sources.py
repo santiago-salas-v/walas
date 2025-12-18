@@ -24,7 +24,7 @@ antoine_csv = Path('data/The-Yaws-Handbook-of-Vapor-Pressure-Second-Edition-Anto
 antoine_csv_new = Path('/'.join([x if j==0 else antoine_csv.stem+'_more_cas_resolved.csv' for j,x in enumerate(antoine_csv.parts)]))
 burcat_url = 'https://respecth.elte.hu/burcat/BURCAT.THR.txt'
 patch_url = 'https://gist.githubusercontent.com/santiago-salas-v/6f408779c65a0267372c0ed66ff21fe4/raw/38f1621ea9dc03e265468f4d3ab5e8f5ce2515d4/Thermodyn2XML_vanilla_7_11_05.py' # original py script was removed (only exe remaining) from the original path in https://respecth.elte.hu/burcat/dist.zip
-resolver_url = 'https://hcd.rtpnc.epa.gov/api/resolver/lookup?%s'
+resolver_url = 'https://cactus.nci.nih.gov/chemical/structure/%s/cas'
 ddbst_adress = 'http://www.ddbst.com/published-parameters-unifac.html'
 
 if not Path(burcat_thr).exists():
@@ -200,20 +200,18 @@ ant_df = DataFrame(loadtxt(
     }))
 
 def get_cas(x):
-    params=parse.urlencode({'query':x,'idType':'AnyId','fuzzy':'Not','mol':'false'})
-    with request.urlopen(resolver_url % params) as f:
-        response=json.loads(f.read().decode('utf-8'))
+    try:
+        with request.urlopen(resolver_url % 'Decane') as f:
+            response=f.read().decode('utf-8').replace('\n',' ')
+        print(x,response)
+    except request.HTTPError as e:
+        response=''
+        print(x,'\tcas not found:\t'+str(e))
     sleep(1)
-    if len(response)==0:
-        return ''
-    elif 'casrn' in response[0]['chemical'].keys():
-        print(x,response[0]['chemical']['casrn'])
-        return response[0]['chemical']['casrn']
-    else:
-        return ''
+    return response
 
 idx=(ant_df.cas_no=='---')|(ant_df.cas_no=='—') # missinc CAS
-#idx=idx.index[idx][:15] # limit to first 15
+idx=idx.index[idx][:15] # limit to first 15
 ant_df.loc[idx,'cas_no']=ant_df.ant_name.loc[idx].apply(get_cas)
 
 with open(antoine_csv,'r') as f:
