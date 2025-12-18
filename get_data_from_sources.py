@@ -1,13 +1,15 @@
 from html.parser import HTMLParser
-from urllib.request import urlretrieve, urlopen
+from urllib import request, parse
+import json
+from time import sleep
 from subprocess import check_call, CalledProcessError
 from lxml import etree as et
-import string
+import string, re
+from numpy import loadtxt
 from pandas import DataFrame
 from os.path import sep
 from os import chdir, getcwd
 from pathlib import Path
-#import ipdb
 
 # 1. burcat tc
 # ref. https://gist.github.com/santiago-salas-v/6f408779c65a0267372c0ed66ff21fe4
@@ -18,9 +20,14 @@ outfile = 'BURCAT_THR.xml'
 template = 'xsl_stylesheet_burcat.xsl'
 thermodyn2xml = 'Thermodyn2XML_vanilla_7_11_05.py'
 burcat_thr = 'BURCAT.THR'
+antoine_csv = Path('data/The-Yaws-Handbook-of-Vapor-Pressure-Second-Edition-Antoine-coefficients.csv')
+burcat_url = 'https://respecth.elte.hu/burcat/BURCAT.THR.txt'
+patch_url = 'https://gist.githubusercontent.com/santiago-salas-v/6f408779c65a0267372c0ed66ff21fe4/raw/38f1621ea9dc03e265468f4d3ab5e8f5ce2515d4/Thermodyn2XML_vanilla_7_11_05.py' # original py script was removed (only exe remaining) from the original path in https://respecth.elte.hu/burcat/dist.zip
+resolver_url = 'https://hcd.rtpnc.epa.gov/api/resolver/lookup?%s'
+ddbst_adress = 'http://www.ddbst.com/published-parameters-unifac.html'
 
 if not Path(burcat_thr).exists():
-    url = 'https://respecth.elte.hu/burcat/BURCAT.THR.txt'
+    url = burcat_url
     patch = 'patch_BURCAT_THR.diff'
 
     path, headers = urlretrieve(url, burcat_thr)
@@ -34,11 +41,10 @@ else:
     print(f'file already exists: {burcat_thr}')
 
 if not Path(outfile).exists():
-    url = 'https://gist.githubusercontent.com/santiago-salas-v/6f408779c65a0267372c0ed66ff21fe4/raw/38f1621ea9dc03e265468f4d3ab5e8f5ce2515d4/Thermodyn2XML_vanilla_7_11_05.py' # original py script was removed (only exe remaining) from the original path in https://respecth.elte.hu/burcat/dist.zip
+    url = patch_url
     patch = 'patch_Thermodyn2XML_vanilla_7_11_05_py.diff'
 
     path, headers = urlretrieve(url, thermodyn2xml)
-    #ipdb.set_trace()
     try:
         print(check_call(['patch', '-p1', thermodyn2xml,  patch]))
         print('patch applied successfully.')
@@ -97,7 +103,6 @@ print(burcat_df)
 
 chdir(folder)
 
-ddbst_adress = 'http://www.ddbst.com/published-parameters-unifac.html'
 
 class TableHTMLParser(HTMLParser):
     def __init__(self):
@@ -135,7 +140,7 @@ class TableHTMLParser(HTMLParser):
 
 
 page_str = ''
-for line in urlopen(ddbst_adress):
+for line in request.urlopen(ddbst_adress):
     page_str += line.decode('utf-8')
 
 parser = TableHTMLParser()
@@ -158,3 +163,55 @@ f.write('sep=,'+'\n')
 for line in parser.tables[2]:
     f.write(','.join(line)+'\n')
 f.close()
+
+def helper_func1(x):
+    # helper function for csv reading
+    # replace dot in original file for minus in some cases ocr'd like .17.896
+    str_with_dot_actually_minus = x
+    matches = re.search('(\.(\d+\.\d+))', x)
+    if matches:
+        str_with_dot_actually_minus = '-' + matches.groups()[1]
+    return str_with_dot_actually_minus.replace(' ', '')
+
+def helper_func3(x):
+    # helper function 3 for csv reading.
+    # replace - for . in cas numbers (Antoine coeff)
+    return x.replace('.', '-')
+
+ant_df = DataFrame(loadtxt(
+    open(antoine_csv, 'r'),
+    delimiter='|',
+    skiprows=9,
+    dtype={
+        'names': [
+            'ant_no', 'ant_formula', 'ant_name',
+            'cas_no', 'ant_a', 'ant_b',
+            'ant_c', 'ant_tmin', 'ant_tmax',
+            'ant_code'],
+        'formats': [
+            int, object, object,
+            object, float, float,
+            float, float, float, object]},
+    converters={
+        0: helper_func1, 3: helper_func3,
+        4: helper_func1, 5: helper_func1,
+        6: helper_func1, 7: helper_func1
+    }))
+
+def get_cas(x):
+    params=parse.urlencode({'query':x,'idType':'AnyId','fuzzy':'Not','mol':'false'})
+    with request.urlopen(resolver_url % params) as f:
+        response=json.loads(f.read().decode('utf-8'))
+    sleep(1)
+    if len(response)==0:
+        return ''
+    elif 'casrn' in response[0]['chemical'].keys():
+        print(x,response[0]['chemical']['casrn'])
+        return response[0]['chemical']['casrn']
+    else:
+        return ''
+
+idx=(ant_df.cas_no=='---')|(ant_df.cas_no=='—') # missinc CAS
+idx[15:]=False
+ant_df.loc['cas_no',idx]=ant_df.ant_name.loc[idx].apply(get_cas)
+ant_df.to_csv(Path('/'.join([x if j==0 else antoine_csv.stem+'_more_cas_resolved,csv' for j,x in enumerate(antoine_csv.parts)])),delimiter='|')
