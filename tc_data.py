@@ -19,7 +19,7 @@ from PySide6.QtWidgets import QGridLayout, QLineEdit, QPushButton
 from PySide6.QtWidgets import QSizePolicy
 from PySide6.QtWidgets import QTableView, QApplication, QWidget
 from numpy import loadtxt, isnan, empty_like, linspace, zeros, ones, dtype, log
-from pandas import DataFrame, merge, to_numeric, read_csv
+from pandas import DataFrame, merge, to_numeric, read_csv, isna
 
 matplotlib.use('Qt5Agg')
 import matplotlib.pyplot as plt
@@ -558,35 +558,35 @@ class thTableModel(QAbstractTableModel):
         self.df = DataFrame()
         found_existing_df = exists(merged_df_csv)
         dtypes_dict = {
-            'cas_no': dtype('O'), 'phase': dtype('O'), 'formula_name_structure': dtype('O'),
-            'reference': dtype('O'), 'hf298': dtype('O'), 'max_lst_sq_error': dtype('O'),
-            'formula': dtype('O'), 'source': dtype('O'), 'date': dtype('O'),
-            'range_tmin_to_1000': dtype('float64'), 'range_1000_to_tmax': dtype('float64'),
-            'molecular_weight': dtype('float64'), 'hf298_div_r': dtype('float64'),
-            'a1_low': dtype('float64'), 'a2_low': dtype('float64'), 'a3_low': dtype('float64'),
-            'a4_low': dtype('float64'), 'a5_low': dtype('float64'), 'a6_low': dtype('float64'),
-            'a7_low': dtype('float64'), 'a1_high': dtype('float64'), 'a2_high': dtype('float64'),
-            'a3_high': dtype('float64'), 'a4_high': dtype('float64'), 'a5_high': dtype('float64'),
-            'a6_high': dtype('float64'), 'a7_high': dtype('float64'), 'poling_no': dtype('float64'),
-            'poling_formula': dtype('O'), 'poling_name': dtype('O'), 'poling_molwt': dtype('float64'),
-            'poling_tfp': dtype('float64'), 'poling_tb': dtype('float64'), 'poling_tc': dtype('float64'),
-            'poling_pc': dtype('float64'), 'poling_vc': dtype('float64'), 'poling_zc': dtype('float64'),
-            'poling_omega': dtype('float64'), 'poling_delhf0': dtype('float64'), 'poling_delgf0': dtype('float64'),
-            'poling_delhb': dtype('float64'), 'poling_delhm': dtype('float64'), 'poling_v_liq': dtype('float64'),
-            'poling_t_liq': dtype('float64'), 'poling_dipole': dtype('float64'), 'poling_trange': dtype('O'),
-            'poling_a0': dtype('float64'), 'poling_a1': dtype('float64'), 'poling_a2': dtype('float64'),
-            'poling_a3': dtype('float64'), 'poling_a4': dtype('float64'), 'poling_cpig': dtype('float64'),
-            'poling_cpliq': dtype('float64'), 'p_ant_a': dtype('float64'), 'p_ant_b': dtype('float64'),
-            'p_ant_c': dtype('float64'), 'p_ant_pvpmin': dtype('float64'), 'p_ant_tmin': dtype('float64'),
-            'p_ant_pvpmax': dtype('float64'), 'p_ant_tmax': dtype('float64'), 'eant_to': dtype('float64'),
-            'eant_n': dtype('float64'), 'eant_e': dtype('float64'), 'eant_f': dtype('float64'),
-            'eant_pvpmin': dtype('float64'), 'eant_tmin': dtype('float64'), 'eant_pvpmax': dtype('float64'),
-            'eant_tmax': dtype('float64'), 'wagn_a': dtype('float64'), 'wagn_b': dtype('float64'),
-            'wagn_c': dtype('float64'), 'wagn_d': dtype('float64'), 'wagn_pvpmin': dtype('float64'),
-            'wagn_tmin': dtype('float64'), 'wagn_pvpmax': dtype('float64'), 'wagn_tmax': dtype('float64'),
-            'ant_no': dtype('float64'), 'ant_formula': dtype('O'), 'ant_name': dtype('O'),
-            'ant_a': dtype('float64'), 'ant_b': dtype('float64'), 'ant_c': dtype('float64'),
-            'ant_tmin': dtype('float64'), 'ant_tmax': dtype('float64'), 'ant_code': dtype('O')}
+            'cas_no': object, 'phase': object, 'formula_name_structure': object,
+            'reference': object, 'hf298': object, 'max_lst_sq_error': object,
+            'formula': object, 'source': object, 'date': object,
+            'range_tmin_to_1000': float, 'range_1000_to_tmax': float,
+            'molecular_weight': float, 'hf298_div_r': float,
+            'a1_low': float, 'a2_low': float, 'a3_low': float,
+            'a4_low': float, 'a5_low': float, 'a6_low': float,
+            'a7_low': float, 'a1_high': float, 'a2_high': float,
+            'a3_high': float, 'a4_high': float, 'a5_high': float,
+            'a6_high': float, 'a7_high': float, 'poling_no': float,
+            'poling_formula': object, 'poling_name': object, 'poling_molwt': float,
+            'poling_tfp': float, 'poling_tb': float, 'poling_tc': float,
+            'poling_pc': float, 'poling_vc': float, 'poling_zc': float,
+            'poling_omega': float, 'poling_delhf0': float, 'poling_delgf0': float,
+            'poling_delhb': float, 'poling_delhm': float, 'poling_v_liq': float,
+            'poling_t_liq': float, 'poling_dipole': float, 'poling_trange': object,
+            'poling_a0': float, 'poling_a1': float, 'poling_a2': float,
+            'poling_a3': float, 'poling_a4': float, 'poling_cpig': float,
+            'poling_cpliq': float, 'p_ant_a': float, 'p_ant_b': float,
+            'p_ant_c': float, 'p_ant_pvpmin': float, 'p_ant_tmin': float,
+            'p_ant_pvpmax': float, 'p_ant_tmax': float, 'eant_to': float,
+            'eant_n': float, 'eant_e': float, 'eant_f': float,
+            'eant_pvpmin': float, 'eant_tmin': float, 'eant_pvpmax': float,
+            'eant_tmax': float, 'wagn_a': float, 'wagn_b': float,
+            'wagn_c': float, 'wagn_d': float, 'wagn_pvpmin': float,
+            'wagn_tmin': float, 'wagn_pvpmax': float, 'wagn_tmax': float,
+            'ant_no': float, 'ant_formula': object, 'ant_name': object,
+            'ant_a': float, 'ant_b': float, 'ant_c': float,
+            'ant_tmin': float, 'ant_tmax': float, 'ant_code': object}
 
         if found_existing_df:
             self.df = read_csv(merged_df_csv, skiprows=1, sep=',', index_col=0,
