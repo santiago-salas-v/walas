@@ -32,3 +32,4 @@ data/*.csv
 data/*.bak
 utils/icon_batch_32X32.png
 !data/th_data_df.csv
+!data/tables_wagner_doi.org_10.1016_j.jct.2011.03.011.csv
