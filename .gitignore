@@ -33,3 +33,7 @@ data/*.bak
 utils/icon_batch_32X32.png
 !data/th_data_df.csv
 !data/tables_wagner_doi.org_10.1016_j.jct.2011.03.011.csv
+!data/table1_wagner_doi.org_10.1016_j.jct.2011.03.011.csv
+!data/table2_wagner_doi.org_10.1016_j.jct.2011.03.011.csv
+!data/vdi_heat_atlas_2nd_2010_3.1-table_3.pdf
+!data/vdi_heat_atlas_2nd_2010_3.1-table_3.csv
