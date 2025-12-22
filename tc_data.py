@@ -27,16 +27,7 @@ from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from z_l_v import State
 
 locale.setlocale(locale.LC_ALL, '')
-burcat_xml_file = './data/BURCAT_THR.xml'
-antoine_csv = './data/The-Yaws-Handbook-of-Vapor-Pressure-Second-Edition-Antoine-coefficients.csv'
-poling_basic_i_csv = './data/basic_constants_i_properties_of_gases_and_liquids.csv'
-poling_basic_ii_csv = './data/basic_constants_ii_properties_of_gases_and_liquids.csv'
-poling_cp_l_ig_poly_csv = './data/ig_l_heat_capacities_properties_of_gases_and_liquids.csv'
-poling_pv_csv = './data/vapor_pressure_correlations_parameters_clean.csv'
-template = "./data/xsl_stylesheet_burcat.xsl"
 merged_df_csv = 'data/th_data_df.csv'
-linesep_b = os.linesep.encode('utf-8')
-
 
 class App(QWidget):
     def __init__(self):
@@ -411,36 +402,6 @@ class PlotWindow(QWidget):
         self.fig.tight_layout()
 
 
-def helper_func1(x):
-    # helper function for csv reading
-    # replace dot in original file for minus in some cases ocr'd like .17.896
-    str_with_dot_actually_minus = x
-    matches = re.search('(\.(\d+\.\d+))', x)
-    if matches:
-        str_with_dot_actually_minus = '-' + matches.groups()[1]
-    return str_with_dot_actually_minus.replace(' ', '')
-
-
-def helper_func2(x):
-    # helper function 2 for csv reading.
-    # Return None when empty string
-    if len(x) == 0 or x == linesep_b:
-        return 'nan'
-    return x.replace(' ', '')
-
-
-def helper_func3(x):
-    # helper function 3 for csv reading.
-    # replace - for . in cas numbers (Antoine coeff)
-    return x.replace('.', '-')
-
-
-def helper_func4(x):
-    # helper function 4 for csv reading.
-    # replace whitespace ' ' for '' in float numbers
-    return x.replace(' ', '')
-
-
 class thTableModel(QAbstractTableModel):
 
     def __init__(self):
@@ -556,7 +517,6 @@ class thTableModel(QAbstractTableModel):
                 self.dtypes += [str]
 
         self.df = DataFrame()
-        found_existing_df = exists(merged_df_csv)
         dtypes_dict = {
             'cas_no': object, 'phase': object, 'formula_name_structure': object,
             'reference': object, 'hf298': object, 'max_lst_sq_error': object,
@@ -588,275 +548,14 @@ class thTableModel(QAbstractTableModel):
             'ant_a': float, 'ant_b': float, 'ant_c': float,
             'ant_tmin': float, 'ant_tmax': float, 'ant_code': object}
 
-        if found_existing_df:
-            self.df = read_csv(merged_df_csv, skiprows=1, sep=',', index_col=0,
-                               keep_default_na=False, na_values=['NaN'], dtype=dtypes_dict)
-            # test = all(a.fillna(0) == self.df.fillna(0))
-        else:
-            self.construct_df()
-            with open(merged_df_csv, 'w') as buf:
-                buf.write('sep=,\n')
-            self.df.to_csv(merged_df_csv, na_rep='NaN', mode='a')
+        self.df = read_csv(merged_df_csv, skiprows=1, sep=',', index_col=0,
+                           keep_default_na=False, na_values=['NaN'], dtype=dtypes_dict)
+        # test = all(a.fillna(0) == self.df.fillna(0))
 
         self.apply_filter(
             cas_filter, name_filter,
             formula_filter, phase_filter
         )
-
-
-    def construct_df(self):
-        tree = et.parse(burcat_xml_file)
-        root = tree.getroot()
-        xsl = et.parse(template)
-        transformer = et.XSLT(xsl)
-        result = transformer(tree)
-        cas_filter, name_filter, \
-        formula_filter, phase_filter = \
-            '', '', '', ''
-
-        xpath = \
-                    "./specie[contains(@CAS, '" + \
-                    cas_filter + "')]/" + \
-                    "formula_name_structure[contains(translate(" +\
-                    "formula_name_structure_1" + \
-                    ", '" + string.ascii_lowercase + "', '" + \
-                    string.ascii_uppercase + "'), '" + \
-                    name_filter + "')]/../@CAS/../" + \
-                    "phase[contains(translate(" + \
-                    "formula" + \
-                    ", '" + string.ascii_lowercase + "', '" + \
-                    string.ascii_uppercase + "'), '" + \
-                    formula_filter + "')]/../" + \
-                    "phase[contains(phase, '" + \
-                    phase_filter + "')]"
-
-        for element in root.xpath(xpath):
-            #print(element.getparent().get('CAS'))
-            pass
-        data = []
-        for i in result.xpath('/*'):
-            inner = {}
-            for j in i.xpath('*'):
-                inner[j.tag] = j.text
-            data.append(inner)
-
-        burcat_df = DataFrame(data)
-
-        for column_name in [
-            'a'+str(i)+'_low' for i in range(1,7+1) ] + [
-            'a'+str(i)+'_high' for i in range(1,7+1)] + [
-            'hf298_div_r', 'molecular_weight', 'range_1000_to_tmax',
-            'range_tmin_to_1000'
-            ]:
-            burcat_df[column_name] = to_numeric(
-                burcat_df[column_name].str.replace(' ', ''),errors='coerce'
-                )
-
-        ant_df = DataFrame(loadtxt(
-            open(antoine_csv, 'r'),
-            delimiter='|',
-            skiprows=9,
-            dtype={
-                'names': [
-                    'ant_no', 'ant_formula', 'ant_name',
-                    'cas_no', 'ant_a', 'ant_b',
-                    'ant_c', 'ant_tmin', 'ant_tmax',
-                    'ant_code'],
-                'formats': [
-                    int, object, object,
-                    object, float, float,
-                    float, float, float, object]},
-            converters={
-                0: helper_func1, 3: helper_func3,
-                4: helper_func1, 5: helper_func1,
-                6: helper_func1, 7: helper_func1
-            }))
-
-        poling_basic_i_df = DataFrame(loadtxt(
-            open(poling_basic_i_csv, 'r'),
-            delimiter='|',
-            skiprows=3,
-            dtype={
-                'names': [
-                    'poling_no', 'poling_formula', 'poling_name',
-                    'cas_no', 'poling_molwt', 'poling_tfp',
-                    'poling_tb', 'poling_tc', 'poling_pc',
-                    'poling_vc', 'poling_zc', 'poling_omega'],
-                'formats': [
-                    int, object, object,
-                    object, float, float,
-                    float, float, float, float, float,
-                    float]},
-            converters={
-                5: helper_func2, 6: helper_func2,
-                8: helper_func2, 9: helper_func2,
-                10: helper_func2, 11: helper_func2
-            }
-        ))
-
-        poling_basic_ii_df = DataFrame(loadtxt(
-            open(poling_basic_ii_csv, 'r'),
-            delimiter='|',
-            skiprows=3,
-            usecols=(3, 4, 5, 6, 7, 8, 9, 10, 0),
-            dtype={
-                'names': [
-                    'cas_no',
-                    'poling_delhf0', 'poling_delgf0', 'poling_delhb',
-                    'poling_delhm', 'poling_v_liq', 'poling_t_liq',
-                    'poling_dipole', 'poling_no'],
-                'formats': [
-                    object, float, float,
-                    float, float, float, float, float, int]},
-            converters={
-                4: helper_func2, 5: helper_func2,
-                6: helper_func2, 7: helper_func2,
-                8: helper_func2, 9: helper_func2,
-                10: helper_func2
-            }
-        ))
-
-
-        poling_cp_ig_l_df = DataFrame(loadtxt(
-            open(poling_cp_l_ig_poly_csv, 'r'),
-            delimiter='|',
-            skiprows=4,
-            usecols=(3, 4, 5, 6, 7, 8, 9, 10, 11, 0),
-            dtype={
-                'names': [
-                    'cas_no',
-                    'poling_trange', 'poling_a0', 'poling_a1',
-                    'poling_a2', 'poling_a3', 'poling_a4',
-                    'poling_cpig', 'poling_cpliq', 'poling_no'],
-                'formats': [
-                    object, object, float,
-                    float, float, float, float, float, float, int]},
-            converters={
-                5: helper_func2, 6: helper_func2,
-                7: helper_func2, 8: helper_func2,
-                9: helper_func2, 10: helper_func2,
-                11: helper_func2
-            }
-        ))
-
-        conv = dict([[i, lambda x: helper_func4(helper_func2(x))]
-                     for i in [0, 1, 2, 4, 5,
-                               ]+[8, 9, 10, 11, 12, 13, 14, 15, 16]])
-        conv[3] = lambda x: helper_func3(x)
-        conv[6] = lambda x: helper_func4(helper_func2(x))
-        conv[7] = lambda x: helper_func4(helper_func2(x))
-
-        poling_pv_df = DataFrame(loadtxt(
-            open(poling_pv_csv, 'r'),
-            delimiter='|',
-            skiprows=3,
-            dtype={
-                'names': [
-                    'poling_no',
-                    'poling_formula',
-                    'poling_name',
-                    'cas_no',
-                    'poling_pv_eq',
-                    'A/A/Tc',
-                    'B/B/a',
-                    'C/C/b',
-                    'Tc/c',
-                    'to/d',
-                    'n/Pc',
-                    'E',
-                    'F',
-                    'poling_pvpmin',
-                    'poling_pv_tmin',
-                    'poling_pvpmax',
-                    'poling_pv_tmax'],
-                'formats': [
-                               int, object, object, object, int] + [float] * 12},
-            converters=conv
-        ))
-
-        poling_pv_df_eq_3 = poling_pv_df[poling_pv_df['poling_pv_eq'] == 3][
-            [x for x in poling_pv_df.keys() if x not in [
-                'E', 'F', 'poling_name', 'poling_formula']]
-        ].rename(columns={
-            'A/A/Tc': 'poling_tc', 'B/B/a': 'wagn_a', 'C/C/b': 'wagn_b',
-            'Tc/c': 'wagn_c', 'to/d': 'wagn_d', 'n/Pc': 'poling_pc'})
-        poling_pv_df_eq_2 = poling_pv_df[poling_pv_df['poling_pv_eq'] == 2][
-            [x for x in poling_pv_df.keys() if x not in [
-                'A/A/Tc', 'B/B/a', 'C/C/b', 'poling_name', 'poling_formula']]
-        ].rename(columns={
-            'A/A/Tc': 'p_ant_a', 'B/B/a': 'p_ant_b',
-            'C/C/b': 'p_ant_c', 'Tc/c': 'poling_tc', 'to/d': 'eant_to',
-            'n/Pc': 'eant_n', 'E': 'eant_e', 'F': 'eant_f'})
-        poling_pv_df_eq_1 = poling_pv_df[poling_pv_df['poling_pv_eq'] == 1][
-            [x for x in poling_pv_df.keys() if x not in [
-                'E', 'F', 'Tc/c', 'to/d', 'n/Pc', 'poling_name', 'poling_formula']]
-        ].rename(columns={
-            'A/A/Tc': 'p_ant_a', 'B/B/a': 'p_ant_b', 'C/C/b': 'p_ant_c'})
-
-        poling_pv_df = merge(merge(
-            poling_pv_df_eq_1, poling_pv_df_eq_2,
-            how='outer', on=['poling_no', 'cas_no'], suffixes=['_1', '_2']),
-              poling_pv_df_eq_3, how='outer', on=['poling_no', 'cas_no'],
-            suffixes=['', '_3'])
-
-        poling_pv_df.update(
-            poling_pv_df.rename(
-                columns={'poling_tc': 'poling_tc_4',
-                         'poling_tc_3': 'poling_tc',
-                         'poling_pc': 'poling_pc_4',
-                         'poling_pc_3': 'poling_pc'}))
-        poling_pv_df.update(
-            poling_pv_df.rename(columns={
-                'poling_tc': 'poling_tc_4',
-                'poling_tc_3': 'poling_tc'}))
-
-        poling_df = merge(merge(    
-            poling_basic_i_df, poling_basic_ii_df,
-            how='outer', on=['cas_no', 'poling_no']),
-            poling_cp_ig_l_df, how='outer', on='cas_no')
-
-        del poling_df['poling_no_y']
-        poling_df = poling_df.rename(columns={'poling_no_x': 'poling_no'})
-        poling_df = merge(poling_df, poling_pv_df, on=['cas_no', 'poling_no'], how='outer')
-
-        poling_df = poling_df.rename(
-            columns={'poling_pc_x': 'poling_pc', 'poling_tc_x': 'poling_tc',
-                     'poling_pv_tmin_1': 'p_ant_tmin',
-                     'poling_pv_tmax_1': 'p_ant_tmax',
-                     'poling_pvpmin_1': 'p_ant_pvpmin',
-                     'poling_pvpmax_1': 'p_ant_pvpmax',
-                     'poling_pv_tmin_2': 'eant_tmin',
-                     'poling_pv_tmax_2': 'eant_tmax',
-                     'poling_pvpmin_2': 'eant_pvpmin',
-                     'poling_pvpmax_2': 'eant_pvpmax',
-                     'poling_pv_tmin': 'wagn_tmin',
-                     'poling_pv_tmax': 'wagn_tmax',
-                     'poling_pvpmin': 'wagn_pvpmin',
-                     'poling_pvpmax': 'wagn_pvpmax'
-                     })
-        poling_df.update(poling_df.rename(
-            columns={'poling_pc': 'poling_pc_x', 'poling_pc_y': 'poling_pc'}))
-
-        del poling_df['poling_tc_y']
-        del poling_df['poling_pc_y']
-        del poling_df['poling_tc_3']
-        del poling_df['poling_pv_eq_1']
-        del poling_df['poling_pv_eq_2']
-        del poling_df['poling_pv_eq']
-
-        poling_burcat_df = merge(burcat_df, poling_df, on='cas_no', how='outer')
-        self.df = merge(poling_burcat_df, ant_df, on='cas_no', how='outer')
-
-        self.df['poling_a1'] = self.df['poling_a1'] * 1e-3
-        self.df['poling_a2'] = self.df['poling_a2'] * 1e-5
-        self.df['poling_a3'] = self.df['poling_a3'] * 1e-8
-        self.df['poling_a4'] = self.df['poling_a4'] * 1e-11
-
-        idx=isnan(self.df['poling_omega'])
-        pc_bar=self.df.loc[idx,'poling_pc']
-        tbr=self.df.loc[idx,'poling_tb']/self.df.loc[idx,'poling_tc']
-        f0_tbr,f1_tbr,f2_tbr=(-5.97616*(1-tbr)+1.29874*(1-tbr)**1.5-0.60394*(1-tbr)**2.5-1.06841*(1-tbr)**5)/tbr,(-5.03365*(1-tbr)+1.11505*(1-tbr)**1.5-5.41217*(1-tbr)**2.5-7.46628*(1-tbr)**5)/tbr,(-0.64771*(1-tbr)+2.41539*(1-tbr)**1.5-4.26979*(1-tbr)**2.5+3.25259*(1-tbr)**5)/tbr # Ambrose-Walton 1989
-        self.df.loc[idx,'poling_omega']=-(log(pc_bar/1.01325)+f0_tbr)/f1_tbr
 
     def apply_filter(
             self,

@@ -4,22 +4,20 @@ from time import sleep
 from subprocess import check_call, CalledProcessError
 from lxml import etree as et
 import string, re
-from numpy import loadtxt,nan
+from numpy import loadtxt,nan,log
 from pandas import DataFrame, read_csv, merge, isna, concat
-from os import chdir, getcwd
 from pathlib import Path
-from cirpy import resolve # conda install -c conda-forge cirpy
+from py2opsin import py2opsin # pip install py2opsin # fast get StdInChIKey
+from pubchempy import PubChemHTTPError, get_synonyms # slow get synonims (CAS)
 import camelot
 
 # 1. burcat tc
 # ref. https://gist.github.com/santiago-salas-v/6f408779c65a0267372c0ed66ff21fe4
 
-folder = getcwd()
-chdir('data')
-outfile = 'BURCAT_THR.xml'
-template = 'xsl_stylesheet_burcat.xsl'
-thermodyn2xml = 'Thermodyn2XML_vanilla_7_11_05.py'
-burcat_thr = 'BURCAT.THR'
+burcat_xml_file = Path('data/BURCAT_THR.xml')
+template = Path('data/xsl_stylesheet_burcat.xsl')
+thermodyn2xml = Path('data/Thermodyn2XML_vanilla_7_11_05.py')
+burcat_thr = Path('data/BURCAT.THR')
 antoine_csv = Path('data/The-Yaws-Handbook-of-Vapor-Pressure-Second-Edition-Antoine-coefficients.csv')
 antoine_csv_new = Path('/'.join([x if j==0 else antoine_csv.stem+'_more_cas_resolved.csv' for j,x in enumerate(antoine_csv.parts)]))
 wagn_2_csv=Path('data/table2_wagner_doi.org_10.1016_j.jct.2011.03.011.csv')
@@ -30,10 +28,14 @@ wagn_m_csv=Path('data/tables_wagner_doi.org_10.1016_j.jct.2011.03.011.csv')
 wagn_m_csv_new = Path('/'.join([antoine_csv.parts[0],wagn_m_csv.stem+'_cas.csv']))
 burcat_url = 'https://respecth.elte.hu/burcat/BURCAT.THR.txt'
 patch_url = 'https://gist.githubusercontent.com/santiago-salas-v/6f408779c65a0267372c0ed66ff21fe4/raw/38f1621ea9dc03e265468f4d3ab5e8f5ce2515d4/Thermodyn2XML_vanilla_7_11_05.py' # original py script was removed (only exe remaining) from the original path in https://respecth.elte.hu/burcat/dist.zip
-resolver_url = 'https://cactus.nci.nih.gov/chemical/structure/%s/cas'
 ddbst_adress = 'http://www.ddbst.com/published-parameters-unifac.html'
 vdi_vp_tab_pdf=Path('data/vdi_heat_atlas_2nd_2010_3.1-table_3.pdf')
 vdi_csv=Path('data/vdi_heat_atlas_2nd_2010_3.1-table_3.csv')
+poling_basic_i_csv = Path('data/basic_constants_i_properties_of_gases_and_liquids.csv')
+poling_basic_ii_csv = Path('data/basic_constants_ii_properties_of_gases_and_liquids.csv')
+poling_cp_l_ig_poly_csv = Path('data/ig_l_heat_capacities_properties_of_gases_and_liquids.csv')
+poling_pv_csv = Path('data/vapor_pressure_correlations_parameters_clean.csv')
+merged_df_csv = Path('data/th_data_df.csv')
 
 if not Path(burcat_thr).exists():
     url = burcat_url
@@ -49,7 +51,7 @@ if not Path(burcat_thr).exists():
 else:
     print(f'file already exists: {burcat_thr}')
 
-if not Path(outfile).exists():
+if not Path(burcat_xml_file).exists():
     url = patch_url
     patch = 'patch_Thermodyn2XML_vanilla_7_11_05_py.diff'
 
@@ -62,13 +64,13 @@ if not Path(outfile).exists():
 
     check_call(['python', thermodyn2xml, burcat_thr])
 
-    print(f'file produced successfully: {outfile}')
+    print(f'file produced successfully: {burcat_xml_file}')
 else:
-    print(f'file already exists: {outfile}')
+    print(f'file already exists: {burcat_xml_file}')
 
-print(et.parse(outfile))
+print(et.parse(burcat_xml_file))
 
-tree = et.parse(outfile)
+tree = et.parse(burcat_xml_file)
 root = tree.getroot()
 xsl = et.parse(template)
 transformer = et.XSLT(xsl)
@@ -96,7 +98,6 @@ xpath = \
 for element in root.xpath(xpath):
     #print(element.getparent().get('CAS'))
     pass
-
 data = []
 for i in result.xpath('/*'):
     inner = {}
@@ -106,12 +107,18 @@ for i in result.xpath('/*'):
 
 burcat_df = DataFrame(data)
 
+for column_name in [
+    'a'+str(i)+'_low' for i in range(1,7+1) ] + [
+    'a'+str(i)+'_high' for i in range(1,7+1)] + [
+    'hf298_div_r', 'molecular_weight', 'range_1000_to_tmax',
+    'range_tmin_to_1000'
+    ]:
+    burcat_df[column_name] =  burcat_df[column_name].str.replace(' ', '').apply(lambda x: float(x) if x not in ['N/A'] else nan)
+
+
 print(burcat_df)
 
 # 2. unifac
-
-chdir(folder)
-
 
 class TableHTMLParser(HTMLParser):
     def __init__(self):
@@ -155,19 +162,19 @@ for line in request.urlopen(ddbst_adress):
 parser = TableHTMLParser()
 parser.feed(page_str)
 
-f = open('./data/unifac_list_of_interaction_parameters.csv', 'w')
+f = open('data/unifac_list_of_interaction_parameters.csv', 'w')
 f.write('sep=,'+'\n')
 for line in parser.tables[0]:
     f.write(','.join(line)+'\n')
 f.close()
 
-f = open('./data/unifac_sub_groups_surfaces_and_volumes.csv', 'w')
+f = open('data/unifac_sub_groups_surfaces_and_volumes.csv', 'w')
 f.write('sep=,'+'\n')
 for line in parser.tables[1]:
     f.write(','.join(line)+'\n')
 f.close()
 
-f = open('./data/unifac_main_groups.csv', 'w')
+f = open('data/unifac_main_groups.csv', 'w')
 f.write('sep=,'+'\n')
 for line in parser.tables[2]:
     f.write(','.join(line)+'\n')
@@ -182,10 +189,32 @@ def helper_func1(x):
         str_with_dot_actually_minus = '-' + matches.groups()[1]
     return str_with_dot_actually_minus.replace(' ', '')
 
+
+def helper_func2(x):
+    # helper function 2 for csv reading.
+    # Return None when empty string
+    if len(x) == 0:
+        return 'nan'
+    return x.replace(' ', '')
+
+
 def helper_func3(x):
     # helper function 3 for csv reading.
     # replace - for . in cas numbers (Antoine coeff)
     return x.replace('.', '-')
+
+
+def helper_func4(x):
+    # helper function 4 for csv reading.
+    # replace whitespace ' ' for '' in float numbers
+    return x.replace(' ', '')
+
+
+def helper_func5(x):
+    # helper function 5 for csv reading.
+    # replace '−' for '-' (otherwise float not possible)
+    return nan if len(x.strip())==0 else float(x.replace('−','-'))
+
 
 ant_df = DataFrame(loadtxt(
     open(antoine_csv, 'r'),
@@ -207,26 +236,14 @@ ant_df = DataFrame(loadtxt(
         6: helper_func1, 7: helper_func1
     }))
 
-def get_cas(x):
-    try:
-        with request.urlopen(resolver_url % x) as f:
-            response=f.read().decode('utf-8').replace('\n',' ')
-        print(x,response)
-    except request.HTTPError as e:
-        response=''
-        print(x,'cas not found:\t'+str(e))
-    except request.URLError as e:
-        response=''
-        print(x,'url error:\t'+str(e))
-    sleep(1)
-    return response
 
-def get_cas_cir(x):
-    response=resolve(x,'cas',['name_by_cir','name_by_opsin'])
-    if response is None:
-        response=''
-    elif type(response)==list:
-        response=','.join(response)
+def get_cas(x):
+    # try pubchem directly, 
+    response=[] # name not resolved
+    synonyms=get_synonyms(x,'name')
+    for c in synonyms:
+        response+=[y for y in c['Synonym'] if re.match(r'^\d{2,7}-\d{2}-\d{1}$',y.strip())]
+    response=','.join(response)
     print(x,response)
     return response
 
@@ -243,33 +260,222 @@ with open(antoine_csv,'r') as f:
 
 ant_df.to_csv(antoine_csv_new,sep='|',index=False,header=False,mode='a')
 
-def helper_func4(x):
-    # helper function 4 for csv reading.
-    # replace whitespace ' ' for '' in float numbers
-    return x.replace(' ', '')
+poling_basic_i_df = DataFrame(loadtxt(
+    open(poling_basic_i_csv, 'r'),
+    delimiter='|',
+    skiprows=3,
+    dtype={
+        'names': [
+            'poling_no', 'poling_formula', 'poling_name',
+            'cas_no', 'poling_molwt', 'poling_tfp',
+            'poling_tb', 'poling_tc', 'poling_pc',
+            'poling_vc', 'poling_zc', 'poling_omega'],
+        'formats': [
+            int, object, object,
+            object, float, float,
+            float, float, float, float, float,
+            float]},
+    converters={
+        5: helper_func2, 6: helper_func2,
+        8: helper_func2, 9: helper_func2,
+        10: helper_func2, 11: helper_func2
+    }
+))
 
-def helper_func5(x):
-    # helper function 5 for csv reading.
-    # replace '−' for '-' (otherwise float not possible)
-    return nan if len(x.strip())==0 else float(x.replace('−','-'))
+poling_basic_ii_df = DataFrame(loadtxt(
+    open(poling_basic_ii_csv, 'r'),
+    delimiter='|',
+    skiprows=3,
+    usecols=(3, 4, 5, 6, 7, 8, 9, 10, 0),
+    dtype={
+        'names': [
+            'cas_no',
+            'poling_delhf0', 'poling_delgf0', 'poling_delhb',
+            'poling_delhm', 'poling_v_liq', 'poling_t_liq',
+            'poling_dipole', 'poling_no'],
+        'formats': [
+            object, float, float,
+            float, float, float, float, float, int]},
+    converters={
+        4: helper_func2, 5: helper_func2,
+        6: helper_func2, 7: helper_func2,
+        8: helper_func2, 9: helper_func2,
+        10: helper_func2
+    }
+))
 
-df_wgn2=read_csv(wagn_2_csv,skiprows=2,sep='\t',converters={1:helper_func4}|{x:helper_func5 for x in range(2,18)})
-df_wgn2['cas_no']=df_wgn2.Substance.apply(get_cas_cir)
-df_wgn2=df_wgn2.rename(columns={'Tc':'Tc/K','Pc':'Pc/kPa'})
+poling_cp_ig_l_df = DataFrame(loadtxt(
+    open(poling_cp_l_ig_poly_csv, 'r'),
+    delimiter='|',
+    skiprows=4,
+    usecols=(3, 4, 5, 6, 7, 8, 9, 10, 11, 0),
+    dtype={
+        'names': [
+            'cas_no',
+            'poling_trange', 'poling_a0', 'poling_a1',
+            'poling_a2', 'poling_a3', 'poling_a4',
+            'poling_cpig', 'poling_cpliq', 'poling_no'],
+        'formats': [
+            object, object, float,
+            float, float, float, float, float, float, int]},
+    converters={
+        5: helper_func2, 6: helper_func2,
+        7: helper_func2, 8: helper_func2,
+        9: helper_func2, 10: helper_func2,
+        11: helper_func2
+    }
+))
 
-df_wgn1=read_csv(wagn_1_csv,skiprows=2,sep='\t')
-df_wgn1['cas_no']=df_wgn1.Substance.apply(get_cas_cir)
-df_wgn1['Tr,min']=df_wgn1['Experimental Tr range'].apply(lambda x:float(x.split('-')[0]))
-df_wgn1['Tr,max']=df_wgn1['Experimental Tr range'].apply(lambda x:float(x.split('-')[1]))
-df_wgn1=df_wgn1.rename(columns={'Tc':'Tc/K','Pc':'Pc/kPa'})
+conv = dict([[i, lambda x: helper_func4(helper_func2(x))]
+             for i in [0, 1, 2, 4, 5,
+                       ]+[8, 9, 10, 11, 12, 13, 14, 15, 16]])
+conv[3] = lambda x: helper_func3(x)
+conv[6] = lambda x: helper_func4(helper_func2(x))
+conv[7] = lambda x: helper_func4(helper_func2(x))
+
+poling_pv_df = DataFrame(loadtxt(
+    open(poling_pv_csv, 'r'),
+    delimiter='|',
+    skiprows=3,
+    dtype={
+        'names': [
+            'poling_no',
+            'poling_formula',
+            'poling_name',
+            'cas_no',
+            'poling_pv_eq',
+            'A/A/Tc',
+            'B/B/a',
+            'C/C/b',
+            'Tc/c',
+            'to/d',
+            'n/Pc',
+            'E',
+            'F',
+            'poling_pvpmin',
+            'poling_pv_tmin',
+            'poling_pvpmax',
+            'poling_pv_tmax'],
+        'formats': [
+                       int, object, object, object, int] + [float] * 12},
+    converters=conv
+))
+
+poling_pv_df_eq_3 = poling_pv_df[poling_pv_df['poling_pv_eq'] == 3][
+    [x for x in poling_pv_df.keys() if x not in [
+        'E', 'F', 'poling_name', 'poling_formula']]
+].rename(columns={
+    'A/A/Tc': 'poling_tc', 'B/B/a': 'wagn_a', 'C/C/b': 'wagn_b',
+    'Tc/c': 'wagn_c', 'to/d': 'wagn_d', 'n/Pc': 'poling_pc'})
+poling_pv_df_eq_2 = poling_pv_df[poling_pv_df['poling_pv_eq'] == 2][
+    [x for x in poling_pv_df.keys() if x not in [
+        'A/A/Tc', 'B/B/a', 'C/C/b', 'poling_name', 'poling_formula']]
+].rename(columns={
+    'A/A/Tc': 'p_ant_a', 'B/B/a': 'p_ant_b',
+    'C/C/b': 'p_ant_c', 'Tc/c': 'poling_tc', 'to/d': 'eant_to',
+    'n/Pc': 'eant_n', 'E': 'eant_e', 'F': 'eant_f'})
+poling_pv_df_eq_1 = poling_pv_df[poling_pv_df['poling_pv_eq'] == 1][
+    [x for x in poling_pv_df.keys() if x not in [
+        'E', 'F', 'Tc/c', 'to/d', 'n/Pc', 'poling_name', 'poling_formula']]
+].rename(columns={
+    'A/A/Tc': 'p_ant_a', 'B/B/a': 'p_ant_b', 'C/C/b': 'p_ant_c'})
+
+poling_pv_df = merge(merge(
+    poling_pv_df_eq_1, poling_pv_df_eq_2,
+    how='outer', on=['poling_no', 'cas_no'], suffixes=['_1', '_2']),
+      poling_pv_df_eq_3, how='outer', on=['poling_no', 'cas_no'],
+    suffixes=['', '_3'])
+
+poling_pv_df.update(
+    poling_pv_df.rename(
+        columns={'poling_tc': 'poling_tc_4',
+                 'poling_tc_3': 'poling_tc',
+                 'poling_pc': 'poling_pc_4',
+                 'poling_pc_3': 'poling_pc'}))
+poling_pv_df.update(
+    poling_pv_df.rename(columns={
+        'poling_tc': 'poling_tc_4',
+        'poling_tc_3': 'poling_tc'}))
+
+poling_df = merge(merge(    
+    poling_basic_i_df, poling_basic_ii_df,
+    how='outer', on=['cas_no', 'poling_no']),
+    poling_cp_ig_l_df, how='outer', on='cas_no')
+
+del poling_df['poling_no_y']
+poling_df = poling_df.rename(columns={'poling_no_x': 'poling_no'})
+poling_df = merge(poling_df, poling_pv_df, on=['cas_no', 'poling_no'], how='outer')
+
+poling_df = poling_df.rename(
+    columns={'poling_pc_x': 'poling_pc', 'poling_tc_x': 'poling_tc',
+             'poling_pv_tmin_1': 'p_ant_tmin',
+             'poling_pv_tmax_1': 'p_ant_tmax',
+             'poling_pvpmin_1': 'p_ant_pvpmin',
+             'poling_pvpmax_1': 'p_ant_pvpmax',
+             'poling_pv_tmin_2': 'eant_tmin',
+             'poling_pv_tmax_2': 'eant_tmax',
+             'poling_pvpmin_2': 'eant_pvpmin',
+             'poling_pvpmax_2': 'eant_pvpmax',
+             'poling_pv_tmin': 'wagn_tmin',
+             'poling_pv_tmax': 'wagn_tmax',
+             'poling_pvpmin': 'wagn_pvpmin',
+             'poling_pvpmax': 'wagn_pvpmax'
+             })
+poling_df.update(poling_df.rename(
+    columns={'poling_pc': 'poling_pc_x', 'poling_pc_y': 'poling_pc'}))
+
+del poling_df['poling_tc_y']
+del poling_df['poling_pc_y']
+del poling_df['poling_tc_3']
+del poling_df['poling_pv_eq_1']
+del poling_df['poling_pv_eq_2']
+del poling_df['poling_pv_eq']
+
+poling_burcat_df = merge(burcat_df, poling_df, on='cas_no', how='outer')
+df = merge(poling_burcat_df, ant_df, on='cas_no', how='outer')
+
+df['poling_a1'] = df['poling_a1'] * 1e-3
+df['poling_a2'] = df['poling_a2'] * 1e-5
+df['poling_a3'] = df['poling_a3'] * 1e-8
+df['poling_a4'] = df['poling_a4'] * 1e-11
+
+idx=isna(df['poling_omega'])
+pc_bar=df.loc[idx,'poling_pc']
+tbr=df.loc[idx,'poling_tb']/df.loc[idx,'poling_tc']
+f0_tbr,f1_tbr,f2_tbr=(-5.97616*(1-tbr)+1.29874*(1-tbr)**1.5-0.60394*(1-tbr)**2.5-1.06841*(1-tbr)**5)/tbr,(-5.03365*(1-tbr)+1.11505*(1-tbr)**1.5-5.41217*(1-tbr)**2.5-7.46628*(1-tbr)**5)/tbr,(-0.64771*(1-tbr)+2.41539*(1-tbr)**1.5-4.26979*(1-tbr)**2.5+3.25259*(1-tbr)**5)/tbr # Ambrose-Walton 1989
+df.loc[idx,'poling_omega']=-(log(pc_bar/1.01325)+f0_tbr)/f1_tbr
+
+df.loc[isna(df.formula_name_structure),'formula_name_structure']=''
+
+with open(merged_df_csv, 'w') as buf:
+    buf.write('sep=,\n')
+df.to_csv(merged_df_csv, na_rep='NaN', mode='a')
+
+wgn2_df=read_csv(wagn_2_csv,skiprows=2,sep='\t',converters={1:helper_func4}|{x:helper_func5 for x in range(2,18)})
+# cas no. based on pubchem (1st) + opsin (backup). Ref. https://pubchem.ncbi.nlm.nih.gov/docs/pug-rest#section=Input
+# since unfortunately only cid's and inchikeys (not names) can be entered as full lists, would need
+# to transform names into cids, which has the same cost as getting synonyms directly. Therefore:
+# 1. call all synonyms using py2opsin to get StdInChIKey in batch. OPSIN is secure but falsifies diatomic molecules (hydrogen, bromine, etc. interpreted as monatomic), though sulfur is no longer interpreted as H2S. Keep this response as fallback in case the pubchem call fails (because of nomenclature)
+# 2. call for each record the pubchem name method: slow but diatomic molecules interpreted correctly.
+wgn2_df['stdinchikeys']=py2opsin(wgn2_df.Substance,'StdInChIKey')
+idx=wgn2_df['stdinchikeys'].apply(len)==0
+wgn2_df.loc[idx,'stdinchikeys']=wgn2_df.loc[0,'stdinchikeys'] # placeholder
+wgn2_df['cas_no']=wgn2_df.Substance.apply(get_cas)
+wgn2_df=wgn2_df.rename(columns={'Tc':'Tc/K','Pc':'Pc/kPa'})
+
+wgn1_df=read_csv(wagn_1_csv,skiprows=2,sep='\t')
+wgn1_df['cas_no']=wgn1_df.Substance.apply(get_cas)
+wgn1_df['Tr,min']=wgn1_df['Experimental Tr range'].apply(lambda x:float(x.split('-')[0]))
+wgn1_df['Tr,max']=wgn1_df['Experimental Tr range'].apply(lambda x:float(x.split('-')[1]))
+wgn1_df=wgn1_df.rename(columns={'Tc':'Tc/K','Pc':'Pc/kPa'})
 
 
-df_wgn_m=merge(df_wgn1,df_wgn2,how='outer',on=['Substance'])
+wgn_m_df=merge(wgn1_df,wgn2_df,how='outer',on=['Substance'])
 labels=[x for x in ['cas_no']+[y for y in 'ABCD']+['Tc/K','Pc/kPa','Tr,min','Tr,max']]
 for label in [x for x in [y for y in 'ABCD']+['cas_no','Tc/K','Pc/kPa','Tr,min','Tr,max']]:
-    df_wgn_m[label]=df_wgn_m[label+'_x']
-    idx=isna(df_wgn_m[label])
-    df_wgn_m.loc[idx,label]=df_wgn_m.loc[idx,label+'_y']
+    wgn_m_df[label]=wgn_m_df[label+'_x']
+    idx=isna(wgn_m_df[label])
+    wgn_m_df.loc[idx,label]=wgn_m_df.loc[idx,label+'_y']
 
 with open(wagn_1_csv,'r') as f:
     with open(wagn_1_csv_new,'w') as n:
@@ -280,7 +486,7 @@ with open(wagn_1_csv,'r') as f:
             print(t)
             n.write(t)
 
-df_wgn1.to_csv(wagn_1_csv_new,sep='\t',index=False,header=False,mode='a')
+wgn1_df.to_csv(wagn_1_csv_new,sep='\t',index=False,header=False,mode='a')
 
 with open(wagn_2_csv,'r') as f:
     with open(wagn_2_csv_new,'w') as n:
@@ -291,9 +497,9 @@ with open(wagn_2_csv,'r') as f:
             print(t)
             n.write(t)
 
-df_wgn2.to_csv(wagn_2_csv_new,sep='\t',index=False,header=False,mode='a')
+wgn2_df.to_csv(wagn_2_csv_new,sep='\t',index=False,header=False,mode='a')
 
-df_wgn_m[['Substance']+labels].to_csv(wagn_m_csv_new,sep='\t',index=False,header=True)
+wgn_m_df[['Substance']+labels].to_csv(wagn_m_csv_new,sep='\t',index=False,header=True)
 
 # 1. read tables with flavor stream generates some duplicates
 # 2. character for - recognized as (cid:2) --> replace
@@ -306,23 +512,24 @@ df_wgn_m[['Substance']+labels].to_csv(wagn_m_csv_new,sep='\t',index=False,header
 # 8. remove duplicates and reset index, results in 275 components
 # 9. add cas numbers, add cas numbers to refrigerants (additional RXX number)
 tables=camelot.read_pdf(vdi_vp_tab_pdf,pages='all', flavor='stream')
-df_vdi_vp=concat([tables[j].df.map(lambda x:x.replace('(cid:2)','-')) for j in range(tables.n)],ignore_index=True)
-df_vdi_vp=df_vdi_vp.drop(index=[0,1]).rename(columns={j:x for j,x in enumerate(['Substance','Formula','5','10','50','100','250','500','1000','2000','5000','10000','A','B','C','D'])})
-df_vdi_vp.loc[df_vdi_vp.Formula=='C2Cl4F2','Substance']='1,1,2,2-Tetrachlorodifluoroethane'
-df_vdi_vp=df_vdi_vp.drop(df_vdi_vp.index[df_vdi_vp.Substance=='Tetrachlorodifluoroethane'])
-numeric_keys=[x for x in df_vdi_vp.keys() if x not in ['Substance','Formula']]
-df_vdi_vp=df_vdi_vp.drop(df_vdi_vp.index[(df_vdi_vp=='Vapor pressure in mbar').any(axis=1)|(df_vdi_vp.Substance=='Substance')|(df_vdi_vp.Substance.str.contains('Table'))|df_vdi_vp[numeric_keys].map(lambda x:re.search('[a-zA-Z]|,|\s',str(x).replace('nan','')) is not None).any(axis=1)]).reset_index(drop=True)
-df_vdi_vp[df_vdi_vp[numeric_keys]=='']=nan
-df_vdi_vp[numeric_keys]=df_vdi_vp[numeric_keys].map(float)
-df_vdi_vp=df_vdi_vp.reset_index(drop=True)
-idx=df_vdi_vp[isna(df_vdi_vp[numeric_keys]).all(axis=1)].index.to_list()+[df_vdi_vp.shape[0]-1]
+vdi_vp_df=concat([tables[j].df.map(lambda x:x.replace('(cid:2)','-')) for j in range(tables.n)],ignore_index=True)
+vdi_vp_df=vdi_vp_df.drop(index=[0,1]).rename(columns={j:x for j,x in enumerate(['Substance','Formula','5','10','50','100','250','500','1000','2000','5000','10000','A','B','C','D'])})
+vdi_vp_df.loc[vdi_vp_df.Formula=='C2Cl4F2','Substance']='1,1,2,2-Tetrachlorodifluoroethane'
+vdi_vp_df=vdi_vp_df.drop(vdi_vp_df.index[vdi_vp_df.Substance=='Tetrachlorodifluoroethane'])
+numeric_keys=[x for x in vdi_vp_df.keys() if x not in ['Substance','Formula']]
+vdi_vp_df=vdi_vp_df.drop(vdi_vp_df.index[(vdi_vp_df=='Vapor pressure in mbar').any(axis=1)|(vdi_vp_df.Substance=='Substance')|(vdi_vp_df.Substance.str.contains('Table'))|vdi_vp_df[numeric_keys].map(lambda x:re.search(r'[a-zA-Z]|,|\s',str(x).replace('nan','')) is not None).any(axis=1)]).reset_index(drop=True)
+vdi_vp_df[vdi_vp_df[numeric_keys]=='']=nan
+vdi_vp_df[numeric_keys]=vdi_vp_df[numeric_keys].map(float)
+vdi_vp_df=vdi_vp_df.reset_index(drop=True)
+idx=vdi_vp_df[isna(vdi_vp_df[numeric_keys]).all(axis=1)].index.to_list()+[vdi_vp_df.shape[0]-1]
 for j in range(1,len(idx)):
-    print(idx[j-1],idx[j],df_vdi_vp.Substance.loc[idx[j-1]])
-    df_vdi_vp.loc[idx[j-1]:idx[j],'class']=df_vdi_vp.Substance.loc[idx[j-1]]
-df_vdi_vp=df_vdi_vp.drop(df_vdi_vp.index[df_vdi_vp.Substance.duplicated()|isna(df_vdi_vp[numeric_keys]).all(axis=1)]).reset_index(drop=True)
-idx=df_vdi_vp.Substance.str.findall('\(R[\d]+\w*\)').apply(len)>0 # rows with refrigerant names
-df_vdi_vp['refrigerant']=df_vdi_vp.Substance.str.findall('\(R[\d]+\w*\)').apply(lambda x: x[0] if len(x)>0 else '')
-df_vdi_vp.Substance=df_vdi_vp.Substance.str.replace('\s*\(R[\d]+\w*\)','',regex=True)
-df_vdi_vp['cas_no']=df_vdi_vp.Substance.apply(get_cas_cir)
+    print(idx[j-1],idx[j],vdi_vp_df.Substance.loc[idx[j-1]])
+    vdi_vp_df.loc[idx[j-1]:idx[j],'class']=vdi_vp_df.Substance.loc[idx[j-1]]
+vdi_vp_df=vdi_vp_df.drop(vdi_vp_df.index[vdi_vp_df.Substance.duplicated()|isna(vdi_vp_df[numeric_keys]).all(axis=1)]).reset_index(drop=True)
+idx=vdi_vp_df.Substance.str.findall(r'\(R[\d]+\w*\)').apply(len)>0 # rows with refrigerant names
+vdi_vp_df['refrigerant']=vdi_vp_df.Substance.str.findall(r'\(R[\d]+\w*\)').apply(lambda x: x[0] if len(x)>0 else '')
+vdi_vp_df.Substance=vdi_vp_df.Substance.str.replace(r'\s*\(R[\d]+\w*\)','',regex=True)
+vdi_vp_df['cas_no']=vdi_vp_df.Substance.apply(get_cas)
 
-df_vdi_vp[['Substance','Formula','refrigerant','cas_no']+numeric_keys].to_csv(vdi_csv)
+vdi_vp_df[['Substance','Formula','refrigerant','cas_no']+numeric_keys].to_csv(vdi_csv)
+
