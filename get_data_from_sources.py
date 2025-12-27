@@ -18,6 +18,8 @@ burcat_xml_file = Path('data/BURCAT_THR.xml')
 template = Path('data/xsl_stylesheet_burcat.xsl')
 thermodyn2xml = Path('data/Thermodyn2XML_vanilla_7_11_05.py')
 burcat_thr = Path('data/BURCAT.THR')
+burcat_patch = Path('data/patch_BURCAT_THR.diff')
+thermodyn2xml_patch = Path('data/patch_Thermodyn2XML_vanilla_7_11_05_py.diff')
 antoine_csv = Path('data/The-Yaws-Handbook-of-Vapor-Pressure-Second-Edition-Antoine-coefficients.csv')
 antoine_csv_new = Path('/'.join([x if j==0 else antoine_csv.stem+'_more_cas_resolved.csv' for j,x in enumerate(antoine_csv.parts)]))
 wagn_2_csv=Path('data/table2_wagner_doi.org_10.1016_j.jct.2011.03.011.csv')
@@ -27,7 +29,7 @@ wagn_1_csv_new = Path('/'.join([antoine_csv.parts[0],wagn_1_csv.stem+'_cas.csv']
 wagn_m_csv=Path('data/tables_wagner_doi.org_10.1016_j.jct.2011.03.011.csv')
 wagn_m_csv_new = Path('/'.join([antoine_csv.parts[0],wagn_m_csv.stem+'_cas.csv']))
 burcat_url = 'https://respecth.elte.hu/burcat/BURCAT.THR.txt'
-patch_url = 'https://gist.githubusercontent.com/santiago-salas-v/6f408779c65a0267372c0ed66ff21fe4/raw/38f1621ea9dc03e265468f4d3ab5e8f5ce2515d4/Thermodyn2XML_vanilla_7_11_05.py' # original py script was removed (only exe remaining) from the original path in https://respecth.elte.hu/burcat/dist.zip
+thermodyn2xml_url = 'https://gist.githubusercontent.com/santiago-salas-v/6f408779c65a0267372c0ed66ff21fe4/raw/38f1621ea9dc03e265468f4d3ab5e8f5ce2515d4/Thermodyn2XML_vanilla_7_11_05.py' # original py script was removed (only exe remaining) from the original path in https://respecth.elte.hu/burcat/dist.zip
 ddbst_adress = 'http://www.ddbst.com/published-parameters-unifac.html'
 vdi_vp_tab_pdf=Path('data/vdi_heat_atlas_2nd_2010_3.1-table_3.pdf')
 vdi_csv=Path('data/vdi_heat_atlas_2nd_2010_3.1-table_3.csv')
@@ -37,33 +39,32 @@ poling_cp_l_ig_poly_csv = Path('data/ig_l_heat_capacities_properties_of_gases_an
 poling_pv_csv = Path('data/vapor_pressure_correlations_parameters_clean.csv')
 merged_df_csv = Path('data/th_data_df.csv')
 
-if not Path(burcat_thr).exists():
+if not burcat_thr.exists():
     url = burcat_url
-    patch = 'patch_BURCAT_THR.diff'
 
     path, headers = request.urlretrieve(url, burcat_thr)
     print(f'file produced successfully: {burcat_thr}')
     try:
-        print(check_call(['patch', '-p1', burcat_thr, patch])) # newer version with fixes already available
+        print(check_call(['patch', '-p1', burcat_thr, burcat_patch])) # newer version with fixes already available
         print(f'patch applied successfully: {burcat_thr}.')
     except CalledProcessError:
         print(f'called process error: {burcat_thr}')
 else:
     print(f'file already exists: {burcat_thr}')
 
-if not Path(burcat_xml_file).exists():
-    url = patch_url
-    patch = 'patch_Thermodyn2XML_vanilla_7_11_05_py.diff'
+if not burcat_xml_file.exists():
+    url = thermodyn2xml_url
 
     path, headers = request.urlretrieve(url, thermodyn2xml)
     try:
-        print(check_call(['patch', '-p1', thermodyn2xml,  patch]))
+        print(check_call(['patch', '-p1', thermodyn2xml,  thermodyn2xml_patch]))
         print('patch applied successfully.')
     except CalledProcessError:
         print(f'called process error: {thermodyn2xml}')
 
     check_call(['python', thermodyn2xml, burcat_thr])
 
+    Path(burcat_thr.name.replace('.','_')+'.xml').rename(burcat_xml_file)
     print(f'file produced successfully: {burcat_xml_file}')
 else:
     print(f'file already exists: {burcat_xml_file}')
@@ -162,19 +163,19 @@ for line in request.urlopen(ddbst_adress):
 parser = TableHTMLParser()
 parser.feed(page_str)
 
-f = open('data/unifac_list_of_interaction_parameters.csv', 'w')
+f = open('data/unifac_list_of_interaction_parameters.csv', 'w', encoding='utf-8')
 f.write('sep=,'+'\n')
 for line in parser.tables[0]:
     f.write(','.join(line)+'\n')
 f.close()
 
-f = open('data/unifac_sub_groups_surfaces_and_volumes.csv', 'w')
+f = open('data/unifac_sub_groups_surfaces_and_volumes.csv', 'w', encoding='utf-8')
 f.write('sep=,'+'\n')
 for line in parser.tables[1]:
     f.write(','.join(line)+'\n')
 f.close()
 
-f = open('data/unifac_main_groups.csv', 'w')
+f = open('data/unifac_main_groups.csv', 'w', encoding='utf-8')
 f.write('sep=,'+'\n')
 for line in parser.tables[2]:
     f.write(','.join(line)+'\n')
@@ -217,7 +218,7 @@ def helper_func5(x):
 
 
 ant_df = DataFrame(loadtxt(
-    open(antoine_csv, 'r'),
+    open(antoine_csv, 'r', encoding='utf-8'),
     delimiter='|',
     skiprows=9,
     dtype={
@@ -251,8 +252,8 @@ idx=(ant_df.cas_no=='---')|(ant_df.cas_no=='—') # missinc CAS
 idx=idx.index[idx][:3] # limit to first 15
 ant_df.loc[idx,'cas_no']=ant_df.ant_name.loc[idx].apply(get_cas)
 
-with open(antoine_csv,'r') as f:
-    with open(antoine_csv_new,'w') as n:
+with open(antoine_csv,'r', encoding='utf-8') as f:
+    with open(antoine_csv_new,'w', encoding='utf-8') as n:
         for j in range(9):
             t=f.readline()
             print(t)
@@ -261,7 +262,7 @@ with open(antoine_csv,'r') as f:
 ant_df.to_csv(antoine_csv_new,sep='|',index=False,header=False,mode='a')
 
 poling_basic_i_df = DataFrame(loadtxt(
-    open(poling_basic_i_csv, 'r'),
+    open(poling_basic_i_csv, 'r', encoding='utf-8'),
     delimiter='|',
     skiprows=3,
     dtype={
@@ -283,7 +284,7 @@ poling_basic_i_df = DataFrame(loadtxt(
 ))
 
 poling_basic_ii_df = DataFrame(loadtxt(
-    open(poling_basic_ii_csv, 'r'),
+    open(poling_basic_ii_csv, 'r', encoding='utf-8'),
     delimiter='|',
     skiprows=3,
     usecols=(3, 4, 5, 6, 7, 8, 9, 10, 0),
@@ -305,7 +306,7 @@ poling_basic_ii_df = DataFrame(loadtxt(
 ))
 
 poling_cp_ig_l_df = DataFrame(loadtxt(
-    open(poling_cp_l_ig_poly_csv, 'r'),
+    open(poling_cp_l_ig_poly_csv, 'r', encoding='utf-8'),
     delimiter='|',
     skiprows=4,
     usecols=(3, 4, 5, 6, 7, 8, 9, 10, 11, 0),
@@ -334,7 +335,7 @@ conv[6] = lambda x: helper_func4(helper_func2(x))
 conv[7] = lambda x: helper_func4(helper_func2(x))
 
 poling_pv_df = DataFrame(loadtxt(
-    open(poling_pv_csv, 'r'),
+    open(poling_pv_csv, 'r', encoding='utf-8'),
     delimiter='|',
     skiprows=3,
     dtype={
@@ -447,7 +448,7 @@ df.loc[idx,'poling_omega']=-(log(pc_bar/1.01325)+f0_tbr)/f1_tbr
 
 df.loc[isna(df.formula_name_structure),'formula_name_structure']=''
 
-with open(merged_df_csv, 'w') as buf:
+with open(merged_df_csv, 'w', encoding='utf-8') as buf:
     buf.write('sep=,\n')
 df.to_csv(merged_df_csv, na_rep='NaN', mode='a')
 
@@ -477,8 +478,8 @@ for label in [x for x in [y for y in 'ABCD']+['cas_no','Tc/K','Pc/kPa','Tr,min',
     idx=isna(wgn_m_df[label])
     wgn_m_df.loc[idx,label]=wgn_m_df.loc[idx,label+'_y']
 
-with open(wagn_1_csv,'r') as f:
-    with open(wagn_1_csv_new,'w') as n:
+with open(wagn_1_csv,'r', encoding='utf-8') as f:
+    with open(wagn_1_csv_new,'w', encoding='utf-8') as n:
         for j in range(3):
             t=f.readline()
             if j > 0:
@@ -488,8 +489,8 @@ with open(wagn_1_csv,'r') as f:
 
 wgn1_df.to_csv(wagn_1_csv_new,sep='\t',index=False,header=False,mode='a')
 
-with open(wagn_2_csv,'r') as f:
-    with open(wagn_2_csv_new,'w') as n:
+with open(wagn_2_csv,'r', encoding='utf-8') as f:
+    with open(wagn_2_csv_new,'w', encoding='utf-8') as n:
         for j in range(3):
             t=f.readline()
             if j > 0:
@@ -511,7 +512,7 @@ wgn_m_df[['Substance']+labels].to_csv(wagn_m_csv_new,sep='\t',index=False,header
 # 7. propagate classifications to rows below class names
 # 8. remove duplicates and reset index, results in 275 components
 # 9. add cas numbers, add cas numbers to refrigerants (additional RXX number)
-tables=camelot.read_pdf(vdi_vp_tab_pdf,pages='all', flavor='stream')
+tables=camelot.read_pdf(str(vdi_vp_tab_pdf),pages='all', flavor='stream')
 vdi_vp_df=concat([tables[j].df.map(lambda x:x.replace('(cid:2)','-')) for j in range(tables.n)],ignore_index=True)
 vdi_vp_df=vdi_vp_df.drop(index=[0,1]).rename(columns={j:x for j,x in enumerate(['Substance','Formula','5','10','50','100','250','500','1000','2000','5000','10000','A','B','C','D'])})
 vdi_vp_df.loc[vdi_vp_df.Formula=='C2Cl4F2','Substance']='1,1,2,2-Tetrachlorodifluoroethane'
