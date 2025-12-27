@@ -4,7 +4,7 @@ from time import sleep
 from subprocess import check_call, CalledProcessError
 from lxml import etree as et
 import string, re
-from numpy import loadtxt,nan,log
+from numpy import loadtxt,nan,log,exp
 from pandas import DataFrame, read_csv, merge, isna, concat
 from pathlib import Path
 from py2opsin import py2opsin # pip install py2opsin # fast get StdInChIKey
@@ -241,15 +241,21 @@ ant_df = DataFrame(loadtxt(
 def get_cas(x):
     # try pubchem directly, 
     response=[] # name not resolved
-    synonyms=get_synonyms(x,'name')
+    synonyms=get_synonyms(x,'name') #[0] # acetic acid has 3 CIDS first is ok.
+    if len(synonyms)==0: 
+        # not directly found but attempt py2opsin (can manage e.g. "ethyl cyclohexane")
+        inchikey=py2opsin(x,'StdInChIKey')
+        if inchikey:
+            synonyms=get_synonyms(inchikey,'inchikey') #[0] # acetic acid has 3 CIDS first is ok.
     for c in synonyms:
-        response+=[y for y in c['Synonym'] if re.match(r'^\d{2,7}-\d{2}-\d{1}$',y.strip())]
+        if 'Synonym' in c.keys():
+            response+=[y for y in c['Synonym'] if re.match(r'^\d{2,7}-\d{2}-\d{1}$',y.strip())]
     response=','.join(response)
     print(x,response)
     return response
 
-idx=(ant_df.cas_no=='---')|(ant_df.cas_no=='—') # missinc CAS
-idx=idx.index[idx][:3] # limit to first 15
+idx=(ant_df.cas_no=='---')|(ant_df.cas_no=='—')|(ant_df.cas_no=='—') # missinc CAS
+idx=idx.index[idx][:0] # limit to first 15
 ant_df.loc[idx,'cas_no']=ant_df.ant_name.loc[idx].apply(get_cas)
 
 with open(antoine_csv,'r', encoding='utf-8') as f:
@@ -446,11 +452,7 @@ tbr=df.loc[idx,'poling_tb']/df.loc[idx,'poling_tc']
 f0_tbr,f1_tbr,f2_tbr=(-5.97616*(1-tbr)+1.29874*(1-tbr)**1.5-0.60394*(1-tbr)**2.5-1.06841*(1-tbr)**5)/tbr,(-5.03365*(1-tbr)+1.11505*(1-tbr)**1.5-5.41217*(1-tbr)**2.5-7.46628*(1-tbr)**5)/tbr,(-0.64771*(1-tbr)+2.41539*(1-tbr)**1.5-4.26979*(1-tbr)**2.5+3.25259*(1-tbr)**5)/tbr # Ambrose-Walton 1989
 df.loc[idx,'poling_omega']=-(log(pc_bar/1.01325)+f0_tbr)/f1_tbr
 
-df.loc[isna(df.formula_name_structure),'formula_name_structure']=''
-
-with open(merged_df_csv, 'w', encoding='utf-8') as buf:
-    buf.write('sep=,\n')
-df.to_csv(merged_df_csv, na_rep='NaN', mode='a')
+df.loc[isna(df.formula_name_structure),'formula_name_structure']='' # enable .str.contains
 
 wgn2_df=read_csv(wagn_2_csv,skiprows=2,sep='\t',converters={1:helper_func4}|{x:helper_func5 for x in range(2,18)})
 # cas no. based on pubchem (1st) + opsin (backup). Ref. https://pubchem.ncbi.nlm.nih.gov/docs/pug-rest#section=Input
@@ -458,9 +460,8 @@ wgn2_df=read_csv(wagn_2_csv,skiprows=2,sep='\t',converters={1:helper_func4}|{x:h
 # to transform names into cids, which has the same cost as getting synonyms directly. Therefore:
 # 1. call all synonyms using py2opsin to get StdInChIKey in batch. OPSIN is secure but falsifies diatomic molecules (hydrogen, bromine, etc. interpreted as monatomic), though sulfur is no longer interpreted as H2S. Keep this response as fallback in case the pubchem call fails (because of nomenclature)
 # 2. call for each record the pubchem name method: slow but diatomic molecules interpreted correctly.
-wgn2_df['stdinchikeys']=py2opsin(wgn2_df.Substance,'StdInChIKey')
-idx=wgn2_df['stdinchikeys'].apply(len)==0
-wgn2_df.loc[idx,'stdinchikeys']=wgn2_df.loc[0,'stdinchikeys'] # placeholder
+#wgn2_df['stdinchikeys']=py2opsin(wgn2_df.Substance,'StdInChIKey')
+
 wgn2_df['cas_no']=wgn2_df.Substance.apply(get_cas)
 wgn2_df=wgn2_df.rename(columns={'Tc':'Tc/K','Pc':'Pc/kPa'})
 
@@ -472,11 +473,35 @@ wgn1_df=wgn1_df.rename(columns={'Tc':'Tc/K','Pc':'Pc/kPa'})
 
 
 wgn_m_df=merge(wgn1_df,wgn2_df,how='outer',on=['Substance'])
-labels=[x for x in ['cas_no']+[y for y in 'ABCD']+['Tc/K','Pc/kPa','Tr,min','Tr,max']]
 for label in [x for x in [y for y in 'ABCD']+['cas_no','Tc/K','Pc/kPa','Tr,min','Tr,max']]:
     wgn_m_df[label]=wgn_m_df[label+'_x']
     idx=isna(wgn_m_df[label])
     wgn_m_df.loc[idx,label]=wgn_m_df.loc[idx,label+'_y']
+
+wgn_m_df['tmin']=wgn_m_df['Tr,min']*wgn_m_df['Tc/K']
+wgn_m_df['tmax']=wgn_m_df['Tr,max']*wgn_m_df['Tc/K']
+
+def pg(t,x,tc,pc):
+    a,b,c,d=x
+    return pc*exp(tc/t*(a*(1-t/tc)+b*(1-t/tc)**1.5+c*(1-t/tc)**2.5+d*(1-t/tc)**5)) # Wagner, t in K, psat in bar
+
+wgn_m_df['pvpmin']=pg(wgn_m_df['tmin'],wgn_m_df[[j for j in 'ABCD']].to_numpy().T,wgn_m_df['Tc/K'],wgn_m_df['Pc/kPa']*1e3/1e5)
+wgn_m_df['pvpmax']=pg(wgn_m_df['tmax'],wgn_m_df[[j for j in 'ABCD']].to_numpy().T,wgn_m_df['Tc/K'],wgn_m_df['Pc/kPa']*1e3/1e5)
+
+
+for j,x in enumerate(wgn_m_df.cas_no):
+    for y in x.split(','):
+        if len(y)>0 and y not in ['---','—','—','NaN']:
+            idx=df.cas_no.str.contains(y)
+            df.loc[idx,'wagn_a']=wgn_m_df.iloc[j].A
+            df.loc[idx,'wagn_b']=wgn_m_df.iloc[j].B
+            df.loc[idx,'wagn_c']=wgn_m_df.iloc[j].C
+            df.loc[idx,'wagn_d']=wgn_m_df.iloc[j].D
+            df.loc[idx,'wagn_pvpmax']=wgn_m_df.iloc[j].pvpmax
+            df.loc[idx,'wagn_pvpmin']=wgn_m_df.iloc[j].pvpmin
+            df.loc[idx,'wagn_tmax']=wgn_m_df.iloc[j].tmax
+            df.loc[idx,'wagn_tmin']=wgn_m_df.iloc[j].tmin
+
 
 with open(wagn_1_csv,'r', encoding='utf-8') as f:
     with open(wagn_1_csv_new,'w', encoding='utf-8') as n:
@@ -500,6 +525,7 @@ with open(wagn_2_csv,'r', encoding='utf-8') as f:
 
 wgn2_df.to_csv(wagn_2_csv_new,sep='\t',index=False,header=False,mode='a')
 
+labels=[x for x in ['cas_no']+[y for y in 'ABCD']+['Tc/K','Pc/kPa','tmin','tmax']]
 wgn_m_df[['Substance']+labels].to_csv(wagn_m_csv_new,sep='\t',index=False,header=True)
 
 # 1. read tables with flavor stream generates some duplicates
@@ -514,9 +540,11 @@ wgn_m_df[['Substance']+labels].to_csv(wagn_m_csv_new,sep='\t',index=False,header
 # 9. add cas numbers, add cas numbers to refrigerants (additional RXX number)
 tables=camelot.read_pdf(str(vdi_vp_tab_pdf),pages='all', flavor='stream')
 vdi_vp_df=concat([tables[j].df.map(lambda x:x.replace('(cid:2)','-')) for j in range(tables.n)],ignore_index=True)
-vdi_vp_df=vdi_vp_df.drop(index=[0,1]).rename(columns={j:x for j,x in enumerate(['Substance','Formula','5','10','50','100','250','500','1000','2000','5000','10000','A','B','C','D'])})
+pressures_mbar=['5','10','50','100','250','500','1000','2000','5000','10000'] # mbar
+vdi_vp_df=vdi_vp_df.drop(index=[0,1]).rename(columns={j:x for j,x in enumerate(['Substance','Formula']+pressures_mbar+['A','B','C','D'])})
 vdi_vp_df.loc[vdi_vp_df.Formula=='C2Cl4F2','Substance']='1,1,2,2-Tetrachlorodifluoroethane'
 vdi_vp_df=vdi_vp_df.drop(vdi_vp_df.index[vdi_vp_df.Substance=='Tetrachlorodifluoroethane'])
+vdi_vp_df.loc[vdi_vp_df.Substance=='Dinitrogentetroxide','Substance']='Dinitrogen tetroxide'
 numeric_keys=[x for x in vdi_vp_df.keys() if x not in ['Substance','Formula']]
 vdi_vp_df=vdi_vp_df.drop(vdi_vp_df.index[(vdi_vp_df=='Vapor pressure in mbar').any(axis=1)|(vdi_vp_df.Substance=='Substance')|(vdi_vp_df.Substance.str.contains('Table'))|vdi_vp_df[numeric_keys].map(lambda x:re.search(r'[a-zA-Z]|,|\s',str(x).replace('nan','')) is not None).any(axis=1)]).reset_index(drop=True)
 vdi_vp_df[vdi_vp_df[numeric_keys]=='']=nan
@@ -530,7 +558,28 @@ vdi_vp_df=vdi_vp_df.drop(vdi_vp_df.index[vdi_vp_df.Substance.duplicated()|isna(v
 idx=vdi_vp_df.Substance.str.findall(r'\(R[\d]+\w*\)').apply(len)>0 # rows with refrigerant names
 vdi_vp_df['refrigerant']=vdi_vp_df.Substance.str.findall(r'\(R[\d]+\w*\)').apply(lambda x: x[0] if len(x)>0 else '')
 vdi_vp_df.Substance=vdi_vp_df.Substance.str.replace(r'\s*\(R[\d]+\w*\)','',regex=True)
+vdi_vp_df['pvpmin']=vdi_vp_df[pressures_mbar].apply(lambda x:pressures_mbar[isna(x).to_list().index(False)],axis=1).astype(float)/1000 # minimum and maximum pvap in bar
+vdi_vp_df['pvpmax']=vdi_vp_df[pressures_mbar].apply(lambda x:pressures_mbar[::-1][isna(x).to_list()[::-1].index(False)],axis=1).astype(float)/1000 # minimum and maximum pvap in bar
+vdi_vp_df['tmin']=vdi_vp_df[pressures_mbar].apply(lambda x:x[pressures_mbar[isna(x).to_list().index(False)]],axis=1).astype(float)+273.15 # minimum and maximum temperature in °C
+vdi_vp_df['tmax']=vdi_vp_df[pressures_mbar].apply(lambda x:x[pressures_mbar[::-1][isna(x).to_list()[::-1].index(False)]],axis=1).astype(float)+273.15 # minimum and maximum temperature in °C
 vdi_vp_df['cas_no']=vdi_vp_df.Substance.apply(get_cas)
 
 vdi_vp_df[['Substance','Formula','refrigerant','cas_no']+numeric_keys].to_csv(vdi_csv)
+
+for j,x in enumerate(vdi_vp_df.cas_no):
+    for y in x.split(','):
+        if len(y)>0 and y not in ['---','—','—','NaN']:
+            idx=df.cas_no.str.contains(y)
+            df.loc[idx,'wagn_a']=vdi_vp_df.iloc[j].A
+            df.loc[idx,'wagn_b']=vdi_vp_df.iloc[j].B
+            df.loc[idx,'wagn_c']=vdi_vp_df.iloc[j].C
+            df.loc[idx,'wagn_d']=vdi_vp_df.iloc[j].D
+            df.loc[idx,'wagn_pvpmax']=vdi_vp_df.iloc[j].pvpmax
+            df.loc[idx,'wagn_pvpmin']=vdi_vp_df.iloc[j].pvpmin
+            df.loc[idx,'wagn_tmax']=vdi_vp_df.iloc[j].tmax
+            df.loc[idx,'wagn_tmin']=vdi_vp_df.iloc[j].tmin
+
+with open(merged_df_csv, 'w', encoding='utf-8') as buf:
+    buf.write('sep=,\n')
+df.to_csv(merged_df_csv, na_rep='NaN', mode='a')
 
