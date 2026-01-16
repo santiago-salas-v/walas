@@ -18,7 +18,7 @@ from PySide6.QtWidgets import QComboBox, QLabel, QTableWidget, QTableWidgetItem
 from PySide6.QtWidgets import QGridLayout, QLineEdit, QPushButton
 from PySide6.QtWidgets import QSizePolicy
 from PySide6.QtWidgets import QTableView, QApplication, QWidget
-from numpy import loadtxt, isnan, empty_like, linspace, zeros, ones, dtype, log
+from numpy import loadtxt, isnan, empty_like, linspace, zeros, ones, dtype, log, array, finfo, sqrt, exp, log, sign, emath, cos, sin, finfo, pi
 from pandas import DataFrame, merge, to_numeric, read_csv, isna
 
 matplotlib.use('Qt5Agg')
@@ -443,6 +443,8 @@ class thTableModel(QAbstractTableModel):
                                 'ant_a', 'ant_b',
                                 'ant_c', 'ant_tmin', 'ant_tmax',
                                 'ant_code'
+                            ] + [
+                                'lj_b0', 'lj_sigma', 'lj_epsilon_kB'
                             ]
 
         self.column_dtypes = [
@@ -474,7 +476,8 @@ class thTableModel(QAbstractTableModel):
                                  float, str, str,
                                  float, float,
                                  float, float, float,
-                                 str
+                                 str,
+                                 float, float, float
                              ]
 
         self.column_units = [
@@ -505,7 +508,8 @@ class thTableModel(QAbstractTableModel):
             '', '', '',
             '', '', '',
             '°C', '°C',
-            ''
+            '',
+            'cm3/mol', 'angstrom', 'K'
         ]
 
         self.dtypes = []
@@ -546,7 +550,8 @@ class thTableModel(QAbstractTableModel):
             'wagn_tmin': float, 'wagn_pvpmax': float, 'wagn_tmax': float,
             'ant_no': float, 'ant_formula': object, 'ant_name': object,
             'ant_a': float, 'ant_b': float, 'ant_c': float,
-            'ant_tmin': float, 'ant_tmax': float, 'ant_code': object}
+            'ant_tmin': float, 'ant_tmax': float, 'ant_code': object,
+            'lj_b0': float, 'lj_sigma': float, 'lj_epsilon_kB': float}
 
         self.df = read_csv(merged_df_csv, skiprows=1, sep=',', index_col=0,
                            keep_default_na=False, na_values=['NaN'], dtype=dtypes_dict)
@@ -731,6 +736,12 @@ if __name__ == '__main__':
     ex.tableView1.selectRow(0)
 
     ex.phase_filter.setCurrentIndex(ex.phase_filter.findText('G'))
+    ex.cas_filter.setText('')
+    ex.name_filter.setText('ammonia')
+    ex.formula_filter.setText('NH3')
+    ex.tableView1.selectRow(0)
+
+    ex.phase_filter.setCurrentIndex(ex.phase_filter.findText('G'))
     ex.cas_filter.setText('107-31-3')
     ex.name_filter.setText('methyl formate')
     ex.formula_filter.setText('C2H4O2')
@@ -796,12 +807,6 @@ if __name__ == '__main__':
     ex.cas_filter.setText('7446-09-5')
     ex.name_filter.setText('')
     ex.formula_filter.setText('SO2')
-    ex.tableView1.selectRow(0)
-
-    ex.phase_filter.setCurrentIndex(ex.phase_filter.findText('G'))
-    ex.cas_filter.setText('')
-    ex.name_filter.setText('ammonia')
-    ex.formula_filter.setText('NH3')
     ex.tableView1.selectRow(0)
 
     ex.phase_filter.setCurrentIndex(ex.phase_filter.findText(''))
