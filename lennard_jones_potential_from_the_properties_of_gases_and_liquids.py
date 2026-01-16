@@ -7,9 +7,10 @@ import camelot
 
 names = ['CO', 'CO2', 'H2', 'H2O', 'CH3OH', 'CH4', 'N2', 'C2H5OH', 'n-C3H7OH', 'CH3COOCH3']
 lj_csv=Path('data/lennard_jones_params_properties_of_gases_and_liquids.csv')
-merged_df_csv = 'data/th_data_df.csv'
+merged_df_csv = Path('data/th_data_df.csv')
+poling_lj_tab=Path('data/lj_params_properties_of_gases_and_liquids.pdf')
 
-tables=camelot.read_pdf("C:/Users/sala_sn/Downloads/The properties of gases and Liquids Poling Prausnitz O'Connell.pdf",pages='779-780', flavor='stream')
+tables=camelot.read_pdf(poling_lj_tab,pages='all', flavor='stream')
 
 df=concat([tables[j].df for j in range(tables.n)]).drop_duplicates()
 # lj_b0 in cm3/gmol, lj_sigma in Angstrom, lj_epsilon_kB in K
