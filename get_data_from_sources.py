@@ -38,6 +38,8 @@ poling_basic_ii_csv = Path('data/basic_constants_ii_properties_of_gases_and_liqu
 poling_cp_l_ig_poly_csv = Path('data/ig_l_heat_capacities_properties_of_gases_and_liquids.csv')
 poling_pv_csv = Path('data/vapor_pressure_correlations_parameters_clean.csv')
 merged_df_csv = Path('data/th_data_df.csv')
+poling_lj_tab=Path('data/lj_params_properties_of_gases_and_liquids.pdf')
+lj_csv=Path('data/lennard_jones_params_properties_of_gases_and_liquids.csv')
 
 if not burcat_thr.exists():
     url = burcat_url
@@ -578,6 +580,24 @@ for j,x in enumerate(vdi_vp_df.cas_no):
             df.loc[idx,'wagn_pvpmin']=vdi_vp_df.iloc[j].pvpmin
             df.loc[idx,'wagn_tmax']=vdi_vp_df.iloc[j].tmax
             df.loc[idx,'wagn_tmin']=vdi_vp_df.iloc[j].tmin
+
+# Lennard-Jones
+tables=camelot.read_pdf(poling_lj_tab,pages='all', flavor='stream')
+
+lj_df=concat([tables[j].lj_df for j in range(tables.n)]).drop_duplicates()
+# lj_b0 in cm3/gmol, lj_sigma in Angstrom, lj_epsilon_kB in K
+lj_df=lj_df[lj_df[0].apply(lambda x: x not in ['','B.2'])].reset_index(drop=True).rename(columns={0:'Formula',1:'Substance',2:'lj_b0',3:'lj_sigma',4:'lj_epsilon_kB'}).map(lambda x:x.replace('§','').replace('ﬂu','flu').replace('ﬁde','fide'))
+lj_df=lj_df.astype(dtype={'Formula':str,'Substance':str,'lj_b0':float,'lj_sigma':float,'lj_epsilon_kB':float})
+
+lj_df['cas_no']=lj_df.Substance.apply(get_cas)
+
+[[[j]+[y]+df[df.cas_no.str.contains(y)].formula_name_structure.to_list()+df[df.cas_no.str.contains(y)].wagn_a.to_list() for y in x.split(',') if len(y)>0] for j,x in enumerate(lj_df.cas_no)]
+
+for j,x in lj_df.cas_no.items():
+    for y in x.split(','):
+        if len(y)>0 and y not in ['---','—','—','NaN']:
+            for label in ['lj_b0','lj_sigma','lj_epsilon_kB']:
+                df.loc[df.cas_no.str.contains(y),label]=lj_df.loc[j,label]
 
 with open(merged_df_csv, 'w', encoding='utf-8') as buf:
     buf.write('sep=,\n')
