@@ -582,9 +582,9 @@ for j,x in enumerate(vdi_vp_df.cas_no):
             df.loc[idx,'wagn_tmin']=vdi_vp_df.iloc[j].tmin
 
 # Lennard-Jones
-tables=camelot.read_pdf(poling_lj_tab,pages='all', flavor='stream')
+tables=camelot.read_pdf(str(poling_lj_tab),pages='all', flavor='stream')
 
-lj_df=concat([tables[j].lj_df for j in range(tables.n)]).drop_duplicates()
+lj_df=concat([tables[j].df for j in range(tables.n)]).drop_duplicates()
 # lj_b0 in cm3/gmol, lj_sigma in Angstrom, lj_epsilon_kB in K
 lj_df=lj_df[lj_df[0].apply(lambda x: x not in ['','B.2'])].reset_index(drop=True).rename(columns={0:'Formula',1:'Substance',2:'lj_b0',3:'lj_sigma',4:'lj_epsilon_kB'}).map(lambda x:x.replace('§','').replace('ﬂu','flu').replace('ﬁde','fide'))
 lj_df=lj_df.astype(dtype={'Formula':str,'Substance':str,'lj_b0':float,'lj_sigma':float,'lj_epsilon_kB':float})
