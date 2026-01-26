@@ -1,76 +1,72 @@
-from numpy import array, lexsort, pi, cos, arccos, log10
+from numpy import array, lexsort, pi, cos, arccos, log10, sign, emath, abs, sqrt
+from numpy import finfo
+eps=finfo(float).eps
 
 
-def solve_cubic(abcd):
+def solve_cubic(p):
     """ solve cubic polynomial - Tartaglia-Cardano
 
     ref. Polyanin, Manzhirov Handbook of Mathematics for engineers
     and scientists
 
-    a*x^3+b*x^2+c*x+d=0
+    vectorized p(3) roots for (n by 3) p
+    p[0]x^3+p[1]x^2+p[2]x^1+p[3]x^0=0
 
     params:
-    abc: list [a,b,c,d] of parameters
+    p: list of parameters
 
     returns:
     dict with {'roots': [x1, x2, x3], 'disc': disc} 
     where roots are pairs [Re(xi), Im(xi)]
     """
-    a, b, c, d = abcd
-    # transform to incomplete eq y^3+py+q=0
-    # substitution  x = y-b/(3a)
-    p = -1 / 3 * (b / a)**2 + c / a
-    q = 2 / 27 * (b / a)**3 - 1 / 3 * b * c / a**2 + d / a
-
-    # roots of the incomplete eq
-    # as [Re(yi), Im(yi)]
-    disc = (p / 3)**3 + (q / 2)**2
-
-    if disc < 0:
-        # 3 real roots
-        re_y1 = 2 * (-p / 3)**(1 / 2) * cos(
-            1 / 3 * arccos(-q / 2 / (-p / 3)**(3 / 2)) + 0 * 2 * pi / 3)
-        re_y2 = 2 * (-p / 3)**(1 / 2) * cos(
-            1 / 3 * arccos(-q / 2 / (-p / 3)**(3 / 2)) + 1 * 2 * pi / 3)
-        re_y3 = 2 * (-p / 3)**(1 / 2) * cos(
-            1 / 3 * arccos(-q / 2 / (-p / 3)**(3 / 2)) + 2 * 2 * pi / 3)
-        im_y1, im_y2, im_y3 = 0, 0, 0
-    elif disc >=0:
-
-        if -q / 2 + (disc)**(1 / 2) < 0:
-            # avoid complex bv by negative root
-            au = -(+q / 2 - (disc)**(1 / 2))**(1 / 3)
-        else:
-            au = (-q / 2 + (disc) ** (1 / 2)) ** (1 / 3)
-        if -q / 2 - (disc)**(1 / 2) < 0:
-            # avoid complex bv by negative root
-            bv = -(+q / 2 + (disc)**(1 / 2))**(1 / 3)
-        else:
-            bv = (-q / 2 - (disc) ** (1 / 2)) ** (1 / 3)
-
-        if disc > 0:
-            # 1 real root, 2 complex roots
-            re_y1 = au + bv
-            re_y2 = -1 / 2 * (au + bv)
-            re_y3 = -1 / 2 * (au + bv)
-            im_y1 = 0
-            im_y2 = +(3)**(1 / 2) / 2 * (au - bv)
-            im_y3 = -(3)**(1 / 2) / 2 * (au - bv)
-        elif disc == 0:
-            # one real root, and two real roots of multiplicity 2
-            re_y1 = au + bv
-            re_y2 = -1 / 2 * (au + bv)
-            re_y3 = -1 / 2 * (au + bv)
-            im_y1, im_y2, im_y3 = 0, 0, 0
+    p=array(p,ndmin=1)
+    a3,a2,a1,a0=p
+    # transform to incomplete eq y^3+p_coef*y+q_coef=0
+    # substitution  x = y-a2/(3*a3)
+    p_coef=-1/3*(a2/a3)**2+a1/a3
+    q_coef=2/27*(a2/a3)**3-1/3*a2*a1/a3**2+a0/a3
+    # disc>0 -> 1 real 2 complex
+    # disc<0 -> 3 real distinct
+    # disc=0 -> 1 real 2 real of multiplicity 2
+    disc=(p_coef/3)**3+(q_coef/2)**2 
+    au=(sign(-q_coef/2+emath.sqrt(disc))*emath.power(abs(-q_coef/2+emath.sqrt(disc)),1/3)).real # only used where disc>=0
+    bv=(sign(-q_coef/2-emath.sqrt(disc))*emath.power(abs(-q_coef/2-emath.sqrt(disc)),1/3)).real # only used where disc>=0
+    re_z1=-a2/(3*a3)+(disc<0)*(
+        2*sqrt(abs(-p_coef/3))*cos(1/3*emath.arccos(-q_coef/2/emath.power(-p_coef/3+(p_coef==0)*eps/3,3/2))+0*2*pi/3)
+    )+(disc>0)*(
+        au+bv
+    )+((disc==0)|(abs(disc)<eps))*(
+        au+bv
+    )
+    re_z2=-a2/(3*a3)+(disc<0)*(
+        2*sqrt(abs(-p_coef/3))*cos(1/3*emath.arccos(-q_coef/2/emath.power(-p_coef/3+(p_coef==0)*eps/3,3/2))+1*2*pi/3)
+    )+(disc>0)*(
+        -1/2*(au+bv)
+    )+((disc==0)|(abs(disc)<eps))*(
+        -1/2*(au+bv)
+    )
+    re_z3=-a2/(3*a3)+(disc<0)*(
+        2*sqrt(abs(-p_coef/3))*cos(1/3*emath.arccos(-q_coef/2/emath.power(-p_coef/3+(p_coef==0)*eps/3,3/2))+2*2*pi/3)
+    )+(disc>0)*(
+        -1/2*(au+bv)
+    )+((disc==0)|(abs(disc)<eps))*(
+        -1/2*(au+bv)
+    )
+    im_z1=(disc<0)*(0)+(disc>0)*(0)+((disc==0)|(abs(disc)<eps))*(0)
+    im_z2=(disc<0)*(0)+(disc>0)*(+sqrt(3)/2*(au-bv)
+                                 )+((disc==0)|(abs(disc)<eps))*(0)
+    im_z3=(disc<0)*(0)+(disc>0)*(-sqrt(3)/2*(au-bv)
+                                 )+((disc==0)|(abs(disc)<eps))*(0)
+    z_roots=array([re_z1+im_z1*1j,re_z2+im_z2*1j,re_z3+im_z3*1j])
     # sort the roots by real (descending), then imaginary part (0 first)
-    y_real_parts = array([re_y1, re_y2, re_y3]).flatten()
-    y_imag_parts = array([im_y1, im_y2, im_y3])
-    positions = lexsort([-y_real_parts, y_imag_parts, abs(y_imag_parts)])
-    # roots of the complete equation through substitution xk=yk-b/(3a)
-    x_list = []
-    for i in positions:
-        x_list += [[y_real_parts[i] - b / 3 / a, y_imag_parts[i]]]
-    return dict([['roots', x_list], ['disc', disc], ['p', p], ['q', q]])
+    z_real_parts = array([re_z1, re_z2, re_z3]).real
+    z_imag_parts = array([im_z1, im_z2, im_z3])
+    positions = lexsort([-z_real_parts, z_imag_parts, abs(z_imag_parts)],axis=0)
+    z_roots=z_roots.reshape(z_roots.shape[0],len(p.shape)) # return columns of z_roots
+    z_roots=z_roots[positions,range(len(p.shape))] # perform sorting
+    if len(p.shape)<=1 or p.shape[1]<=1:
+        z_roots=[[z_real_parts[i],z_imag_parts[i]] for i in positions]
+    return dict([['roots', z_roots], ['disc', disc], ['p', p_coef], ['q', q_coef]])
 
 
 def solve_quartic(abcde):

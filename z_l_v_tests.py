@@ -1404,4 +1404,4 @@ isot_flash_seader_4_1()
 # Stabilitätsproblem
 #pat_ue_03_vollstaendig(0.65, True)
 
-plt.show()
+plt.show(block=False)

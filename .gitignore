@@ -18,6 +18,7 @@ bufferSolution/
 bufferSolution_LINUX/
 logs/
 .ipynb_checkpoints/
+.virtual_documents/
 docs/*
 !docs/*.tex
 !docs/*.cfg
