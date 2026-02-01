@@ -408,83 +408,69 @@ def zs_1998():
     plot3 = plt.subplot2grid([2, 2], [0, 0], rowspan=1, colspan=1)
     plot4 = plt.subplot2grid([2, 2], [0, 1], rowspan=1, colspan=1)
     x = 0.5
-    z_i = array([x, 1 - x])
-    for t in[420, 500]:
-        v_plot = []
-        p_plot = []
-        rho_plot = []
-        z_plot = []
-        z_complex = []
-        p_complex = []
+    p=concatenate([p_range for x in [420,500]])[:,None]
+    z_i=array([[x,1-x] for _ in range(2*len(p_range))])
+    t=concatenate([[x for _ in range(len(p_range))] for x in [420,500]])[:,None]
+    tr_i=outer(t,1/tc_i)
+    pr_i=outer(p,1/pc_i)
+    a_i=psi*alpha_tr(tr_i,af_omega_i)*r**2*tc_i**2/pc_i
+    b_i=omega*r*tc_i/pc_i
+    beta_i=b_i*p/(r*t)
+    q_i=a_i/(b_i*r*t)
+    a_ij=array([[sqrt(a_i[:,i]*a_i[:,j]) for i in range(tc_i.shape[0])] for j in range(tc_i.shape[0])]).T
 
-        rho_l_phase = []
-        rho_v_phase = []
-        p_v_phase = []
-        for p in p_range:
-            tr_i = t / tc_i
-            a_i = psi * alpha_tr(tr_i, af_omega_i) * r ** 2 * tc_i ** 2 / pc_i
-            b_i = omega * r * tc_i / pc_i
-            beta_i = b_i * p / (r * t)
-            q_i = a_i / (b_i * r * t)
-            a_ij = sqrt(outer(a_i, a_i))
+    # Variablen, die von der Flüssigkeit-Zusammensetzung abhängig sind
+    b=z_i.dot(b_i)[:,None]
+    a=array([[z_i[:,i]*z_i[:,j]*a_ij[:,i,j] for i in range(tc_i.shape[0])] for j in range(tc_i.shape[0])]).sum(axis=(0,1))[:,None]
+    beta=b*p/(r*t)
+    q=a/(b*r*t)
+    a_mp_i=-a+2*array([[a_ij[j,i,:]*z_i[j,i] for j in range(a_ij.shape[0])] for i in range(a_ij.shape[1])]).sum(axis=0) # partielles molares a_i
+    b_mp_i=b_i  # partielles molares b_i
+    q_mp_i=q*(1+a_mp_i/a-b_i/b) # partielles molares q_i
 
-            # Variablen, die von der Flüssigkeit-Zusammensetzung abhängig sind
-            b = sum(z_i * b_i)
-            a = z_i.dot(a_ij).dot(z_i)
-            beta = b * p / (r * t)
-            q = a / (b * r * t)
-            a_mp_i = -a + 2 * a_ij.dot(z_i)  # partielles molares a_i
-            b_mp_i = b_i  # partielles molares b_i
-            q_mp_i = q * (1 + a_mp_i / a - b_i / b)  # partielles molares q_i
+    a0=ones(t.shape)
+    a1=beta*(epsilon+sigma)-beta-1
+    a2=q*beta+epsilon*sigma*beta**2-beta*(epsilon+sigma)*(1+beta)
+    a3=-(epsilon*sigma*beta**2*(1+beta)+q*beta**2)
 
-            a1 = beta * (epsilon + sigma) - beta - 1
-            a2 = q * beta + epsilon * sigma * beta ** 2 \
-                 - beta * (epsilon + sigma) * (1 + beta)
-            a3 = -(epsilon * sigma * beta ** 2 * (1 + beta) +
-                   q * beta ** 2)
+    soln = solve_cubic([x.flatten() for x in [a0, a1, a2, a3]])
+    roots, disc = soln['roots'], soln['disc']
 
-            soln = solve_cubic([1, a1, a2, a3])
-            roots, disc = soln['roots'], soln['disc']
-            re_roots = array([roots[0][0], roots[1][0], roots[2][0]])
+    idx=((disc<=0) & (roots[:,0]>=0)) # 3 real roots. smallest ist liq. largest is gas.
+    z_l = (roots[idx,0].real)[:,None]
+    z_mid = (roots[idx,1].real)[:,None]
+    z_v = (roots[idx,2].real)[:,None]
+    v_l = z_l * r * t[idx] / p[idx]
+    v_mid = z_mid * r * t[idx] / p[idx]
+    v_v = z_v * r * t[idx] / p[idx]
+    p_plot = [p[idx], p[idx], p[idx]]
+    v_plot = [v_l, v_mid, v_v]
+    rho_plot = [1 / v_l, 1 / v_mid, 1 / v_v]
+    z_plot = [z_l, z_mid, z_v]
 
-            if disc <= 0 and all(re_roots >= 0):
-                # 3 real roots. smallest ist liq. largest is gas.
-                z_l = re_roots[0]
-                z_mid = re_roots[1]
-                z_v = re_roots[2]
-                v_l = z_l * r * t / p
-                v_mid = z_mid * r * t / p
-                v_v = z_v * r * t / p
-                p_plot += [p, p, p]
-                v_plot += [v_l, v_mid, v_v]
-                rho_plot += [1 / v_l, 1 / v_mid, 1 / v_v]
-                z_plot += [z_l, z_mid, z_v]
-            elif disc > 0:
-                # one real root, 2 complex. First root is the real one.
-                z = re_roots[0]
-                v = z * r * t / abs(p)
-                p_plot += [p]
-                v_plot += [v]
-                rho_plot += [1 / v]
-                z_plot += [z]
-                z_complex += [re_roots[1]]
-                p_complex += [p]
-
-        for p in linspace(1e-4, max(p_range), 30):
-            rho_l_phase += [
-                z_phase(t, p, z_i, tc_i, pc_i, af_omega_i, 'l', alpha_tr, epsilon, sigma, psi, omega, tol, r)['rho']]
-            rho_v_phase += [
-                z_phase(t, p, z_i, tc_i, pc_i, af_omega_i, 'v', alpha_tr, epsilon, sigma, psi, omega, tol, r)['rho']]
-            p_v_phase += [p]
-
-        plot1.semilogx(v_plot, p_plot, markers[randint(0, len(markers))],
-                       label=r'$z_1={:g}, T={:g}K$'.format(z_i[0], t),
-                       fillstyle='none')
-        rho_line = plot2.plot(rho_plot, p_plot, markers[randint(0, len(markers))],
-                              label=r'$z_1={:g}, T={:g}K$'.format(z_i[0], t),
-                              fillstyle='none')
+    idx=disc > 0 # one real root, 2 complex. First root is the real one.
+    z = (roots[idx,0].real)[:,None]
+    v = z * r * t[idx] / abs(p[idx])
+    p_plot += [p[idx]]
+    v_plot += [v]
+    rho_plot += [1 / v]
+    z_plot += [z]
+    """
+    z_complex += [roots[:,1]]
+    p_complex += [p[idx]]
+    for p in linspace(1e-4, max(p_range), 30):
+        rho_l_phase += [
+            z_phase(t, p, z_i, tc_i, pc_i, af_omega_i, 'l', alpha_tr, epsilon, sigma, psi, omega, tol, r)['rho']]
+        rho_v_phase += [
+            z_phase(t, p, z_i, tc_i, pc_i, af_omega_i, 'v', alpha_tr, epsilon, sigma, psi, omega, tol, r)['rho']]
+        p_v_phase += [p]
+    """
+    for j in range(len(v_plot)):
+        plot1.semilogx(v_plot[j], p_plot[j], markers[randint(0, len(markers))], fillstyle='none')
+        rho_line = plot2.plot(rho_plot[j], p_plot[j], markers[randint(0, len(markers))], fillstyle='none')
         current_color = plt.get(rho_line[0], 'color')
         current_marker = plt.get(rho_line[0], 'marker')
+        """
         plot4.plot(rho_l_phase, p_v_phase, current_marker, markeredgewidth=0.5,
                    color=current_color, markersize=4, fillstyle='bottom', linestyle='none',
                    label=r'$L: x_1={:g}$'.format(z_i[0]))
@@ -495,13 +481,12 @@ def zs_1998():
                    color=current_color, label=r'pseudo-$\rho_L$')
         plot2.plot(rho_v_phase, p_v_phase, ':',
                    color=current_color, label=r'pseudo-$\rho_V$')
-        z_line = plot3.plot(z_plot, p_plot, markers[randint(0, len(markers))],
-                            label=r'$z_1={:g}, z_2={:g}$'.format(z_i[0], z_i[1]),
-                            fillstyle='none')
+       """
+        z_line = plot3.plot(z_plot[j], p_plot[j], markers[randint(0, len(markers))], fillstyle='none')
         current_color = plt.get(z_line[0], 'color')
         current_marker = markers[randint(0, len(markers))]
-        plot3.plot(z_complex, p_complex, '.', alpha=0.1,
-                   fillstyle='none', color=current_color)
+        #plot3.plot(z_complex, p_complex, '.', alpha=0.1,
+        #           fillstyle='none', color=current_color)
 
     data = []
     f = open('./data/actual_density.csv')
@@ -525,9 +510,10 @@ def zs_1998():
         lines = plot2.plot(a_data[:, 0], a_data[:, 1], ':', color='black')
     lines[0].set_label(r'$pseudo-\rho_{article}$')
 
-    plot1.axvline(b, linestyle='-')
-    plot2.axvline(1 / b, linestyle='-')
-    plot4.axvline(1 / b, linestyle='-')
+    for b in b:
+        plot1.axvline(b, linestyle='-')
+        plot2.axvline(1 / b, linestyle='-')
+        plot4.axvline(1 / b, linestyle='-')
     p_low = z_phase(420, p, z_i, tc_i, pc_i, af_omega_i, 'l', alpha_tr, epsilon, sigma, psi, omega, tol)['p_low']
     plot1.axhline(p_low, linestyle='-.', color='gray', linewidth=0.5, label='$P_{low}$')
     plot2.axhline(p_low, linestyle='-.', color='gray', linewidth=0.5)
@@ -1376,15 +1362,15 @@ def fredenslund_t_6():
     print('\n')
 
 
-vdi_atlas()
-svn_14_1()
-plt.figure()
-svn_fig_14_8()
-plt.figure()
-svn_14_2()
-plt.figure()
-svn_14_2_behchmark()
-plt.figure()
+# vdi_atlas()
+# svn_14_1()
+# plt.figure()
+# svn_fig_14_8()
+# plt.figure()
+# svn_14_2()
+# plt.figure()
+# svn_14_2_behchmark()
+# plt.figure()
 zs_1998()
 ppo_ex_8_12()
 svn_h_1()

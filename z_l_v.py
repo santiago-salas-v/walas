@@ -2,7 +2,7 @@ import re
 
 from numpy import array, zeros, abs, ones, empty, argwhere, asarray
 from numpy import nan, finfo
-from numpy import sqrt, outer, sum, log, exp, diag, sign
+from numpy import sqrt, outer, sum, log, exp, diag, sign, diagonal, maximum
 from scipy import optimize
 
 from numerik import secant_ls_3p, line_search
@@ -555,7 +555,7 @@ def phi_sat_ceos(t, p, tc_i, pc_i, af_omega_i,
     a3 = -(epsilon * sigma * beta ** 2 * (1 + beta) +
            q * beta ** 2)
 
-    soln = solve_cubic(array([asarray(x).flatten() for x in [1, a1, a2, a3]]).flatten())
+    soln = solve_cubic(array([asarray(x) for x in [1, a1, a2, a3]]))
     success = soln['disc'] <= 0
     z_l = soln['roots'][-1][0]
     z_v = soln['roots'][0][0]
@@ -1361,190 +1361,142 @@ def p_est(t, p, x_i, tc_i, pc_i, af_omega_i, alpha_tr,
 def z_phase(t, p, z_i, tc_i, pc_i, af_omega_i, phase,
             alpha_tr, epsilon, sigma, psi, omega, tol=abs_tol, r=r_def):
     z_i = asarray(z_i)
-    tr_i = t / tc_i
+    t=asarray(t).flatten()
+    p=asarray(p).flatten()
+    tr_i=outer(t,1/tc_i)
+    pr_i=outer(p,1/pc_i)
     a_i = psi * alpha_tr(tr_i, af_omega_i) * r ** 2 * tc_i ** 2 / pc_i
     b_i = omega * r * tc_i / pc_i
-    q_i = a_i / (b_i * r * t)
-    a_ij = sqrt(outer(a_i, a_i))
+    q_i = a_i / (b_i * r * (tr_i*tc_i))
+    a_ij=array([[sqrt(a_i[:,i]*a_i[:,j]) for i in range(tc_i.shape[0])] for j in range(tc_i.shape[0])]).T
+    tc_ij=sqrt(outer(tc_i,tc_i))
 
     # composition-dependent variables
-    b = sum(z_i * b_i)
-    a = z_i.dot(a_ij).dot(z_i).item()
+    b = z_i.dot(b_i)
+    a=diagonal(diagonal(z_i.dot(a_ij).dot(z_i.T)))
     q = a / (b * r * t)
 
     # mechanical critical point
     z_mc = -1 / 3 * ((epsilon + sigma) * omega - omega - 1)
-    p_mc = sum(z_i * pc_i)
-    t_mc = z_i.dot(sqrt(outer(tc_i, tc_i))).dot(z_i).item()
+    p_mc = z_i.dot(pc_i)
+    t_mc = diagonal(z_i.dot(tc_ij).dot(z_i.T))
     rho_mc = p_mc / (r * t_mc * z_mc)
     v_mc = 1 / rho_mc
+    p_mc_bound=r*t/(v_mc-b)-a/((v_mc+epsilon*b)*(v_mc*sigma*b))
+    dp_drho_at_rho_mc=(-r*t/(v_mc-b)**2+a/((v_mc+epsilon*b)*(v_mc+sigma*b))*(
+        1/(v_mc+epsilon*b)+1/(v_mc+sigma*b)))*(-v_mc**2)
 
     # solve f(z)=0
     beta = b * p / (r * t)
-    a1 = beta * (epsilon + sigma) - beta - 1
-    a2 = q * beta + epsilon * sigma * beta ** 2 \
-        - beta * (epsilon + sigma) * (1 + beta)
-    a3 = -(epsilon * sigma * beta ** 2 * (1 + beta) +
-           q * beta ** 2)
-    soln = solve_cubic([1, a1, a2, a3])
-    roots_z = array(soln['roots'])
-    disc_z = soln['disc']
+    a0=ones(t.shape)
+    a1=beta*(epsilon+sigma)-beta-1
+    a2=q*beta+epsilon*sigma*beta**2-beta*(epsilon+sigma)*(1+beta)
+    a3=-(epsilon*sigma*beta**2*(1+beta)+q*beta**2)
+    soln = solve_cubic([a0, a1, a2, a3])
+    roots_z, disc_z = soln['roots'], soln['disc']
 
     # solve S+U=0 (real root = real part of complex root)
     # locus matches p-rho inflection point at low density
-    q0 = (9 * (epsilon + sigma) * epsilon * sigma + 18 * epsilon * sigma +
-          - 2 * (epsilon + sigma) ** 3 - 3 * (epsilon + sigma) ** 2 +
-          3 * (epsilon + sigma) + 2) * (b / (r * t)) ** 3
-    q1 = (18 * epsilon * sigma - 2 * (epsilon + sigma) ** 2 +
-          6 * (epsilon + sigma) + 6) * (b / (r * t)) ** 2 + (
-        9 * (epsilon + sigma) + 18) * a * b / (r * t) ** 3
-    q2 = (3 * (epsilon + sigma) + 6) * b / (r * t) - 9 * a / (r * t) ** 2
-    q3 = 2
-    roots_p = None  # init
-    if q0 == 0:
-        # reduces to quadratic (SRK)
-        disc = q2 ** 2 - 4 * q1 * q3
-        if disc >= 0:
-            roots_p = array([
-                [-q2 / q1 / 2 + sqrt((q2 / q1) ** 2 / 4 - q3 / q1), 0],
-                [-q2 / q1 / 2 - sqrt((q2 / q1) ** 2 / 4 - q3 / q1), 0]
-            ])
-            p_low = min(roots_p[:, 0])
-            p_cross = max(roots_p[:, 0])
-        elif disc < 0:
-            roots_p = array([
-                [-q2 / q1 / 2, sqrt(-(q2 / q1) ** 2 / 4 + q3 / q1)],
-                [-q2 / q1 / 2, -sqrt(-(q2 / q1) ** 2 / 4 + q3 / q1)]
-            ])
-            p_low = min(roots_p[:, 0])
-            p_cross = max(roots_p[:, 0])
-    else:
-        # cubic
-        soln = solve_cubic([q0, q1, q2, q3])
-        roots_p = array(soln['roots'])
+    q0=(9*(epsilon+sigma)*epsilon*sigma+18*epsilon*sigma+-2*(epsilon+sigma)**3-3*(epsilon+sigma)**2+3*(epsilon+sigma)+2)*(b/(r*t))**3
+    q1=(18*epsilon*sigma-2*(epsilon+sigma)**2+6*(epsilon+sigma)+6)*(b/(r*t))**2+(9*(epsilon+sigma)+18)*a*b/(r*t)**3
+    q2=(3*(epsilon+sigma)+6)*b/(r*t)-9*a/(r*t)**2
+    q3=2*ones(p.shape)
 
-    re_roots_p = roots_p[roots_p[:, 1] == 0]
-    n_positive_roots_p = len(re_roots_p[re_roots_p > 0])
+    roots_p=zeros([p.shape[0],3])  # init
+    disc_p=q2**2-4*q1*q3
+    idx=((q0==0) & (disc_p>=0)) # reduces to quadratic (SRK), 2 X real
+    roots_p[idx,:2]=array([-(q2/q1)[idx]/2+sqrt(disc_p[idx])/(2*q1[idx]),-(q2/q1)[idx]/2-sqrt(disc_p[idx])/(2*q1[idx])]).T
+    idx=((q0==0) & (disc_p<0)) # reduces to quadratic (SRK), 2 X complex
+    roots_p[idx,:2]=array([-(q2/q1)[idx]/2+sqrt(-disc_p[idx])/(2*q1[idx])*1j,-(q2/q1)[idx]/2-sqrt(-disc_p[idx])/(2*q1[idx])*1j]).T
+    p_low = roots_p.real.min(axis=1)
+    p_cross = roots_p.real.max(axis=1)
 
-    p_low = 0
-    z_low = 0
-    rho_low = nan
-    dp_drho_at_rho_low = nan
-    if n_positive_roots_p <= 1:
-        p_high = roots_p[0, 0]
-    elif n_positive_roots_p > 1:
-        if n_positive_roots_p == 3:
-            p_high = roots_p[0, 0]
-            p_cross = roots_p[1, 0]
-            p_low = roots_p[-1, 0]
-        elif n_positive_roots_p == 2:
-            p_cross = roots_p[0, 0]
-            p_low = roots_p[-1, 0]
-        # solve f(z_low)=0
-        beta_low = b * p_low / (r * t)
-        a1_low = beta_low * (epsilon + sigma) - beta_low - 1
-        a2_low = q * beta_low + epsilon * sigma * beta_low ** 2 \
-            - beta_low * (epsilon + sigma) * (1 + beta_low)
-        a3_low = -(epsilon * sigma * beta_low ** 2 * (1 + beta_low) +
-                   q * beta_low ** 2)
-        soln_z_low = solve_cubic([1, a1_low, a2_low, a3_low])
-        roots_z_low = array(soln_z_low['roots'])
-        disc_z_low = soln_z_low['disc']
-        if phase == 'l' and disc_z_low <= 0:
-            # 3 real roots
-            z_low = roots_z_low[-1][0]
-        elif phase == 'l' and disc_z_low > 0:
-            # 1 real, 2 complex roots
-            z_low = roots_z_low[0][0]
-        elif phase == 'v':
-            # 3 real roots or 1 real, 2 complex roots,
-            # at any rate index 0
-            z_low = roots_z_low[0][0]
-        v_low = z_low * r * t / p_low
-        rho_low = 1 / v_low
-        dp_dv_at_rho_low = -r * t / (v_low - b) ** 2 + a / (
-            (v_low + epsilon * b) * (v_low + sigma * b)) * (
-            1 / (v_low + epsilon * b) + 1 / (v_low + sigma * b)
-        )
-        dp_drho_at_rho_low = -v_low ** 2 * dp_dv_at_rho_low
+    idx=(q0!=0) # full cubic
+    roots_p[idx,:]=solve_cubic([x[idx] for x in [q0,q1,q2,q3]])['roots']
 
-    if phase == 'l':
-        if t < t_mc or n_positive_roots_p > 1:
-            if p > p_low:
-                # liquid density
-                if disc_z <= 0:
-                    z = roots_z[-1, 0]
-                else:
-                    z = roots_z[0, 0]
-                v = z * r * t / p
-                rho = 1 / v
-            elif p <= p_low:
-                # pseudo liquid density - eq. 36, 40, 41
-                # FIXME: extrapolate when (rho_low - 0.7 * rho_mc) < 0 ==>>
-                # complex root
-                if rho_low - 0.7 * rho_mc <= 0 or dp_drho_at_rho_low < 0:
-                    # use linear interpolation
-                    rho = rho_low + (rho_low - 0.7 * rho_mc) / \
-                        dp_drho_at_rho_low
-                    rho = (p - p_low) * (rho_low - 0.7 * rho_mc) + rho_low
-                else:
-                    c1 = dp_drho_at_rho_low * (rho_low - 0.7 * rho_mc)
-                    c0 = p_low - c1 * log(rho_low - 0.7 * rho_mc)
-                    rho = 0.7 * rho_mc + exp((p - c0) / c1)
-                v = 1 / rho
-                z = p * v / (r * t)
-        elif t >= t_mc or n_positive_roots_p <= 1:
-            p_mc_bound = r * t / (v_mc - b) - a / \
-                ((v_mc + epsilon * b) * (v_mc + sigma * b))
-            if p > p_mc_bound:
-                # liquid density
-                z = roots_z[0, 0]
-                v = z * r * t / p
-                rho = 1 / v
-            elif p <= p_mc_bound:
-                # pseudo liquid density - eq. 36, 38, 39
-                dp_dv_at_rho_mc = -r * t / (v_mc - b) ** 2 + a / (
-                    (v_mc + epsilon * b) * (v_mc + sigma * b)) * (
-                    1 / (v_mc + epsilon * b) + 1 / (v_mc + sigma * b)
-                )
-                dp_drho_at_rho_mc = -v_mc ** 2 * dp_dv_at_rho_mc
+    re_roots_p=re_roots_p=roots_p[(roots_p.imag==0).all(axis=1)]
+    n_positive_roots_p = ((roots_p.imag==0) & (roots_p>0)).sum(axis=1)
 
-                c1 = dp_drho_at_rho_mc * (rho_mc - 0.7 * rho_mc)
-                c0 = p_mc_bound - c1 * log(rho_mc - 0.7 * rho_mc)
-                rho = 0.7 * rho_mc + exp((p - c0) / c1)
-                v = 1 / rho
-                z = p * v / (r * t)
-    elif phase == 'v':
-        if t < t_mc or n_positive_roots_p > 1:
-            if p > p_low:
-                # pseudo vapor density - eq. 24, 28, 29, 30
-                if dp_drho_at_rho_low < 0.1 * r * t:
-                    dp_drho_at_rho_low = 0.1 * r * t
-                rho0 = (rho_low + 1.4 * rho_mc) / 2
-                rho1 = p_low * (
-                    (rho_low - 1.4 * rho_mc) + p_low / dp_drho_at_rho_low)
-                rho2 = -p_low ** 2 * (
-                    (rho_low - 1.4 * rho_mc) / 2 + p_low / dp_drho_at_rho_low)
+    z_l,z_l_low,z_v,z_v_low = zeros(p.shape), zeros(p.shape), zeros(p.shape), zeros(p.shape)
+    rho_l_low,rho_v_low = nan*ones(p.shape), nan*ones(p.shape)
+    p_high,p_cross,p_low=zeros(p.shape),zeros(p.shape),zeros(p.shape)
+    # roots are sorted
+    p_high[n_positive_roots_p<=1]=roots_p[n_positive_roots_p<=1,0].real
+    p_high[n_positive_roots_p==3]=roots_p[n_positive_roots_p==3,0].real
+    p_cross[n_positive_roots_p==3]=roots_p[n_positive_roots_p==3,1].real
+    p_low[n_positive_roots_p==3]=roots_p[n_positive_roots_p==3,2].real
+    p_cross[n_positive_roots_p==2]=roots_p[n_positive_roots_p==2,0].real
+    p_low[n_positive_roots_p==2]=roots_p[n_positive_roots_p==2,2].real
+    # solve f(z_low)=0
+    beta_low = b * p_low / (r * t)
+    a0_low=ones(beta_low.shape)
+    a1_low=beta_low*(epsilon+sigma)-beta_low-1
+    a2_low=q*beta_low+epsilon*sigma*beta_low**2-beta_low*(epsilon+sigma)*(1+beta_low)
+    a3_low=-(epsilon*sigma*beta_low**2*(1+beta_low)+q*beta_low**2)
+    soln_z_low = solve_cubic([a0_low, a1_low, a2_low, a3_low])
+    roots_z_low = array(soln_z_low['roots'])
+    disc_z_low = soln_z_low['disc']
+    idx=(disc_z_low<=0) # 3 real roots
+    z_l_low[idx]=roots_z_low[idx,2].real # smallest is liq
+    idx=(disc_z_low>0) # 1 real, 2 complex
+    z_l_low[idx]=roots_z_low[idx,0].real
+    z_v_low=roots_z_low[:,0].real # at any rate largest real root
 
-                rho = rho0 + rho1 / p + rho2 / p ** 2
-                v = 1 / rho
-                z = p * v / (r * t)
-            elif p <= p_low:
-                # vapor density
-                z = roots_z[0, 0]
-                v = z * r * t / p
-                rho = 1 / v
-        elif t >= t_mc or n_positive_roots_p <= 0:
-            # vapor density
-            z = roots_z[0, 0]
-            v = z * r * t / p
-            rho = 1 / v
-    soln = dict()
-    for item in ['z', 'rho', 'v',
-                 'p_low', 'p_mc_bound', 'p_high', 'p_cross']:
-        soln[item] = locals().get(item)
-    return soln
+    # phase: L
+    v_l_low=z_l_low*r*t/p_low
+    rho_l_low=1/v_l_low
+    dp_drho_at_rho_l_low=(-r*t/(v_l_low-b)**2+a/((v_l_low+epsilon*b)*(v_l_low+sigma*b))*(
+        1/(v_l_low+epsilon*b)+1/(v_l_low+sigma*b)))*(-v_l_low**2)
+    # liquid density smallest real
+    idx=((t<t_mc) | (n_positive_roots_p>1)) & (p>p_low) & (disc_z<=0)
+    z_l[idx]=roots_z[idx,2].real
+    # liquid density only real
+    idx=((t<t_mc) | (n_positive_roots_p>1)) & (p>p_low) & (disc_z>0)
+    z_l[idx]=roots_z[idx,0].real
+    # liquid pseudo-density complex
+    idx=((t<t_mc) | (n_positive_roots_p>1)) & (p<=p_low) & (
+        (rho_l_low-0.7*rho_mc<=0) | (dp_drho_at_rho_l_low<0))
+    rho_l=rho_l_low[idx]+(rho_l_low-0.7*rho_mc)[idx]/dp_drho_at_rho_l_low[idx]
+    rho_l=(p-p_low)[idx]*(rho_l_low-0.7*rho_mc)[idx]+rho_l_low[idx]
+    z_l[idx]=p[idx]*1/rho_l/(r*t[idx])
+    # liquid pseudo-density real: extrapolating function l
+    idx=((t<t_mc) | (n_positive_roots_p>1)) & (p<=p_low) & (
+        (rho_l_low-0.7*rho_mc>0) & (dp_drho_at_rho_l_low>=0))
+    c1=dp_drho_at_rho_l_low[idx]*(rho_l_low-0.7*rho_mc)[idx]
+    c0=p_low[idx]-c1*log((rho_l_low-0.7*rho_mc)[idx])
+    rho_l=0.7*rho_mc[idx]+exp((p[idx]-c0)/c1)
+    z_l[idx]=p[idx]*1/rho_l/(r*t[idx])
+    # liquid pseudo-density single real
+    idx=((t>=t_mc) | (n_positive_roots_p<=1)) & (p>p_mc_bound)
+    z_l[idx]=roots_z[idx,0].real
+    # liquid pseudo-density - eq. 36, 38, 39
+    idx=((t>=t_mc) | (n_positive_roots_p<=1)) & (p<=p_mc_bound)
+    c1=dp_drho_at_rho_mc[idx]*(rho_mc-0.7*rho_mc)[idx]
+    c0=p_low[idx]-c1*log((rho_mc-0.7*rho_mc)[idx])
+    rho_l=0.7*rho_mc[idx]+exp((p[idx]-c0)/c1)
+    z_l[idx]=p[idx]*1/rho_l/(r*t[idx])
+    
+    # phase: V
+    v_v_low=z_v_low*r*t/p_low
+    rho_v_low=1/v_v_low
+    dp_drho_at_rho_v_low=(-r*t/(v_v_low-b)**2+a/((v_v_low+epsilon*b)*(v_v_low+sigma*b))*(
+        1/(v_v_low+epsilon*b)+1/(v_v_low+sigma*b)))*(-v_v_low**2)
+    dp_drho_at_rho_v_low=maximum(dp_drho_at_rho_v_low,0.1*r*t)
+    # vapor density single real
+    idx=((t<t_mc) | (n_positive_roots_p>1)) & (p<=p_low)
+    z_v[idx]=roots_z[idx,0].real
+    # vapor pseudo-density - eq. 24, 28, 29, 30
+    idx=((t<t_mc) | (n_positive_roots_p>1)) & (p>p_low)
+    rho0=(rho_v_low+1.4*rho_mc)/2
+    rho1=p_low*((rho_v_low-1.4*rho_mc)+p_low/dp_drho_at_rho_v_low)
+    rho2=-p_low**2*((rho_v_low-1.4*rho_mc)/2+p_low/dp_drho_at_rho_v_low)
+    rho_v=rho0+rho1/p+rho2/p**2
+    z_v[idx]=p[idx]*1/rho_v[idx]/(r*t[idx])
+    # vapor density fallback
+    idx=((t>=t_mc) | (n_positive_roots_p<=0))
+    z_v[idx]=roots_z[idx,0].real
 
+    return {item:locals().get(item) for item in ['z_l','z_v', 'rho_l','rho_v', 'v_l','v_v', 'p_low', 'p_mc_bound', 'p_high', 'p_cross']}
 
 def isot_flash(t, p, x_i, y_i, z_i, tc_i, pc_i, af_omega_i,
                alpha_tr, epsilon, sigma, psi, omega):

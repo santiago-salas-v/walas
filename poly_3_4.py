@@ -62,10 +62,10 @@ def solve_cubic(p):
     z_real_parts = array([re_z1, re_z2, re_z3]).real
     z_imag_parts = array([im_z1, im_z2, im_z3])
     positions = lexsort([-z_real_parts, z_imag_parts, abs(z_imag_parts)],axis=0)
-    z_roots=z_roots.reshape(z_roots.shape[0],len(p.shape)) # return columns of z_roots
-    z_roots=z_roots[positions,range(len(p.shape))] # perform sorting
     if len(p.shape)<=1 or p.shape[1]<=1:
         z_roots=[[z_real_parts[i],z_imag_parts[i]] for i in positions]
+    else:
+        z_roots=array([z_roots[positions[:,j],j] for j in range(z_roots.shape[1])]) # perform sorting
     return dict([['roots', z_roots], ['disc', disc], ['p', p_coef], ['q', q_coef]])
 
 
