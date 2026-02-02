@@ -192,7 +192,7 @@ class Eos:
             self.bubl_p_p = None
             self.dew_p_p = None
             self.v_f = 1
-            soln_v = phi(self.t, self.p, self.z_i, self.tc_i, self.pc_i, self.af_omega_i, 'v',
+            soln_v = phi(self.t, self.p, self.z_i, self.tc_i, self.pc_i, self.af_omega_i,
                          self.alpha_tr, self.epsilon, self.sigma, self.psi, self.omega)
             self.phi_v = soln_v['phi_i']
             self.phi_l = None
@@ -217,7 +217,7 @@ class Eos:
             self.v_f = soln['v_f']
             if self.v_f == 0:
                 # liquid
-                soln_phi_l = phi(self.t, self.p, self.z_i, self.tc_i, self.pc_i, self.af_omega_i, 'l',
+                soln_phi_l = phi(self.t, self.p, self.z_i, self.tc_i, self.pc_i, self.af_omega_i,
                                  self.alpha_tr, self.epsilon, self.sigma, self.psi, self.omega)
                 self.phi_l = soln_phi_l['phi_i']
                 self.phi_v = None
@@ -225,7 +225,7 @@ class Eos:
                 self.v_l = None
             elif self.v_f == 1:
                 # vapor
-                soln_phi_v = phi(self.t, self.p, self.z_i, self.tc_i, self.pc_i, self.af_omega_i, 'v',
+                soln_phi_v = phi(self.t, self.p, self.z_i, self.tc_i, self.pc_i, self.af_omega_i,
                                  self.alpha_tr, self.epsilon, self.sigma, self.psi, self.omega)
                 self.phi_l = None
                 self.phi_v = soln_phi_v['phi_i']
@@ -619,64 +619,68 @@ def z_non_sat(t, p, x_i, tc_i, pc_i, af_omega_i,
     return soln
 
 
-def phi(t, p, z_i, tc_i, pc_i, af_omega_i, phase,
-        alpha_tr, epsilon, sigma, psi, omega, r=r_def):
+def phi(t, p, z_i, tc_i, pc_i, af_omega_i, alpha_tr, epsilon, sigma, psi, omega, r=r_def):
     z_i = asarray(z_i)
-    tr_i = t / tc_i
-    a_i = psi * alpha_tr(tr_i, af_omega_i) * r ** 2 * tc_i ** 2 / pc_i
-    b_i = omega * r * tc_i / pc_i
-    beta_i = b_i * p / (r * t)
-    q_i = a_i / (b_i * r * t)
-    a_ij = sqrt(outer(a_i, a_i))
+    t=asarray(t).flatten()
+    p=asarray(p).flatten()
+    tr_i=outer(t,1/tc_i)
+    pr_i=outer(p,1/pc_i)
+    a_i=psi*alpha_tr(tr_i,af_omega_i)*r**2*tc_i**2/pc_i
+    b_i=omega*r*tc_i/pc_i
+    beta_i=b_i*pr_i*pc_i/(r*tr_i*tc_i)
+    q_i=a_i/(b_i*r*tr_i*tc_i)
+    a_ij=array([[sqrt(a_i[:,i]*a_i[:,j]) for i in range(tc_i.shape[0])] for j in range(tc_i.shape[0])]).T
+    tc_ij=sqrt(outer(tc_i,tc_i))
 
     # composition-dependent variables
-    b = sum(z_i * b_i)
-    a = z_i.dot(a_ij).dot(z_i).item()
-    beta = b * p / (r * t)
-    q = a / (b * r * t)
-    a_mp_i = -a + 2 * a_ij.dot(z_i)  # partielles molares a_i
-    b_mp_i = b_i  # partielles molares b_i
-    q_mp_i = q * (1 + a_mp_i / a - b_i / b)  # partielles molares q_i
+    b=z_i.dot(b_i)
+    a=diagonal(diagonal(z_i.dot(a_ij).dot(z_i.T)))
+    beta=b*p/(r*t)
+    q=a/(b*r*t)
+    a_mp_i=(-a+2*diagonal(z_i.dot(a_ij))).T
+    b_mp_i=b_i  # partielles molares b_i
+    q_mp_i=array([q*(1+a_mp_i[:,j]/a-b_i[j]/b) for j in range(tc_i.shape[0])]).T # partielles molares q_i
 
-    phase_soln = z_phase(t, p, z_i, tc_i, pc_i, af_omega_i, phase,
-                         alpha_tr, epsilon, sigma, psi, omega, abs_tol)
-    z = phase_soln['z']
+    phase_soln = z_phase(t, p, z_i, tc_i, pc_i, af_omega_i, alpha_tr, epsilon, sigma, psi, omega, abs_tol)
+    z_l,z_v=phase_soln['z_l'],phase_soln['z_v']
+    v_l,v_v=phase_soln['v_l'],phase_soln['v_v']
+    rho_l,rho_v=phase_soln['rho_l'],phase_soln['rho_v']
     i_int = 0  # init
     if epsilon != sigma:
         # vdw: epsilon = sigma
-        i_int = 1 / (sigma - epsilon) * \
-            log((z + sigma * beta) / (z + epsilon * beta))
+        i_int_l=1/(sigma-epsilon)*log((z_l+sigma*beta)/(z_l+epsilon*beta))
+        i_int_v=1/(sigma-epsilon)*log((z_v+sigma*beta)/(z_v+epsilon*beta))
     elif epsilon == sigma:
         # only vdw
-        i_int = beta / (z + epsilon * beta)
-    if z - beta > 0:
-        # $G^R/(RT) = Z - 1 - ln(1-\rho b) - ln(Z) - q I$
-        # and $\beta = \rho b Z$
-        ln_phi_i = b_i / b * (z - 1) - log(z - beta) - q_mp_i * i_int
-    else:
-        # $G^R/(RT) = Z - 1 - ln(1-\rho b) + ln(-Z) - q I$
-        # and $\beta = \rho b Z$
-        ln_phi_i = b_i / b * (z - 1) - log(beta / z **
-                                           2 - 1 / z) - q_mp_i * i_int
-    phi_i_calc = exp(ln_phi_i)
-    if phase == 'l':
-        # correction for pseudoproperties in phi (Matthias et al. 1984)
-        v = phase_soln['v']
-        p_calc = r * t / (v - b) - a / ((v + epsilon * b) * (v + sigma * b))
-        phi_i = phi_i_calc * p_calc / p
-        ln_phi = log(phi_i)
-    else:
-        phi_i = phi_i_calc
+        i_int_l=beta/(z_l+epsilon*beta)
+        i_int_v=beta/(z_v+epsilon*beta)
+    # $G^R/(RT) = Z - 1 - ln(1-\rho b) - ln(Z) - q I$
+    # and $\beta = \rho b Z$
+    ln_phi_i_l,ln_phi_i_v=zeros(q_mp_i.shape),zeros(q_mp_i.shape)
+    idx=(z_l-beta>0)
+    ln_phi_i_l[idx,:]=array([
+        b_i[j]/b[idx]*(z_l[idx]-1)-log(z_l[idx]-beta[idx])-q_mp_i[idx,j]*i_int_l[idx] 
+        for j in range(z_i.shape[1])]).T
+    ln_phi_i_v[idx,:]=array([
+        b_i[j]/b[idx]*(z_v[idx]-1)-log(z_v[idx]-beta[idx])-q_mp_i[idx,j]*i_int_v[idx] 
+        for j in range(z_i.shape[1])]).T
+    idx=(z_l-beta<=0)
+    ln_phi_i_l[idx,:]=array([
+        b_i[j]/b[idx]*(z_l[idx]-1)-log(beta[idx]/z_l[idx]**2-1/z_l[idx])-q_mp_i[idx,j]*i_int_l[idx]
+        for j in range(z_i.shape[1])]).T
+    ln_phi_i_v[idx,:]=array([
+        b_i[j]/b[idx]*(z_v[idx]-1)-log(beta[idx]/z_v[idx]**2-1/z_v[idx])-q_mp_i[idx,j]*i_int_v[idx]
+        for j in range(z_i.shape[1])]).T
 
-    v = z * r * t / p
-    rho = 1 / v
-    soln = dict()
-    for item in ['a_i', 'b_i',
-                 'b', 'a', 'q',
-                 'a_mp_i', 'b_mp_i', 'q_mp_i',
-                 'beta', 'z', 'v', 'rho',  'i_int', 'ln_phi_i', 'phi_i']:
-        soln[item] = locals().get(item)
-    return soln
+    phi_i_calc_l=exp(ln_phi_i_l)
+    p_calc_l=r*t/(v_l-b)-a/((v_l+epsilon*b)*(v_l+sigma*b))
+    # correction for pseudoproperties phi (Matthias et al. 1984)
+    phi_i_l=array([phi_i_calc_l[:,j]*p_calc_l/p for j in range(z_i.shape[1])]).T
+    ln_phi_i_l=log(phi_i_l)
+    phi_i_v=exp(ln_phi_i_v)
+
+    return {item:locals().get(item) for item in ['a_i','b_i','b','a','q',
+    'a_mp_i','b_mp_i','q_mp_i','beta','z_l','z_v','v_l','v_v','rho_l','rho_v','i_int_l','i_int_v','ln_phi_i_l','ln_phi_i_v','phi_i_l','phi_i_v']}
 
 
 def bubl_p(t, p, x_i, tc_i, pc_i, af_omega_i,
@@ -806,16 +810,16 @@ def bubl_t(t, p, x_i, tc_i, pc_i, af_omega_i,
 def bubl_point_step_l_k(t, p, x_i, tc_i, pc_i, af_omega_i,
                         alpha_tr, epsilon, sigma, psi, omega,
                         max_it, tol=abs_tol, full_output=False, y_i_est=None):
-    soln_l = phi(t, p, x_i, tc_i, pc_i, af_omega_i, 'l',
+    soln_l = phi(t, p, x_i, tc_i, pc_i, af_omega_i,
                  alpha_tr, epsilon, sigma, psi, omega)
     phi_l = soln_l['phi_i']
     if y_i_est is not None:
         y_i_est = asarray(y_i_est)
-        soln_v = phi(t, p, y_i_est, tc_i, pc_i, af_omega_i, 'v',
+        soln_v = phi(t, p, y_i_est, tc_i, pc_i, af_omega_i,
                      alpha_tr, epsilon, sigma, psi, omega)
         phi_v = soln_v['phi_i']
     else:
-        soln_v = phi(t, p, x_i, tc_i, pc_i, af_omega_i, 'v',
+        soln_v = phi(t, p, x_i, tc_i, pc_i, af_omega_i,
                      alpha_tr, epsilon, sigma, psi, omega)
         phi_v = soln_v['phi_i']
     k_i = phi_l / phi_v
@@ -826,7 +830,7 @@ def bubl_point_step_l_k(t, p, x_i, tc_i, pc_i, af_omega_i,
     success = True
     while not stop:
         sum_ki_xi_k_minus_1 = sum_ki_xi
-        soln_v = phi(t, p, y_i, tc_i, pc_i, af_omega_i, 'v',
+        soln_v = phi(t, p, y_i, tc_i, pc_i, af_omega_i,
                      alpha_tr, epsilon, sigma, psi, omega)
         phi_v = soln_v['phi_i']
         k_i = phi_l / phi_v
@@ -893,7 +897,7 @@ def bubl_t_gamma_phi(t, p, x_i, tc_i, pc_i, af_omega_i,
         v_l_i = z_l_i * r * t / p
         y_i = x_i * gamma_i * p_i_sat / phi_coef_fun_i / p
         poynting_i = exp(-v_l_i * (p - p_i_sat) / (r * t))
-        phi_i_v = phi(t, p, y_i, tc_i, pc_i, af_omega_i, 'v',
+        phi_i_v = phi(t, p, y_i, tc_i, pc_i, af_omega_i,
                       alpha_tr, epsilon, sigma, psi, omega)['phi_i']
 
         gamma_i = gamma_u(t, x_i, sec_j, nu_ij, unifac_data_dict)
@@ -930,7 +934,7 @@ def bubl_p_gamma_phi(t, p, x_i, tc_i, pc_i, af_omega_i,
         delta_p = p - p_old
         y_i = x_i * gamma_i * p_i_sat / phi_coef_fun_i / p
         y_i = y_i / sum(y_i)
-        phi_i_v = phi(t, p, y_i, tc_i, pc_i, af_omega_i, 'v',
+        phi_i_v = phi(t, p, y_i, tc_i, pc_i, af_omega_i,
                       alpha_tr, epsilon, sigma, psi, omega)['phi_i']
         v_l_i = z_l_i * r * t / p
         poynting_i = exp(-v_l_i * (p - p_i_sat) / (r * t))
@@ -1062,14 +1066,14 @@ def dew_t(t, p, y_i, tc_i, pc_i, af_omega_i,
 def dew_point_step_l_k(t, p, y_i, tc_i, pc_i, af_omega_i,
                        alpha_tr, epsilon, sigma, psi, omega,
                        max_it, tol=abs_tol, full_output=False, x_i_est=None):
-    soln_v = phi(t, p, y_i, tc_i, pc_i, af_omega_i, 'v',
+    soln_v = phi(t, p, y_i, tc_i, pc_i, af_omega_i,
                  alpha_tr, epsilon, sigma, psi, omega)
     phi_v = soln_v['phi_i']
     if x_i_est is not None:
-        phi_l = phi(t, p, x_i_est, tc_i, pc_i, af_omega_i, 'l',
+        phi_l = phi(t, p, x_i_est, tc_i, pc_i, af_omega_i,
                     alpha_tr, epsilon, sigma, psi, omega)['phi_i']
     else:
-        soln_l = phi(t, p, y_i, tc_i, pc_i, af_omega_i, 'l',
+        soln_l = phi(t, p, y_i, tc_i, pc_i, af_omega_i,
                      alpha_tr, epsilon, sigma, psi, omega)
         phi_l = soln_l['phi_i']
     k_i = phi_l / phi_v
@@ -1081,7 +1085,7 @@ def dew_point_step_l_k(t, p, y_i, tc_i, pc_i, af_omega_i,
     soln_l = dict()  # init
     while not stop:
         sum_yi_over_ki_k_minus_1 = sum_yi_over_ki
-        soln_l = phi(t, p, x_i, tc_i, pc_i, af_omega_i, 'l',
+        soln_l = phi(t, p, x_i, tc_i, pc_i, af_omega_i,
                      alpha_tr, epsilon, sigma, psi, omega)
         phi_l = soln_l['phi_i']
         k_i = phi_l / phi_v
@@ -1134,7 +1138,7 @@ def dew_p_gamma_phi(t, p, y_i, tc_i, pc_i, af_omega_i,
     n_it = 0  # init
     for n_it in range(max_it):
         p_old = p
-        phi_i_v = phi(t, p, y_i, tc_i, pc_i, af_omega_i, 'v',
+        phi_i_v = phi(t, p, y_i, tc_i, pc_i, af_omega_i,
                       alpha_tr, epsilon, sigma, psi, omega)['phi_i']
         v_l_i = z_l_i * r * t / p
         poynting_i = exp(-v_l_i * (p - p_i_sat) / (r * t))
@@ -1358,16 +1362,15 @@ def p_est(t, p, x_i, tc_i, pc_i, af_omega_i, alpha_tr,
     return soln
 
 
-def z_phase(t, p, z_i, tc_i, pc_i, af_omega_i, phase,
-            alpha_tr, epsilon, sigma, psi, omega, tol=abs_tol, r=r_def):
+def z_phase(t, p, z_i, tc_i, pc_i, af_omega_i, alpha_tr, epsilon, sigma, psi, omega, tol=abs_tol, r=r_def):
     z_i = asarray(z_i)
     t=asarray(t).flatten()
     p=asarray(p).flatten()
     tr_i=outer(t,1/tc_i)
     pr_i=outer(p,1/pc_i)
-    a_i = psi * alpha_tr(tr_i, af_omega_i) * r ** 2 * tc_i ** 2 / pc_i
-    b_i = omega * r * tc_i / pc_i
-    q_i = a_i / (b_i * r * (tr_i*tc_i))
+    a_i=psi*alpha_tr(tr_i,af_omega_i)*r**2*tc_i**2/pc_i
+    b_i=omega*r*tc_i/pc_i
+    q_i=a_i/(b_i*r*tr_i*tc_i)
     a_ij=array([[sqrt(a_i[:,i]*a_i[:,j]) for i in range(tc_i.shape[0])] for j in range(tc_i.shape[0])]).T
     tc_ij=sqrt(outer(tc_i,tc_i))
 
@@ -1504,9 +1507,9 @@ def z_phase(t, p, z_i, tc_i, pc_i, af_omega_i, phase,
 
 def isot_flash(t, p, x_i, y_i, z_i, tc_i, pc_i, af_omega_i,
                alpha_tr, epsilon, sigma, psi, omega):
-    soln_l = phi(t, p, x_i, tc_i, pc_i, af_omega_i, 'l',
+    soln_l = phi(t, p, x_i, tc_i, pc_i, af_omega_i,
                  alpha_tr, epsilon, sigma, psi, omega)
-    soln_v = phi(t, p, y_i, tc_i, pc_i, af_omega_i, 'v',
+    soln_v = phi(t, p, y_i, tc_i, pc_i, af_omega_i,
                  alpha_tr, epsilon, sigma, psi, omega)
     k_i = soln_l['phi_i'] / soln_v['phi_i']
     soln_v_f = secant_ls_3p(
@@ -1606,7 +1609,7 @@ def pt_flash(t, p, z_i, tc_i, pc_i, af_omega_i,
             x_i_old = x_i
             v_f_old = v_f
             if sec_j is None:
-                soln_phi_l = phi(t, p, x_i, tc_i, pc_i, af_omega_i, 'l',
+                soln_phi_l = phi(t, p, x_i, tc_i, pc_i, af_omega_i,
                               alpha_tr, epsilon, sigma, psi, omega)
                 phi_i_l = soln_phi_l['phi_i']
                 k_i = phi_i_l / phi_i_v
@@ -1645,7 +1648,7 @@ def pt_flash(t, p, z_i, tc_i, pc_i, af_omega_i,
             else:
                 # gamma-phi
                 gamma_i = gamma_u(t, x_i, sec_j, nu_ij, unifac_data_dict)
-            soln_phi_v = phi(t, p, y_i, tc_i, pc_i, af_omega_i, 'v',
+            soln_phi_v = phi(t, p, y_i, tc_i, pc_i, af_omega_i,
                           alpha_tr, epsilon, sigma, psi, omega)
             phi_i_v = soln_phi_v['phi_i']
     elif p_dew >= p:

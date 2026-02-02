@@ -46,15 +46,15 @@ def vdi_atlas():
                    alpha_tr, epsilon, sigma, psi, omega,
                    max_it=100, tol=tol,print_iterations=False)['p'].item()
     soln = secant_ls_3p(lambda p_var:
-                 phi(-256.6 + 273.15, p_var, 1, 33.19, 13.13, -0.216, 'l',
+                 phi(-256.6 + 273.15, p_var, 1, 33.19, 13.13, -0.216,
                      alpha_tr, epsilon, sigma, psi, omega
                      )['phi_i'].item() -
-                 phi(-256.6 + 273.15, p_var, 1, 33.19, 13.13, -0.216, 'v',
+                 phi(-256.6 + 273.15, p_var, 1, 33.19, 13.13, -0.216,
                              alpha_tr, epsilon, sigma, psi, omega)['phi_i'].item()
                  , 0.7, tol=tol, x_1=1.001 * 0.7,
                  restriction=lambda p_val: p_val > 0,
                  print_iterations=False)
-    phi_sat = phi(-256.6 + 273.15, soln['x'], 1, 33.19, 13.13, -0.216, 'v',
+    phi_sat = phi(-256.6 + 273.15, soln['x'], 1, 33.19, 13.13, -0.216,
                              alpha_tr, epsilon, sigma, psi, omega)
 
     t = 273.15 + linspace(-260, 400, 50)
@@ -103,14 +103,14 @@ def vdi_atlas():
     p_min = p_est(t, 1e-3, z_i, tc_i, pc_i, af_omega_i, alpha_tr, epsilon, sigma, psi, omega,
                   100, tol)['p_min_l']
 
-    phi(-256.6 + 273.15, 0.2620861427179638, 1, 33.19, 13.13, -0.216, 'l',
+    phi(-256.6 + 273.15, 0.2620861427179638, 1, 33.19, 13.13, -0.216,
         alpha_tr, epsilon, sigma, psi, omega)
     p_i_sat_ceos(-256.6 + 273.15, 0.2620861427179638, 33.19, 13.13, -0.216, alpha_tr, epsilon, sigma, psi, omega,
                  max_it=100, tol=tol)
     p_range = concatenate([linspace(-71, 0.001, 10), linspace(0.001, 10, 20)])
 
     markers = plt.Line2D.filled_markers
-    fig2 = plt.figure()
+    fig2 = plt.figure(constrained_layout=True)
     plot1 = plt.subplot2grid([2, 2], [1, 0], rowspan=1, colspan=1)
     plot2 = plt.subplot2grid([2, 2], [1, 1], rowspan=1, colspan=1)
     plot3 = plt.subplot2grid([2, 2], [0, 0], rowspan=1, colspan=1)
@@ -178,9 +178,9 @@ def vdi_atlas():
 
     for p in linspace(1e-4, max(p_range), 30):
         rho_l_phase += [
-            z_phase(t, p, z_i, tc_i, pc_i, af_omega_i, 'l', alpha_tr, epsilon, sigma, psi, omega, tol)['rho']]
+            z_phase(t, p, z_i, tc_i, pc_i, af_omega_i, alpha_tr, epsilon, sigma, psi, omega, tol)['rho']]
         rho_v_phase += [
-            z_phase(t, p, z_i, tc_i, pc_i, af_omega_i, 'v', alpha_tr, epsilon, sigma, psi, omega, tol)['rho']]
+            z_phase(t, p, z_i, tc_i, pc_i, af_omega_i, alpha_tr, epsilon, sigma, psi, omega, tol)['rho']]
         p_v_phase += [p]
 
     current_marker = markers[randint(0, len(markers))]
@@ -207,14 +207,14 @@ def vdi_atlas():
                fillstyle='bottom', linestyle='none')
     plot3.plot(z_complex, p_complex, current_marker, markersize=4, linestyle='--',
                fillstyle='none', color=current_color, markeredgewidth=0.25, linewidth=0.5)
-    p_low = z_phase(t, p, z_i, tc_i, pc_i, af_omega_i, 'l', alpha_tr, epsilon, sigma, psi, omega, tol)['p_low']
+    p_low = z_phase(t, p, z_i, tc_i, pc_i, af_omega_i, alpha_tr, epsilon, sigma, psi, omega, tol)['p_low']
     plot1.axhline(p_low, linestyle='-.', color='gray', linewidth=0.5, label='$P_{low}$')
     plot2.axhline(p_low, linestyle='-.', color='gray', linewidth=0.5, label='$P_{low}$')
     plot3.axhline(p_low, linestyle='-.', color='gray', linewidth=0.5, label='$P_{low}$')
     plot4.axhline(p_low, linestyle='-.', color='gray', linewidth=0.5, label='$P_{low}$')
     plot1.set_xlabel(r'$\frac{v}{cm^3/mol}$')
     plot1.set_ylabel('p / bar')
-    plot1.legend(fontsize=6)
+    plot1.legend()
     plot2.set_xlabel(r'$\frac{rho}{mol / cm^3}$')
     plot2.set_ylabel('p / bar')
     plot2.set_title(r'$\rho$' + ', act.')
@@ -224,9 +224,7 @@ def vdi_atlas():
     plot4.set_xlabel(r'$\frac{rho}{mol / cm^3}$')
     plot4.set_ylabel('p / bar')
     plot4.set_title(r'pseudo-$\rho$' + ', L/V [3]')
-    plot4.legend(fontsize=6)
-    plt.tight_layout()
-    
+    plot4.legend()
 
 
 def svn_14_1():
@@ -395,6 +393,7 @@ def svn_14_2_behchmark():
 
 
 def zs_1998():
+    # doi:10.1021/ie970639k
     alpha_tr, epsilon, sigma, psi, omega = use_pr_eos()
     r = 8.3145 # Pa m^3 / (mol K)
     tc_i = array([305.32, 540.2])
@@ -403,10 +402,11 @@ def zs_1998():
     max_it = 100
     markers = plt.Line2D.filled_markers
     p_range = linspace(1e-1, 140, 100) * 1e5
-    plot1 = plt.subplot2grid([2, 2], [1, 0], rowspan=1, colspan=1)
-    plot2 = plt.subplot2grid([2, 2], [1, 1], rowspan=1, colspan=1)
-    plot3 = plt.subplot2grid([2, 2], [0, 0], rowspan=1, colspan=1)
-    plot4 = plt.subplot2grid([2, 2], [0, 1], rowspan=1, colspan=1)
+    fig1=plt.figure(constrained_layout=True)
+    plot1 = plt.subplot2grid([2, 2], [1, 0], rowspan=1, colspan=1,fig=fig1)
+    plot2 = plt.subplot2grid([2, 2], [1, 1], rowspan=1, colspan=1,fig=fig1)
+    plot3 = plt.subplot2grid([2, 2], [0, 0], rowspan=1, colspan=1,fig=fig1)
+    plot4 = plt.subplot2grid([2, 2], [0, 1], rowspan=1, colspan=1,fig=fig1)
     x = 0.5
     p=concatenate([p_range for x in [420,500]])
     z_i=array([[x,1-x] for _ in range(2*len(p_range))])
@@ -419,8 +419,9 @@ def zs_1998():
     q_i=a_i/(b_i*r*tr_i*tc_i)
     a_ij=array([[sqrt(a_i[:,i]*a_i[:,j]) for i in range(tc_i.shape[0])] for j in range(tc_i.shape[0])]).T
     
-    z_phase(500,6e6,array([[0.5,0.5]]),tc_i,pc_i,af_omega_i,'l',alpha_tr,epsilon, sigma, psi, omega,tol,r)
-    z_phase(420,140e6,array([[0.5,0.5]]),tc_i,pc_i,af_omega_i,'l',alpha_tr,epsilon, sigma, psi, omega,tol,r)
+    # two important points
+    #z_phase(500,6e6,array([[0.5,0.5]]),tc_i,pc_i,af_omega_i,alpha_tr,epsilon, sigma, psi, omega,tol,r)
+    #z_phase(420,140e6,array([[0.5,0.5]]),tc_i,pc_i,af_omega_i,alpha_tr,epsilon, sigma, psi, omega,tol,r)
 
     # Variablen, die von der Flüssigkeit-Zusammensetzung abhängig sind
     b=z_i.dot(b_i)
@@ -463,7 +464,7 @@ def zs_1998():
     z_complex = roots[idx,1].real # real part of complex root
     p_complex = p[idx]
 
-    soln=z_phase(t, p, z_i, tc_i, pc_i, af_omega_i, 'l', alpha_tr, epsilon, sigma, psi, omega, tol, r)
+    soln=z_phase(t, p, z_i, tc_i, pc_i, af_omega_i, alpha_tr, epsilon, sigma, psi, omega, tol, r)
     rho_l_phase=soln['rho_l']
     rho_v_phase=soln['rho_v']
 
@@ -520,7 +521,7 @@ def zs_1998():
         plot1.axvline(b, linestyle='-')
         plot2.axvline(1 / b, linestyle='-')
         plot4.axvline(1 / b, linestyle='-')
-    p_low = z_phase(420, 140e5, array([[0.5,0.5]]), tc_i, pc_i, af_omega_i, 'l', alpha_tr, epsilon, sigma, psi, omega, tol, r)['p_low']
+    p_low = z_phase(420, 140e5, array([[0.5,0.5]]), tc_i, pc_i, af_omega_i, alpha_tr, epsilon, sigma, psi, omega, tol, r)['p_low']
     plot1.axhline(p_low, linestyle='-.', color='gray', linewidth=0.5, label='$P_{low}$')
     plot2.axhline(p_low, linestyle='-.', color='gray', linewidth=0.5)
     plot4.axhline(p_low, linestyle='-.', color='gray', linewidth=0.5, label='$P_{low}$')
@@ -531,52 +532,45 @@ def zs_1998():
     plot2.set_title(r'$\rho$' + ', act.')
     plot2.set_ylim(0, max(a_data[:, 1]))
     plot2.ticklabel_format(axis='y', scilimits=[-4,4])
-    plot2.legend(fontsize=6)
+    plot2.legend()
     plot3.set_xlabel(r'$Z$')
     plot3.set_ylabel('p / Pa')
-    plot3.legend(['real root', 'real part of complex root'], fontsize=6)
+    plot3.legend(['real root', 'real part of complex root'])
     plot4.set_xlabel(r'$\frac{rho}{mol / m^3}$')
     plot4.set_ylabel('p / Pa')
     plot4.set_title(r'pseudo-$\rho$' + ', L/V [3]')
-    plot4.legend(fontsize=6)
+    plot4.legend()
     plot4.set_ylim(0, max(a_data[:, 1]))
     plot4.ticklabel_format(axis='y', scilimits=[-4, 4])
     plt.tight_layout()
-    plot1.legend(fontsize=6)
+    plot1.legend()
 
 
     fig2 = plt.figure()
-    ax = plt.axes()
     p_list = linspace(1e-4, 80, 30) * 1e5
-    j = 1
-    for t in [420, 500]:
-        phi_list_l = empty([len(p_list), 2])
-        phi_list_v = empty([len(p_list), 2])
-        for i, p in enumerate(p_list):
-            phi_list_l[i] = phi(t, p, z_i, tc_i, pc_i, af_omega_i, 'l', alpha_tr, epsilon, sigma, psi, omega)['phi_i']
-            phi_list_v[i] = phi(t, p, z_i, tc_i, pc_i, af_omega_i, 'v', alpha_tr, epsilon, sigma, psi, omega)['phi_i']
-
-        plt.subplot(1, 2, j)
+    phi_soln=phi(t, p, z_i, tc_i, pc_i, af_omega_i, alpha_tr, epsilon, sigma, psi, omega)
+    phi_i_l,phi_i_v=phi_soln['phi_i_l'],phi_soln['phi_i_v']
+    for j,t_val in enumerate([420,500]):
+        idx=(t==t_val)
+        plt.subplot(1, 2, j+1)
         current_marker = markers[randint(0, len(markers))]
-        plt.plot(p_list, log(phi_list_l[:, 0]), current_marker+'-', label=r'$\phi_{C2}^L$')
-        plt.plot(p_list, log(phi_list_v[:, 0]), current_marker + '-', label=r'$\phi_{C2}^V$')
+        plt.plot(p[idx], log(phi_i_l[idx, 0]), current_marker+'-', label=r'$\phi_{C2}^L$')
+        plt.plot(p[idx], log(phi_i_v[idx, 0]), current_marker + '-', label=r'$\phi_{C2}^V$')
         current_marker = markers[randint(0, len(markers))]
-        plt.plot(p_list, log(phi_list_l[:, 1]), current_marker + '-', label=r'$\phi_{C7}^L$')
-        plt.plot(p_list, log(phi_list_v[:, 1]), current_marker+'-', label=r'$\phi_{C7}^V$')
+        plt.plot(p[idx], log(phi_i_l[idx, 1]), current_marker + '-', label=r'$\phi_{C7}^L$')
+        plt.plot(p[idx], log(phi_i_v[idx, 1]), current_marker+'-', label=r'$\phi_{C7}^V$')
         plt.xlabel('p / Pa')
         plt.ylabel(r'$log \phi$')
-        plt.title('T={:g}K'.format(t))
+        plt.title('T={:g}K'.format(t_val))
         if j == 1:
-            plt.axvline(z_phase(t, p, z_i, tc_i, pc_i, af_omega_i, 'l', alpha_tr, epsilon, sigma, psi, omega)['p_low'],
-                        linestyle='--', label='$P_{low}$')
-            plt.ylim(-3, 3)
-        else:
+            plt.vlines(z_phase(t[idx], p[idx], z_i[idx,:], tc_i, pc_i, af_omega_i, alpha_tr, epsilon, sigma, psi, omega)['p_low'],ymin=-2,ymax=4,linestyle='--', label='$P_{low}$')
             plt.ylim(-2, 4)
+        else:
+            plt.ylim(-3, 3)
         plt.legend()
         j += 1
-        ax = plt.gca().ticklabel_format(axis='x', scilimits=[-4,4])
+        plt.gca().ticklabel_format(axis='x', scilimits=[-4,4])
     plt.tight_layout()
-    
 
 
 def svn_fig_14_8():
@@ -664,9 +658,9 @@ def svn_fig_14_8():
 
         for p in linspace(1e-4, max(p_range), 30):
             rho_l_phase += [
-                z_phase(t, p, z_i, tc_i, pc_i, af_omega_i, 'l', alpha_tr, epsilon, sigma, psi, omega, tol)['rho']]
+                z_phase(t, p, z_i, tc_i, pc_i, af_omega_i, alpha_tr, epsilon, sigma, psi, omega, tol)['rho']]
             rho_v_phase += [
-                z_phase(t, p, z_i, tc_i, pc_i, af_omega_i, 'v', alpha_tr, epsilon, sigma, psi, omega, tol)['rho']]
+                z_phase(t, p, z_i, tc_i, pc_i, af_omega_i, alpha_tr, epsilon, sigma, psi, omega, tol)['rho']]
             p_v_phase += [p]
 
         current_marker = markers[randint(0, len(markers))]
@@ -700,17 +694,17 @@ def svn_fig_14_8():
                   alpha_tr, epsilon, sigma, psi, omega, max_it, tol)
     plot1.set_xlabel(r'$\frac{v}{cm^3/mol}$')
     plot1.set_ylabel('p / bar')
-    plot1.legend(fontsize=6)
+    plot1.legend()
     plot2.set_xlabel(r'$\frac{rho}{mol / cm^3}$')
     plot2.set_ylabel('p / bar')
     plot2.set_title(r'$\rho$' + ', act.')
     plot3.set_xlabel(r'$Z$')
     plot3.set_ylabel('p / bar')
-    plot3.legend(['real root', 'real part of complex root'], fontsize=6)
+    plot3.legend(['real root', 'real part of complex root'])
     plot4.set_xlabel(r'$\frac{rho}{mol / cm^3}$')
     plot4.set_ylabel('p / bar')
     plot4.set_title(r'pseudo-$\rho$' + ', L/V [3]')
-    plot4.legend(fontsize=6)
+    plot4.legend()
     plt.tight_layout()
     
 
