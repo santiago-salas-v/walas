@@ -1382,7 +1382,7 @@ def z_phase(t, p, z_i, tc_i, pc_i, af_omega_i, phase,
     t_mc = diagonal(z_i.dot(tc_ij).dot(z_i.T))
     rho_mc = p_mc / (r * t_mc * z_mc)
     v_mc = 1 / rho_mc
-    p_mc_bound=r*t/(v_mc-b)-a/((v_mc+epsilon*b)*(v_mc*sigma*b))
+    p_mc_bound=r*t/(v_mc-b)-a/((v_mc+epsilon*b)*(v_mc+sigma*b))
     dp_drho_at_rho_mc=(-r*t/(v_mc-b)**2+a/((v_mc+epsilon*b)*(v_mc+sigma*b))*(
         1/(v_mc+epsilon*b)+1/(v_mc+sigma*b)))*(-v_mc**2)
 
@@ -1402,24 +1402,24 @@ def z_phase(t, p, z_i, tc_i, pc_i, af_omega_i, phase,
     q2=(3*(epsilon+sigma)+6)*b/(r*t)-9*a/(r*t)**2
     q3=2*ones(p.shape)
 
-    roots_p=zeros([p.shape[0],3])  # init
+    roots_p=zeros([p.shape[0],3])*1j  # init
     disc_p=q2**2-4*q1*q3
     idx=((q0==0) & (disc_p>=0)) # reduces to quadratic (SRK), 2 X real
     roots_p[idx,:2]=array([-(q2/q1)[idx]/2+sqrt(disc_p[idx])/(2*q1[idx]),-(q2/q1)[idx]/2-sqrt(disc_p[idx])/(2*q1[idx])]).T
     idx=((q0==0) & (disc_p<0)) # reduces to quadratic (SRK), 2 X complex
     roots_p[idx,:2]=array([-(q2/q1)[idx]/2+sqrt(-disc_p[idx])/(2*q1[idx])*1j,-(q2/q1)[idx]/2-sqrt(-disc_p[idx])/(2*q1[idx])*1j]).T
-    p_low = roots_p.real.min(axis=1)
-    p_cross = roots_p.real.max(axis=1)
+    #p_low = roots_p.real.min(axis=1)
+    #p_cross = roots_p.real.max(axis=1)
 
     idx=(q0!=0) # full cubic
     roots_p[idx,:]=solve_cubic([x[idx] for x in [q0,q1,q2,q3]])['roots']
 
-    re_roots_p=re_roots_p=roots_p[(roots_p.imag==0).all(axis=1)]
+
     n_positive_roots_p = ((roots_p.imag==0) & (roots_p>0)).sum(axis=1)
 
     z_l,z_l_low,z_v,z_v_low = zeros(p.shape), zeros(p.shape), zeros(p.shape), zeros(p.shape)
     rho_l_low,rho_v_low = nan*ones(p.shape), nan*ones(p.shape)
-    p_high,p_cross,p_low=zeros(p.shape),zeros(p.shape),zeros(p.shape)
+    p_high,p_cross,p_low=zeros(p.shape),zeros(p.shape),ones(p.shape)*finfo(float).eps
     # roots are sorted
     p_high[n_positive_roots_p<=1]=roots_p[n_positive_roots_p<=1,0].real
     p_high[n_positive_roots_p==3]=roots_p[n_positive_roots_p==3,0].real
@@ -1447,6 +1447,15 @@ def z_phase(t, p, z_i, tc_i, pc_i, af_omega_i, phase,
     rho_l_low=1/v_l_low
     dp_drho_at_rho_l_low=(-r*t/(v_l_low-b)**2+a/((v_l_low+epsilon*b)*(v_l_low+sigma*b))*(
         1/(v_l_low+epsilon*b)+1/(v_l_low+sigma*b)))*(-v_l_low**2)
+    # liquid pseudo-density single real fallback
+    idx=((t>=t_mc) | (n_positive_roots_p<=1)) & (p>p_mc_bound)
+    z_l[idx]=roots_z[idx,0].real
+    # liquid pseudo-density - eq. 36, 38, 39 fallback
+    idx=((t>=t_mc) | (n_positive_roots_p<=1)) & (p<=p_mc_bound)
+    c1=dp_drho_at_rho_mc[idx]*(rho_mc-0.7*rho_mc)[idx]
+    c0=p_mc_bound[idx]-c1*log((rho_mc-0.7*rho_mc)[idx])
+    rho_l=0.7*rho_mc[idx]+exp((p[idx]-c0)/c1)
+    z_l[idx]=p[idx]*1/rho_l/(r*t[idx])
     # liquid density smallest real
     idx=((t<t_mc) | (n_positive_roots_p>1)) & (p>p_low) & (disc_z<=0)
     z_l[idx]=roots_z[idx,2].real
@@ -1459,29 +1468,25 @@ def z_phase(t, p, z_i, tc_i, pc_i, af_omega_i, phase,
     rho_l=rho_l_low[idx]+(rho_l_low-0.7*rho_mc)[idx]/dp_drho_at_rho_l_low[idx]
     rho_l=(p-p_low)[idx]*(rho_l_low-0.7*rho_mc)[idx]+rho_l_low[idx]
     z_l[idx]=p[idx]*1/rho_l/(r*t[idx])
-    # liquid pseudo-density real: extrapolating function l
+    # liquid pseudo-density real: extrapolating function l - eq. 36, 38, 39
     idx=((t<t_mc) | (n_positive_roots_p>1)) & (p<=p_low) & (
         (rho_l_low-0.7*rho_mc>0) & (dp_drho_at_rho_l_low>=0))
     c1=dp_drho_at_rho_l_low[idx]*(rho_l_low-0.7*rho_mc)[idx]
     c0=p_low[idx]-c1*log((rho_l_low-0.7*rho_mc)[idx])
     rho_l=0.7*rho_mc[idx]+exp((p[idx]-c0)/c1)
     z_l[idx]=p[idx]*1/rho_l/(r*t[idx])
-    # liquid pseudo-density single real
-    idx=((t>=t_mc) | (n_positive_roots_p<=1)) & (p>p_mc_bound)
-    z_l[idx]=roots_z[idx,0].real
-    # liquid pseudo-density - eq. 36, 38, 39
-    idx=((t>=t_mc) | (n_positive_roots_p<=1)) & (p<=p_mc_bound)
-    c1=dp_drho_at_rho_mc[idx]*(rho_mc-0.7*rho_mc)[idx]
-    c0=p_low[idx]-c1*log((rho_mc-0.7*rho_mc)[idx])
-    rho_l=0.7*rho_mc[idx]+exp((p[idx]-c0)/c1)
-    z_l[idx]=p[idx]*1/rho_l/(r*t[idx])
-    
+    rho_l=p/(r*t*z_l)
+    v_l=1/rho_l
+
     # phase: V
     v_v_low=z_v_low*r*t/p_low
     rho_v_low=1/v_v_low
     dp_drho_at_rho_v_low=(-r*t/(v_v_low-b)**2+a/((v_v_low+epsilon*b)*(v_v_low+sigma*b))*(
         1/(v_v_low+epsilon*b)+1/(v_v_low+sigma*b)))*(-v_v_low**2)
     dp_drho_at_rho_v_low=maximum(dp_drho_at_rho_v_low,0.1*r*t)
+    # vapor density fallback
+    idx=((t>=t_mc) | (n_positive_roots_p<=0))
+    z_v[idx]=roots_z[idx,0].real
     # vapor density single real
     idx=((t<t_mc) | (n_positive_roots_p>1)) & (p<=p_low)
     z_v[idx]=roots_z[idx,0].real
@@ -1492,9 +1497,8 @@ def z_phase(t, p, z_i, tc_i, pc_i, af_omega_i, phase,
     rho2=-p_low**2*((rho_v_low-1.4*rho_mc)/2+p_low/dp_drho_at_rho_v_low)
     rho_v=rho0+rho1/p+rho2/p**2
     z_v[idx]=p[idx]*1/rho_v[idx]/(r*t[idx])
-    # vapor density fallback
-    idx=((t>=t_mc) | (n_positive_roots_p<=0))
-    z_v[idx]=roots_z[idx,0].real
+    rho_v=p/(r*t*z_v)
+    v_v=1/rho_v
 
     return {item:locals().get(item) for item in ['z_l','z_v', 'rho_l','rho_v', 'v_l','v_v', 'p_low', 'p_mc_bound', 'p_high', 'p_cross']}
 

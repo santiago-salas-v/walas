@@ -1,7 +1,7 @@
 import sys
 
 from matplotlib import pyplot as plt
-from numpy import array, zeros, ones, empty, log, append, linspace, sqrt, exp, sum
+from numpy import array, zeros, ones, empty, log, append, linspace, sqrt, exp, sum, diagonal
 from numpy import finfo, nan, concatenate, asarray, empty_like, dot, outer, multiply
 from numpy.random import randint
 from scipy import optimize
@@ -408,85 +408,91 @@ def zs_1998():
     plot3 = plt.subplot2grid([2, 2], [0, 0], rowspan=1, colspan=1)
     plot4 = plt.subplot2grid([2, 2], [0, 1], rowspan=1, colspan=1)
     x = 0.5
-    p=concatenate([p_range for x in [420,500]])[:,None]
+    p=concatenate([p_range for x in [420,500]])
     z_i=array([[x,1-x] for _ in range(2*len(p_range))])
-    t=concatenate([[x for _ in range(len(p_range))] for x in [420,500]])[:,None]
+    t=concatenate([[x for _ in range(len(p_range))] for x in [420,500]])
     tr_i=outer(t,1/tc_i)
     pr_i=outer(p,1/pc_i)
     a_i=psi*alpha_tr(tr_i,af_omega_i)*r**2*tc_i**2/pc_i
     b_i=omega*r*tc_i/pc_i
-    beta_i=b_i*p/(r*t)
-    q_i=a_i/(b_i*r*t)
+    beta_i=b_i*pr_i*pc_i/(r*tr_i*tc_i)
+    q_i=a_i/(b_i*r*tr_i*tc_i)
     a_ij=array([[sqrt(a_i[:,i]*a_i[:,j]) for i in range(tc_i.shape[0])] for j in range(tc_i.shape[0])]).T
+    
+    z_phase(500,6e6,array([[0.5,0.5]]),tc_i,pc_i,af_omega_i,'l',alpha_tr,epsilon, sigma, psi, omega,tol,r)
+    z_phase(420,140e6,array([[0.5,0.5]]),tc_i,pc_i,af_omega_i,'l',alpha_tr,epsilon, sigma, psi, omega,tol,r)
 
     # Variablen, die von der Flüssigkeit-Zusammensetzung abhängig sind
-    b=z_i.dot(b_i)[:,None]
-    a=array([[z_i[:,i]*z_i[:,j]*a_ij[:,i,j] for i in range(tc_i.shape[0])] for j in range(tc_i.shape[0])]).sum(axis=(0,1))[:,None]
+    b=z_i.dot(b_i)
+    a=diagonal(diagonal(z_i.dot(a_ij).dot(z_i.T)))
     beta=b*p/(r*t)
     q=a/(b*r*t)
-    a_mp_i=-a+2*array([[a_ij[j,i,:]*z_i[j,i] for j in range(a_ij.shape[0])] for i in range(a_ij.shape[1])]).sum(axis=0) # partielles molares a_i
+    a_mp_i=(-a+2*diagonal(z_i.dot(a_ij))).T
     b_mp_i=b_i  # partielles molares b_i
-    q_mp_i=q*(1+a_mp_i/a-b_i/b) # partielles molares q_i
+    q_mp_i=array([q*(1+a_mp_i[:,j]/a-b_i[j]/b) for j in range(tc_i.shape[0])]).T # partielles molares q_i
 
     a0=ones(t.shape)
     a1=beta*(epsilon+sigma)-beta-1
     a2=q*beta+epsilon*sigma*beta**2-beta*(epsilon+sigma)*(1+beta)
     a3=-(epsilon*sigma*beta**2*(1+beta)+q*beta**2)
 
-    soln = solve_cubic([x.flatten() for x in [a0, a1, a2, a3]])
+    soln = solve_cubic([a0, a1, a2, a3])
     roots, disc = soln['roots'], soln['disc']
 
     idx=((disc<=0) & (roots[:,0]>=0)) # 3 real roots. smallest ist liq. largest is gas.
-    z_l = (roots[idx,0].real)[:,None]
-    z_mid = (roots[idx,1].real)[:,None]
-    z_v = (roots[idx,2].real)[:,None]
+    z_l = (roots[idx,0].real)
+    z_mid = (roots[idx,1].real)
+    z_v = (roots[idx,2].real)
     v_l = z_l * r * t[idx] / p[idx]
     v_mid = z_mid * r * t[idx] / p[idx]
     v_v = z_v * r * t[idx] / p[idx]
     p_plot = [p[idx], p[idx], p[idx]]
+    t_plot = [t[idx], t[idx], t[idx]]
     v_plot = [v_l, v_mid, v_v]
     rho_plot = [1 / v_l, 1 / v_mid, 1 / v_v]
     z_plot = [z_l, z_mid, z_v]
 
     idx=disc > 0 # one real root, 2 complex. First root is the real one.
-    z = (roots[idx,0].real)[:,None]
+    z = (roots[idx,0].real)
     v = z * r * t[idx] / abs(p[idx])
     p_plot += [p[idx]]
+    t_plot += [t[idx]]
     v_plot += [v]
     rho_plot += [1 / v]
     z_plot += [z]
-    """
-    z_complex += [roots[:,1]]
-    p_complex += [p[idx]]
-    for p in linspace(1e-4, max(p_range), 30):
-        rho_l_phase += [
-            z_phase(t, p, z_i, tc_i, pc_i, af_omega_i, 'l', alpha_tr, epsilon, sigma, psi, omega, tol, r)['rho']]
-        rho_v_phase += [
-            z_phase(t, p, z_i, tc_i, pc_i, af_omega_i, 'v', alpha_tr, epsilon, sigma, psi, omega, tol, r)['rho']]
-        p_v_phase += [p]
-    """
-    for j in range(len(v_plot)):
-        plot1.semilogx(v_plot[j], p_plot[j], markers[randint(0, len(markers))], fillstyle='none')
-        rho_line = plot2.plot(rho_plot[j], p_plot[j], markers[randint(0, len(markers))], fillstyle='none')
+    z_complex = roots[idx,1].real # real part of complex root
+    p_complex = p[idx]
+
+    soln=z_phase(t, p, z_i, tc_i, pc_i, af_omega_i, 'l', alpha_tr, epsilon, sigma, psi, omega, tol, r)
+    rho_l_phase=soln['rho_l']
+    rho_v_phase=soln['rho_v']
+
+    v_plot=concatenate(v_plot)
+    p_plot=concatenate(p_plot)
+    t_plot=concatenate(t_plot)
+    rho_plot=concatenate(rho_plot)
+    z_plot=concatenate(z_plot)
+    for t_val in [420,500]:
+        idx=(t_plot==t_val)
+        plot1.semilogx(v_plot[idx], p_plot[idx], markers[randint(0, len(markers))], fillstyle='none')
+        rho_line = plot2.plot(rho_plot[idx], p_plot[idx], markers[randint(0, len(markers))], fillstyle='none')
+        z_line = plot3.plot(z_plot[idx], p_plot[idx], markers[randint(0, len(markers))], fillstyle='none')
         current_color = plt.get(rho_line[0], 'color')
         current_marker = plt.get(rho_line[0], 'marker')
-        """
-        plot4.plot(rho_l_phase, p_v_phase, current_marker, markeredgewidth=0.5,
+        idx=(t==t_val)
+        plot4.plot(rho_l_phase[idx], p[idx], current_marker, markeredgewidth=0.5,
                    color=current_color, markersize=4, fillstyle='bottom', linestyle='none',
-                   label=r'$L: x_1={:g}$'.format(z_i[0]))
-        plot4.plot(rho_v_phase, p_v_phase, current_marker, markeredgewidth=0.25,
+                   label=r'$L: x_1={:g}$'.format(z_i[0][0]))
+        plot4.plot(rho_v_phase[idx], p[idx], current_marker, markeredgewidth=0.25,
                    color=current_color, markersize=4, fillstyle='none', linestyle='--',
-                   label=r'$V: y_1={:g}$'.format(z_i[0]))
-        plot2.plot(rho_l_phase, p_v_phase, '--',
+                   label=r'$V: y_1={:g}$'.format(z_i[0][0]))
+        plot2.plot(rho_l_phase[idx], p[idx], '--',
                    color=current_color, label=r'pseudo-$\rho_L$')
-        plot2.plot(rho_v_phase, p_v_phase, ':',
+        plot2.plot(rho_v_phase[idx], p[idx], ':',
                    color=current_color, label=r'pseudo-$\rho_V$')
-       """
-        z_line = plot3.plot(z_plot[j], p_plot[j], markers[randint(0, len(markers))], fillstyle='none')
         current_color = plt.get(z_line[0], 'color')
         current_marker = markers[randint(0, len(markers))]
-        #plot3.plot(z_complex, p_complex, '.', alpha=0.1,
-        #           fillstyle='none', color=current_color)
+    plot3.plot(z_complex, p_complex, '.', alpha=0.1, fillstyle='none', color=current_color)
 
     data = []
     f = open('./data/actual_density.csv')
@@ -514,7 +520,7 @@ def zs_1998():
         plot1.axvline(b, linestyle='-')
         plot2.axvline(1 / b, linestyle='-')
         plot4.axvline(1 / b, linestyle='-')
-    p_low = z_phase(420, p, z_i, tc_i, pc_i, af_omega_i, 'l', alpha_tr, epsilon, sigma, psi, omega, tol)['p_low']
+    p_low = z_phase(420, 140e5, array([[0.5,0.5]]), tc_i, pc_i, af_omega_i, 'l', alpha_tr, epsilon, sigma, psi, omega, tol, r)['p_low']
     plot1.axhline(p_low, linestyle='-.', color='gray', linewidth=0.5, label='$P_{low}$')
     plot2.axhline(p_low, linestyle='-.', color='gray', linewidth=0.5)
     plot4.axhline(p_low, linestyle='-.', color='gray', linewidth=0.5, label='$P_{low}$')
