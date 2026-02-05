@@ -31,8 +31,8 @@ def laguerre(a, x):
     N,n=a.shape # N rows, n cols
     ad_v = a
     mr = 8
-    mt = 10*2
-    maxit = mt * mr
+    mt = 10
+    maxit = mt * mr * min(3,a.shape[0])
     eps = finfo(float).eps
     # EPS here: estimated fractional roundoff error
 
@@ -42,12 +42,13 @@ def laguerre(a, x):
     frac = [0.0,0.5,0.25,0.75,0.13,0.38,0.62,0.88,1.0]
     m = n-1
     dx=empty(N,dtype=complex) # init. dx
+    idx=empty(N,dtype=bool) # init indices
     for iter in range(1, maxit+1):
         # loop over iterations up to allowed maximum
         its = iter
         b = a[:,m]
         err = abs(b)
-        d = f = zeros(N)
+        d = f = zeros(N,dtype=complex)
         abx = abs(x)
         for j in range(m-1, 0-1, -1):
             # efficient computation of the polynomial
@@ -61,27 +62,27 @@ def laguerre(a, x):
         # polynomial
         err *= eps
         if (abs(b) <= err).all(): return ad_v, x, its  # we are on the root
+        idx[b==0]=False # exclude rows that converged already (b=0)
         # the generic case: use Laguerre's formula
-        g = d/b # exclude rows that converged already (b=0)
+        g = d[b!=0]/b[b!=0]
         g2 = g**2
-        h = g2 - 2.0 * f/b
+        h = g2 - 2.0 * f[b!=0]/b[b!=0]
         sq = emath.sqrt((m-1) * (m*h - g2))
         gp = g + sq
         gm = g -sq
         abp = abs(gp)
         abm = abs(gm)
         gp[abp<abm]=gm[abp<abm]
-        idx=maximum(abp,abm)>0
-        dx[idx]=float(m)/gp[idx]
+        idx[b!=0]=maximum(abp,abm)>0
+        dx[idx]=float(m)/gp
         dx[~idx]=(1+abx[~idx])*exp(iter*1j) # equivalent to polar(1+abx, iter)
         x1 = x - dx
         if (dx == 0).all():
-            print('converged')
-            return adv_v, its  # converged
+            return ad_v, x, its  # converged
         if iter % mt != 0:
             x = x1
         else:
-            x -= frac[int(iter/mt)] * dx
+            x -= frac[int(iter/maxit)] * dx
 
     print('not converged')
     raise Exception("too many iterations in laguerre")
@@ -90,22 +91,28 @@ def laguerre(a, x):
     return ad_v, x, its
 
 
-print(zroots([[1,2,3,4,5],[5,6,7,8,9]]))
+def test_poly_n():
+    print(zroots([[1,2,3,4,5],[5,6,7,8,9]]))
 
-a=array([[-2.4e+01, -2.3e+01, -2.2e+01, -2.1e+01, -2.0e+01],
-       [-1.9e+01, -1.8e+01, -1.7e+01, -1.6e+01, -1.5e+01],
-       [-1.4e+01, -1.3e+01, -1.2e+01, -1.1e+01, -1.0e+01],
-       [-9.0e+00, -8.0e+00, -7.0e+00, -6.0e+00, -5.0e+00],
-       [-4.0e+00, -3.0e+00, -2.0e+00, -1.0e+00,  1.0e-13],
-       [ 1.0e+00,  2.0e+00,  3.0e+00,  4.0e+00,  5.0e+00],
-       [ 6.0e+00,  7.0e+00,  8.0e+00,  9.0e+00,  1.0e+01],
-       [ 1.1e+01,  1.2e+01,  1.3e+01,  1.4e+01,  1.5e+01],
-       [ 1.6e+01,  1.7e+01,  1.8e+01,  1.9e+01,  2.0e+01],
-       [ 2.1e+01,  2.2e+01,  2.3e+01,  2.4e+01,  2.5e+01],
-       [ 2.6e+01,  2.7e+01,  2.8e+01,  2.9e+01,  3.0e+01],
-       [ 3.1e+01,  3.2e+01,  3.3e+01,  3.4e+01,  3.5e+01],
-       [ 3.6e+01,  3.7e+01,  3.8e+01,  3.9e+01,  4.0e+01],
-       [ 4.1e+01,  4.2e+01,  4.3e+01,  4.4e+01,  4.5e+01],
-       [ 4.6e+01,  4.7e+01,  4.8e+01,  4.9e+01,  5.0e+01]])
+    a=array([[-2.4e+01, -2.3e+01, -2.2e+01, -2.1e+01, -2.0e+01],
+           [-1.9e+01, -1.8e+01, -1.7e+01, -1.6e+01, -1.5e+01],
+           [-1.4e+01, -1.3e+01, -1.2e+01, -1.1e+01, -1.0e+01],
+           [-9.0e+00, -8.0e+00, -7.0e+00, -6.0e+00, -5.0e+00],
+           [-4.0e+00, -3.0e+00, -2.0e+00, -1.0e+00,  1.0e-13],
+           [ 1.0e+00,  2.0e+00,  3.0e+00,  4.0e+00,  5.0e+00],
+           [ 6.0e+00,  7.0e+00,  8.0e+00,  9.0e+00,  1.0e+01],
+           [ 1.1e+01,  1.2e+01,  1.3e+01,  1.4e+01,  1.5e+01],
+           [ 1.6e+01,  1.7e+01,  1.8e+01,  1.9e+01,  2.0e+01],
+           [ 2.1e+01,  2.2e+01,  2.3e+01,  2.4e+01,  2.5e+01],
+           [ 2.6e+01,  2.7e+01,  2.8e+01,  2.9e+01,  3.0e+01],
+           [ 3.1e+01,  3.2e+01,  3.3e+01,  3.4e+01,  3.5e+01],
+           [ 3.6e+01,  3.7e+01,  3.8e+01,  3.9e+01,  4.0e+01],
+           [ 4.1e+01,  4.2e+01,  4.3e+01,  4.4e+01,  4.5e+01],
+           [ 4.6e+01,  4.7e+01,  4.8e+01,  4.9e+01,  5.0e+01]])
+    x=zroots(a)
 
-print(zroots(a))
+    from tabulate import tabulate
+    print('order n={:d}, poly N={:d}, roots:'.format(a.shape[1],a.shape[0]))
+    print(tabulate(array([[a[:,j]*x[:,k]**j for j in range(a.shape[1])] for k in range(x.shape[1])]).real.sum(axis=1).T))
+
+test_poly_n()
