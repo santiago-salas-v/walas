@@ -112,7 +112,16 @@ def test_poly_n():
     x=zroots(a)
 
     from tabulate import tabulate
-    print('order n={:d}, poly N={:d}, roots:'.format(a.shape[1],a.shape[0]))
-    print(tabulate(array([[a[:,j]*x[:,k]**j for j in range(a.shape[1])] for k in range(x.shape[1])]).real.sum(axis=1).T))
+    print('order n={:d}, poly N={:d}:'.format(a.shape[1],a.shape[0]))
+    print('coefs:')
+    print(tabulate(a.real))
+    print('re(roots):')
+    print(tabulate(x.real))
+    print('im(roots):')
+    print(tabulate(x.imag))
 
-test_poly_n()
+    print('re(y(roots)):')
+    print(tabulate(array([[a[:,j]*x[:,k]**j for j in range(a.shape[1])] for k in range(x.shape[1])]).real.sum(axis=1).T))
+    print('im(y(roots)):')
+    print(tabulate(array([[a[:,j]*x[:,k]**j for j in range(a.shape[1])] for k in range(x.shape[1])]).imag.sum(axis=1).T))
+
