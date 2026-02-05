@@ -1,4 +1,4 @@
-from numpy import array, zeros, ones, eye, argmax, finfo, copy, empty_like, zeros_like, empty
+from numpy import array, zeros, ones, eye, argmax, finfo, copy, empty_like, zeros_like, empty, append
 from numpy import sqrt, log, exp, nan, isnan, isinf, size, asarray
 
 
@@ -577,8 +577,8 @@ def secant_ls_3p(y, x_0, tol, x_1=None, f_prime=None,
         :return: dict with keys: ['x', 'f', 'x_list', 'f_list',
                  'iterations', 'total_backtracks', 'steps', 'success']
         """
-    x_k = x_0
-    y_k = y(x_k)
+    x_k = array(x_0)
+    y_k = array(y(x_k))
     g_k = 1 / 2 * y_k**2
     g_prime_k = - y_k**2
     # initialize to prevent
@@ -598,13 +598,13 @@ def secant_ls_3p(y, x_0, tol, x_1=None, f_prime=None,
     total_backtracks = 0
     backtrackcount = 0
     success = False
-    steps = []
-    y_list = []
-    x_list = []
+    steps = array([])
+    y_list = array([])
+    x_list = array([])
     for j in range(max_it):
-        y_list += [y_k]
-        x_list += [x_k]
-        steps += [accum_step]
+        y_list = append(y_list,y_k)
+        x_list = append(x_list,x_k)
+        steps = append(steps,accum_step)
         if abs(y_k) <= tol:
             success = True
             break
@@ -696,16 +696,16 @@ def secant_ls_3p(y, x_0, tol, x_1=None, f_prime=None,
 
             if not stop:
                 # backtrack - reduce lambda
-                x_list += [x_2]
-                y_list += [f_2]
-                steps += [accum_step]
+                x_list =append(x_list,x_2)
+                y_list = append(y_list,f_2)
+                steps = append(steps,accum_step)
                 backtrackcount += 1
                 accum_step -= lambda_ls
                 if lambda_ls == 1:
                     # first backtrack quadratic fit
-                    lambda_temp = -g_prime_0 / (
+                    lambda_temp = (-g_prime_0 / (
                         2 * (g_2 - g_0 - g_prime_0)
-                    )
+                    )).item()
                 elif lambda_ls < 1:
                     # subsequent backtracks cubic fit
                     a, b = 1 / (lambda_ls - lambda_prev) * array(
@@ -713,17 +713,17 @@ def secant_ls_3p(y, x_0, tol, x_1=None, f_prime=None,
                          [-lambda_prev / lambda_ls**2,
                           +lambda_ls / lambda_prev**2]]
                     ).dot(array(
-                        [[g_2 - g_0 - g_prime_0 * lambda_ls],
-                         [g_1 - g_0 - g_prime_0 * lambda_prev]]
+                        [g_2 - g_0 - g_prime_0 * lambda_ls,
+                         g_1 - g_0 - g_prime_0 * lambda_prev]
                     ))
                     a, b = a.item(), b.item()
                     disc = b**2 - 3 * a * g_prime_0
                     if a == 0:
                         # actually quadratic
-                        lambda_temp = - g_prime_0 / (2 * b)
+                        lambda_temp = (- g_prime_0 / (2 * b)).item()
                     else:
                         # legitimate cubic
-                        lambda_temp = (-b + sqrt(disc)) / (3 * a)
+                        lambda_temp = ((-b + sqrt(disc)) / (3 * a)).item()
                     if lambda_temp > 1 / 2 * lambda_ls:
                         lambda_temp = 1 / 2 * lambda_ls
                 lambda_prev = lambda_ls

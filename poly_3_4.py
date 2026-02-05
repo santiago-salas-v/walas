@@ -1,4 +1,4 @@
-from numpy import array, lexsort, pi, cos, arccos, log10, sign, emath, abs, sqrt
+from numpy import array, lexsort, pi, cos, arccos, log10, sign, emath, abs, sqrt, ones
 from numpy import finfo
 eps=finfo(float).eps
 
@@ -63,9 +63,14 @@ def solve_cubic(p):
     z_imag_parts = array([im_z1, im_z2, im_z3])
     positions = lexsort([-z_real_parts, z_imag_parts, abs(z_imag_parts)],axis=0)
     # array of complex, sorted first real, then imag
-    z_roots=array([z_roots[positions[:,j],j] for j in range(z_roots.shape[1])])
-    re_z_roots=array([z_real_parts[positions[:,j],j] for j in range(z_real_parts.shape[1])])
-    im_z_roots=array([z_imag_parts[positions[:,j],j] for j in range(z_imag_parts.shape[1])])
+    if len(z_roots.shape)>1:
+        z_roots=array([z_roots[positions[:,j],j] for j in range(z_roots.shape[1])])
+        re_z_roots=array([z_real_parts[positions[:,j],j] for j in range(z_real_parts.shape[1])])
+        im_z_roots=array([z_imag_parts[positions[:,j],j] for j in range(z_imag_parts.shape[1])])
+    else:
+        z_roots=z_roots[positions]
+        re_z_roots=z_real_parts[positions]
+        im_z_roots=z_imag_parts[positions]
     return {'roots':z_roots,'disc':disc,'p':p_coef,'q':q_coef,'re_roots':re_z_roots,'im_roots':im_z_roots}
 
 
@@ -82,45 +87,42 @@ def solve_quartic(abcde):
     returns:
     x1, x2, x3, x4 as pairs  [Re(xi), Im(xi)]
     """
-    a, b, c, d, e = abcde
+    abcde=array(abcde,ndmin=1)
+    a,b,c,d,e=abcde
     # transform to biquadratic eq y^4+py^2+qy+r=0
     # substitution  x = y-b/(4a)
-    p = (8 * a * c - 3 * b**2) / (8 * a**2)
-    q = (b**3 - 4 * a * b * c + 8 * a**2 * d) / (8 * a**3)
-    r = (16 * a * b**2 * c + 256 * a**3 * e - 3 *
-         b**4 - 64 * a**2 * b * d) / (256 * a**4)
+    p=(8*a*c-3*b**2)/(8*a**2)
+    q=(b**3-4*a*b*c+8*a**2*d)/(8*a**3)
+    r=(16*a*b**2*c+256*a**3*e-3*b**4-64*a**2*b*d)/(256*a**4)
 
     # solve cubic resolvent z^3-p/2z^2-rz+pr/2-q^2/8=0
-    z = solve_cubic([1, -p / 2, -r, p * r / 2 - q**2 / 8])['roots']
+    z=solve_cubic([ones(p.shape),-p/2,-r,p*r/2-q**2/8])['roots']
     # chose any root (here the real one)
-    # z = z[1][0]+z[1][1]*1j
-    z = complex(z[0][0])  # +z[0][1]*1j
-
-    if -q / 2 < 0:
-        s = -1
-    else:
-        s = +1
+    z=z[:,0] if len(z.shape)>1 else z[0]
+    s=(-q/2<0)*(-1)+(-q/2>=0)*(+1)
 
     # roots to biquadratic
-    y1 = 1 / 2 * (2 * z - p)**(1 / 2) + (
-        -1 / 2 * z - 1 / 4 * p + s * (z**2 - r)**(1 / 2))**(1 / 2)
-    y2 = 1 / 2 * (2 * z - p)**(1 / 2) - (
-        -1 / 2 * z - 1 / 4 * p + s * (z**2 - r)**(1 / 2))**(1 / 2)
-    # print([-q/2, s*(2*z-p)**(1/2)*(z**2-r)**(1/2)])
-    y3 = -1 / 2 * (2 * z - p)**(1 / 2) + (
-        -1 / 2 * z - 1 / 4 * p - s * (z**2 - r)**(1 / 2))**(1 / 2)
-    y4 = -1 / 2 * (2 * z - p)**(1 / 2) - (
-        -1 / 2 * z - 1 / 4 * p - s * (z**2 - r)**(1 / 2))**(1 / 2)
+    y1=1/2*(2*z-p)**(1/2)+(-1/2*z-1/4*p+s*(z**2-r)**(1/2))**(1/2)
+    y2=1/2*(2*z-p)**(1/2)-(-1/2*z-1/4*p+s*(z**2-r)**(1/2))**(1/2)
+    #print([-q/2,s*(2*z-p)**(1/2)*(z**2-r)**(1/2)])
+    y3=-1/2*(2*z-p)**(1/2)+(-1/2*z-1/4*p-s*(z**2-r)**(1/2))**(1/2)
+    y4=-1/2*(2*z-p)**(1/2)-(-1/2*z-1/4*p-s*(z**2-r)**(1/2))**(1/2)
+    # roots of the complete equation by substitution xk=yk-b/(4a)
+    z_roots=array([yi-b/(4*a) for yi in [y1,y2,y3,y4]]).T
 
     # sort the roots by real (descending), then imaginary part (0 first)
-    y_real_parts = array([yi.real for yi in [y1, y2, y3, y4]])
-    y_imag_parts = array([yi.imag for yi in [y1, y2, y3, y4]])
-    positions = lexsort([-y_real_parts, y_imag_parts, abs(y_imag_parts)])
-    # roots of the complete equation by substitution xk=yk-b/(4a)
-    x_list = []
-    for i in positions:
-        x_list += [[y_real_parts[i] - b / (4 * a), y_imag_parts[i]]]
-    return dict([['roots', x_list]])
+    z_real_parts=z_roots.real
+    z_imag_parts=z_roots.imag
+    positions = lexsort([-z_real_parts, z_imag_parts, abs(z_imag_parts)],axis=0)
+    if len(z_roots.shape)>1:
+        z_roots=array([z_real_parts[positions[:,j],j] for j in range(z_roots.shape[1])])
+        re_z_roots=array([z_real_parts[positions[:,j],j] for j in range(z_real_parts.shape[1])])
+        im_z_roots=array([z_imag_parts[positions[:,j],j] for j in range(z_imag_parts.shape[1])])
+    else:
+        z_roots=z_roots[positions]
+        re_z_roots=z_real_parts[positions]
+        im_z_roots=z_imag_parts[positions]
+    return {'roots':z_roots,'re_roots':re_z_roots,'im_roots':im_z_roots}
 
 
 def solve_scaled(coefs):
