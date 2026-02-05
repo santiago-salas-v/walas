@@ -194,10 +194,10 @@ class Eos:
             self.v_f = 1
             soln_v = phi(self.t, self.p, self.z_i, self.tc_i, self.pc_i, self.af_omega_i,
                          self.alpha_tr, self.epsilon, self.sigma, self.psi, self.omega)
-            self.phi_v = soln_v['phi_i']
+            self.phi_v = soln_v['phi_i_v']
             self.phi_l = None
             self.v_l = None
-            self.v_v = soln_v['v']
+            self.v_v = soln_v['v_v']
             return soln_v
         else:
             soln_p_sat = p_i_sat_ceos(self.t, self.p, self.tc_i, self.pc_i, self.af_omega_i,
@@ -219,7 +219,7 @@ class Eos:
                 # liquid
                 soln_phi_l = phi(self.t, self.p, self.z_i, self.tc_i, self.pc_i, self.af_omega_i,
                                  self.alpha_tr, self.epsilon, self.sigma, self.psi, self.omega)
-                self.phi_l = soln_phi_l['phi_i']
+                self.phi_l = soln_phi_l['phi_i_l']
                 self.phi_v = None
                 self.v_v = soln_phi_l['v']
                 self.v_l = None
@@ -228,9 +228,9 @@ class Eos:
                 soln_phi_v = phi(self.t, self.p, self.z_i, self.tc_i, self.pc_i, self.af_omega_i,
                                  self.alpha_tr, self.epsilon, self.sigma, self.psi, self.omega)
                 self.phi_l = None
-                self.phi_v = soln_phi_v['phi_i']
+                self.phi_v = soln_phi_v['phi_i_v']
                 self.v_l = None
-                self.v_v = soln_phi_v['v']
+                self.v_v = soln_phi_v['v_v']
             else:
                 self.phi_l = soln['phi_i_l']
                 self.phi_v = soln['phi_i_v']
@@ -337,6 +337,9 @@ def p_sat(t, af_omega, tc, pc, alpha_tr, epsilon, sigma, psi, omega):
 def p_i_sat_ceos(t, p, tc_i, pc_i, af_omega_i,
                  alpha_tr, epsilon, sigma, psi, omega,
                  max_it=100, tol=abs_tol):
+    # ensure shape is possible
+    t,p,tc_i,pc_i,af_omega_i=[array(x,ndmin=1) for x in [t,p,tc_i,pc_i,af_omega_i]] 
+
     n_comps = asarray(tc_i).size
     p_sat_list = empty(n_comps)
     success = empty(n_comps, dtype=bool)
@@ -381,7 +384,7 @@ def p_i_sat_ceos(t, p, tc_i, pc_i, af_omega_i,
                 p1_it = p0_it * (1 + sign(-inv_slope) * 0.001)
             phi_sat_ceos(t, 3e-8, tc, pc, af_omega, alpha_tr, epsilon, sigma, psi, omega)['zero_fun']
             from scipy.optimize import fsolve
-            S1 = fsolve(lambda pvar:phi_sat_ceos(t, pvar, tc, pc, af_omega, alpha_tr, epsilon, sigma, psi, omega)['zero_fun'],x0=p0_it)
+            S1 = fsolve(lambda pvar:phi_sat_ceos(t, pvar, tc, pc, af_omega, alpha_tr, epsilon, sigma, psi, omega)['zero_fun'].real,x0=p0_it)
             soln_temp = secant_ls_3p(
                 lambda p_var: phi_sat_ceos(
                     t, p_var, tc, pc, af_omega,
@@ -396,12 +399,12 @@ def p_i_sat_ceos(t, p, tc_i, pc_i, af_omega_i,
             p_sat_list[i] = soln_temp['x']
             soln_temp = phi_sat_ceos(t, p_sat_list[i], tc, pc, af_omega,
                                      alpha_tr, epsilon, sigma, psi, omega)
-            success[i] = soln_temp['success']
-            zero_fun[i] = soln_temp['zero_fun']
-            z_l[i] = soln_temp['z_l']
-            z_v[i] = soln_temp['z_v']
-            phi_l[i] = soln_temp['phi_l']
-            phi_v[i] = soln_temp['phi_v']
+            success[i] = soln_temp['success'].item()
+            zero_fun[i] = soln_temp['zero_fun'].item()
+            z_l[i] = soln_temp['z_l'].item()
+            z_v[i] = soln_temp['z_v'].item()
+            phi_l[i] = soln_temp['phi_l'].item()
+            phi_v[i] = soln_temp['phi_v'].item()
 
     p = p_sat_list
     soln = dict()
@@ -542,23 +545,26 @@ def approach_pt_i_sat_ceos(t, p, tc_i, pc_i, af_omega_i,
     return soln
 
 
-def phi_sat_ceos(t, p, tc_i, pc_i, af_omega_i,
-                 alpha_tr, epsilon, sigma, psi, omega, r=r_def):
+def phi_sat_ceos(t, p, tc_i, pc_i, af_omega_i, alpha_tr, epsilon, sigma, psi, omega, r=r_def):
+    # ensure shape is possible
+    t,p,tc_i,pc_i,af_omega_i=[array(x,ndmin=1) for x in [t,p,tc_i,pc_i,af_omega_i]] 
+
     tr_i = t / tc_i
     a_i = psi * alpha_tr(tr_i, af_omega_i) * r ** 2 * tc_i ** 2 / pc_i
     b_i = omega * r * tc_i / pc_i
     beta = b_i * p / (r * t)
     q = a_i / (b_i * r * t)
+    a0 = ones(t.shape)
     a1 = beta * (epsilon + sigma) - beta - 1
     a2 = q * beta + epsilon * sigma * beta ** 2 \
         - beta * (epsilon + sigma) * (1 + beta)
     a3 = -(epsilon * sigma * beta ** 2 * (1 + beta) +
            q * beta ** 2)
 
-    soln = solve_cubic(array([asarray(x) for x in [1, a1, a2, a3]]))
+    soln = solve_cubic(array([a0, a1, a2, a3]))
     success = soln['disc'] <= 0
-    z_l = soln['roots'][-1][0]
-    z_v = soln['roots'][0][0]
+    z_l = soln['roots'][:,-1].real
+    z_v = soln['roots'][:,0].real
 
     i_i_l = +1 / (sigma - epsilon) * log(
         (z_l + sigma * beta) / (z_l + epsilon * beta)
@@ -620,9 +626,10 @@ def z_non_sat(t, p, x_i, tc_i, pc_i, af_omega_i,
 
 
 def phi(t, p, z_i, tc_i, pc_i, af_omega_i, alpha_tr, epsilon, sigma, psi, omega, r=r_def):
-    z_i = asarray(z_i)
-    t=asarray(t).flatten()
-    p=asarray(p).flatten()
+    # ensure shape is possible
+    t,p,tc_i,pc_i,af_omega_i=[array(x,ndmin=1) for x in [t,p,tc_i,pc_i,af_omega_i]] 
+    z_i=array(z_i,ndmin=2)
+
     tr_i=outer(t,1/tc_i)
     pr_i=outer(p,1/pc_i)
     a_i=psi*alpha_tr(tr_i,af_omega_i)*r**2*tc_i**2/pc_i
@@ -810,18 +817,14 @@ def bubl_t(t, p, x_i, tc_i, pc_i, af_omega_i,
 def bubl_point_step_l_k(t, p, x_i, tc_i, pc_i, af_omega_i,
                         alpha_tr, epsilon, sigma, psi, omega,
                         max_it, tol=abs_tol, full_output=False, y_i_est=None):
-    soln_l = phi(t, p, x_i, tc_i, pc_i, af_omega_i,
-                 alpha_tr, epsilon, sigma, psi, omega)
-    phi_l = soln_l['phi_i']
+    soln_l = phi(t, p, x_i, tc_i, pc_i, af_omega_i, alpha_tr, epsilon, sigma, psi, omega)
+    phi_l = soln_l['phi_i_l']
     if y_i_est is not None:
         y_i_est = asarray(y_i_est)
-        soln_v = phi(t, p, y_i_est, tc_i, pc_i, af_omega_i,
-                     alpha_tr, epsilon, sigma, psi, omega)
-        phi_v = soln_v['phi_i']
+        soln_v = phi(t, p, y_i_est, tc_i, pc_i, af_omega_i, alpha_tr, epsilon, sigma, psi, omega)
+        phi_v = soln_v['phi_i_v']
     else:
-        soln_v = phi(t, p, x_i, tc_i, pc_i, af_omega_i,
-                     alpha_tr, epsilon, sigma, psi, omega)
-        phi_v = soln_v['phi_i']
+        phi_v = soln_l['phi_i_v']
     k_i = phi_l / phi_v
     sum_ki_xi = sum(k_i * x_i)
     y_i = k_i * x_i / sum_ki_xi
@@ -830,9 +833,8 @@ def bubl_point_step_l_k(t, p, x_i, tc_i, pc_i, af_omega_i,
     success = True
     while not stop:
         sum_ki_xi_k_minus_1 = sum_ki_xi
-        soln_v = phi(t, p, y_i, tc_i, pc_i, af_omega_i,
-                     alpha_tr, epsilon, sigma, psi, omega)
-        phi_v = soln_v['phi_i']
+        soln_v = phi(t, p, y_i, tc_i, pc_i, af_omega_i, alpha_tr, epsilon, sigma, psi, omega)
+        phi_v = soln_v['phi_i_v']
         k_i = phi_l / phi_v
         sum_ki_xi = sum(k_i * x_i)
         y_i = k_i * x_i / sum_ki_xi
@@ -844,8 +846,8 @@ def bubl_point_step_l_k(t, p, x_i, tc_i, pc_i, af_omega_i,
             stop = True
             success = False
     if full_output:
-        z_l = soln_l['z']
-        z_v = soln_v['z']
+        z_l = soln_l['z_l']
+        z_v = soln_v['z_v']
         n_fev = 1 + i
         soln = dict()
         for item in ['x_i', 'y_i', 'phi_l', 'phi_v', 'z_l', 'z_v', 'k_i', 'sum_ki_xi',
@@ -898,7 +900,7 @@ def bubl_t_gamma_phi(t, p, x_i, tc_i, pc_i, af_omega_i,
         y_i = x_i * gamma_i * p_i_sat / phi_coef_fun_i / p
         poynting_i = exp(-v_l_i * (p - p_i_sat) / (r * t))
         phi_i_v = phi(t, p, y_i, tc_i, pc_i, af_omega_i,
-                      alpha_tr, epsilon, sigma, psi, omega)['phi_i']
+                      alpha_tr, epsilon, sigma, psi, omega)['phi_i_v']
 
         gamma_i = gamma_u(t, x_i, sec_j, nu_ij, unifac_data_dict)
         phi_coef_fun_i = phi_i_v / phi_i_sat * poynting_i
@@ -935,7 +937,7 @@ def bubl_p_gamma_phi(t, p, x_i, tc_i, pc_i, af_omega_i,
         y_i = x_i * gamma_i * p_i_sat / phi_coef_fun_i / p
         y_i = y_i / sum(y_i)
         phi_i_v = phi(t, p, y_i, tc_i, pc_i, af_omega_i,
-                      alpha_tr, epsilon, sigma, psi, omega)['phi_i']
+                      alpha_tr, epsilon, sigma, psi, omega)['phi_i_v']
         v_l_i = z_l_i * r * t / p
         poynting_i = exp(-v_l_i * (p - p_i_sat) / (r * t))
         phi_coef_fun_i = phi_i_v / phi_i_sat * poynting_i
@@ -1068,14 +1070,12 @@ def dew_point_step_l_k(t, p, y_i, tc_i, pc_i, af_omega_i,
                        max_it, tol=abs_tol, full_output=False, x_i_est=None):
     soln_v = phi(t, p, y_i, tc_i, pc_i, af_omega_i,
                  alpha_tr, epsilon, sigma, psi, omega)
-    phi_v = soln_v['phi_i']
+    phi_v = soln_v['phi_i_v']
     if x_i_est is not None:
         phi_l = phi(t, p, x_i_est, tc_i, pc_i, af_omega_i,
-                    alpha_tr, epsilon, sigma, psi, omega)['phi_i']
+                    alpha_tr, epsilon, sigma, psi, omega)['phi_i_l']
     else:
-        soln_l = phi(t, p, y_i, tc_i, pc_i, af_omega_i,
-                     alpha_tr, epsilon, sigma, psi, omega)
-        phi_l = soln_l['phi_i']
+        phi_l = soln_v['phi_i_v']
     k_i = phi_l / phi_v
     sum_yi_over_ki = sum(y_i / k_i)
     x_i = y_i / k_i / sum_yi_over_ki
@@ -1087,7 +1087,7 @@ def dew_point_step_l_k(t, p, y_i, tc_i, pc_i, af_omega_i,
         sum_yi_over_ki_k_minus_1 = sum_yi_over_ki
         soln_l = phi(t, p, x_i, tc_i, pc_i, af_omega_i,
                      alpha_tr, epsilon, sigma, psi, omega)
-        phi_l = soln_l['phi_i']
+        phi_l = soln_l['phi_i_l']
         k_i = phi_l / phi_v
         sum_yi_over_ki = sum(y_i / k_i)
         x_i = y_i / k_i / sum_yi_over_ki
@@ -1099,8 +1099,8 @@ def dew_point_step_l_k(t, p, y_i, tc_i, pc_i, af_omega_i,
             stop = True
             success = False
     if full_output:
-        z_l = soln_l['z']
-        z_v = soln_v['z']
+        z_l = soln_l['z_l']
+        z_v = soln_v['z_v']
         n_fev = 1 + i
         soln = dict()
         for item in ['x_i', 'y_i', 'phi_l', 'phi_v', 'z_l', 'z_v', 'k_i',
@@ -1139,7 +1139,7 @@ def dew_p_gamma_phi(t, p, y_i, tc_i, pc_i, af_omega_i,
     for n_it in range(max_it):
         p_old = p
         phi_i_v = phi(t, p, y_i, tc_i, pc_i, af_omega_i,
-                      alpha_tr, epsilon, sigma, psi, omega)['phi_i']
+                      alpha_tr, epsilon, sigma, psi, omega)['phi_i_v']
         v_l_i = z_l_i * r * t / p
         poynting_i = exp(-v_l_i * (p - p_i_sat) / (r * t))
         phi_coef_fun_i = phi_i_v / phi_i_sat * poynting_i
@@ -1150,7 +1150,7 @@ def dew_p_gamma_phi(t, p, y_i, tc_i, pc_i, af_omega_i,
             x_i = x_i / sum(x_i)
             gamma_i = gamma_u(t, x_i, sec_j, nu_ij, unifac_data_dict)
             delta_gamma = gamma_i - gamma_i_old
-            mag_delta_gamma = sqrt(delta_gamma.dot(delta_gamma))
+            mag_delta_gamma = sqrt(delta_gamma.dot(delta_gamma.T))
             success = mag_delta_gamma <= tol
             if success:
                 break
@@ -1174,16 +1174,29 @@ def dew_p_gamma_phi(t, p, y_i, tc_i, pc_i, af_omega_i,
 
 def p_est(t, p, x_i, tc_i, pc_i, af_omega_i, alpha_tr,
           epsilon, sigma, psi, omega, max_it, tol=abs_tol, r=r_def):
-    x_i = asarray(x_i)
-    tr_i = t / tc_i
-    a_i = psi * alpha_tr(tr_i, af_omega_i) * r ** 2 * tc_i ** 2 / pc_i
-    b_i = omega * r * tc_i / pc_i
-    q_i = a_i / (b_i * r * t)
-    a_ij = sqrt(outer(a_i, a_i))
+    # ensure shape is possible
+    t,p,tc_i,pc_i,af_omega_i=[array(x,ndmin=1) for x in [t,p,tc_i,pc_i,af_omega_i]] 
+    x_i=array(x_i,ndmin=2)
 
-    # Variablen, die von der Flüssigkeit-Zusammensetzung abhängig sind
-    b = sum(x_i * b_i)
-    a = x_i.dot(a_ij).dot(x_i).item()
+    x_i = asarray(x_i)
+    tr_i=outer(t,1/tc_i)
+    pr_i=outer(p,1/pc_i)
+    a_i=psi*alpha_tr(tr_i,af_omega_i)*r**2*tc_i**2/pc_i
+    b_i=omega*r*tc_i/pc_i
+    q_i=a_i/(b_i*r*tr_i*tc_i)
+    a_ij=array([[sqrt(a_i[:,i]*a_i[:,j]) for i in range(tc_i.shape[0])] for j in range(tc_i.shape[0])]).T
+    tc_ij=sqrt(outer(tc_i,tc_i))
+
+    # mechanical critical point
+    z_mc = -1 / 3 * ((epsilon + sigma) * omega - omega - 1)
+    p_mc = x_i.dot(pc_i)
+    t_mc = diagonal(x_i.dot(tc_ij).dot(x_i.T))
+    rho_mc = p_mc / (r * t_mc * z_mc)
+    v_mc = 1 / rho_mc
+
+    # composition-dependent variables
+    b = x_i.dot(b_i)
+    a=diagonal(diagonal(x_i.dot(a_ij).dot(x_i.T)))
     q = a / (b * r * t)
 
     rho_lim = 1 / b
@@ -1203,159 +1216,149 @@ def p_est(t, p, x_i, tc_i, pc_i, af_omega_i, alpha_tr,
     d2p_drho_at_rho_lb = 1 / rho_lb**4 * \
         d2p_dv2_at_rho_lb + dp_dv_at_rho_lb * 2 / rho_lb**3
 
-    soln = dict()  # init
+    # no inflection point, curve is monotonic
+    idx=(d2p_drho_at_rho_lb>0)
+    # find inflection point
+    idx=(d2p_drho_at_rho_lb<=0) 
 
-    if d2p_drho_at_rho_lb > 0:
-        # no inflection point, curve is monotonic
-        pass
-    else:
-        # find inflection point
-        p0 = 2 * a * b ** 5 * epsilon ** 2 + 2 * a * b ** 5 * epsilon * sigma + \
-            2 * a * b ** 5 * sigma ** 2 + 2 * b ** 6 * epsilon ** 3 * r * t * sigma ** 3
-        p1 = -3 * a * b ** 4 * epsilon ** 2 - 3 * a * b ** 4 * epsilon * sigma + \
-            3 * a * b ** 4 * epsilon - 3 * a * b ** 4 * sigma ** 2 + \
-            3 * a * b ** 4 * sigma + 3 * b ** 5 * epsilon ** 3 * r * t * sigma ** 2 + \
-            3 * b ** 5 * epsilon ** 3 * r * t * sigma ** 2 + \
-            3 * b ** 5 * epsilon ** 2 * r * t * sigma ** 3
-        p2 = 6 * a * b ** 3 * epsilon ** 2 + 6 * a * b ** 3 * epsilon * sigma - \
-            18 * a * b ** 3 * epsilon + 6 * a * b ** 3 * sigma ** 2 - \
-            18 * a * b ** 3 * sigma + 6 * a * b ** 3 + \
-            6 * b ** 4 * epsilon ** 3 * r * t * sigma + \
-            18 * b ** 4 * epsilon ** 2 * r * t * sigma ** 2 + \
-            6 * b ** 4 * epsilon * r * t * sigma ** 3
-        p3 = -2 * a * b ** 2 * epsilon ** 2 - 2 * a * b ** 2 * epsilon * sigma + \
-            18 * a * b ** 2 * epsilon - 2 * a * b ** 2 * sigma ** 2 + \
-            18 * a * b ** 2 * sigma - 18 * a * b ** 2 + \
-            2 * b ** 3 * epsilon ** 3 * r * t + \
-            18 * b ** 3 * epsilon ** 2 * r * t * sigma + \
-            18 * b ** 3 * epsilon * r * t * sigma ** 2 + 2 * b ** 3 * r * t * sigma ** 3
-        p4 = -6 * a * b * epsilon - 6 * a * b * sigma + 18 * a * b + \
-            6 * b ** 2 * epsilon ** 2 * r * t + \
-            18 * b ** 2 * epsilon * r * t * sigma + 6 * b ** 2 * r * t * sigma ** 2
-        p5 = -6 * a + 6 * b * epsilon * r * t + 6 * b * r * t * sigma
-        p6 = 2 * r * t
+    # find inflection point
+    p0=2*a*b**5*epsilon**2+2*a*b**5*epsilon*sigma+\
+    2*a*b**5*sigma**2+2*b**6*epsilon**3*r*t*sigma**3
+    p1=-3*a*b**4*epsilon**2-3*a*b**4*epsilon*sigma+\
+    3*a*b**4*epsilon-3*a*b**4*sigma**2+\
+    3*a*b**4*sigma+3*b**5*epsilon**3*r*t*sigma**2+\
+    3*b**5*epsilon**3*r*t*sigma**2+\
+    3*b**5*epsilon**2*r*t*sigma**3
+    p2=6*a*b**3*epsilon**2+6*a*b**3*epsilon*sigma-\
+    18*a*b**3*epsilon+6*a*b**3*sigma**2-\
+    18*a*b**3*sigma+6*a*b**3+\
+    6*b**4*epsilon**3*r*t*sigma+\
+    18*b**4*epsilon**2*r*t*sigma**2+\
+    6*b**4*epsilon*r*t*sigma**3
+    p3=-2*a*b**2*epsilon**2-2*a*b**2*epsilon*sigma+\
+    18*a*b**2*epsilon-2*a*b**2*sigma**2+\
+    18*a*b**2*sigma-18*a*b**2+\
+    2*b**3*epsilon**3*r*t+\
+    18*b**3*epsilon**2*r*t*sigma+\
+    18*b**3*epsilon*r*t*sigma**2+2*b**3*r*t*sigma**3
+    p4=-6*a*b*epsilon-6*a*b*sigma+18*a*b+\
+    6*b**2*epsilon**2*r*t+\
+    18*b**2*epsilon*r*t*sigma+6*b**2*r*t*sigma**2
+    p5=-6*a+6*b*epsilon*r*t+6*b*r*t*sigma
+    p6=2*r*t
 
-        v_inf_roots = zroots([p0, p1, p2, p3, p4, p5, p6])
+    v_inf_roots = zroots(array([p0, p1, p2, p3, p4, p5, p6]).T)
 
-        v = v_inf_roots[v_inf_roots.imag == 0].real
-        dp_dv = -r * t / (v - b) ** 2 + a / ((v + epsilon * b) * (v + sigma * b)) * (
-            1 / (v + epsilon * b) + 1 / (v + sigma * b)
+    v = v_inf_roots#[v_inf_roots.imag == 0].real
+    dp_dv=array([-r*t/(v[:,j]-b)**2+a/((v[:,j]+epsilon*b)*(v[:,j]+sigma*b))*(
+        1/(v[:,j]+epsilon*b)+1/(v[:,j]+sigma*b)
+    ) for j in range(v.shape[1])]).T
+    d2p_dv2=array([2*r*t/(v[:,j]-b)**3-a/((v[:,j]+epsilon*b)*(v[:,j]+sigma*b))*(
+        1/(v[:,j]+epsilon*b)**2+1/(v[:,j]+sigma*b)**2
+        )-a/((v[:,j]+epsilon*b)*(v[:,j]+sigma*b))**2*(
+        1+(v[:,j]+epsilon*b)/(v[:,j]+sigma*b)+
+        1+(v[:,j]+sigma*b)/(v[:,j]+epsilon*b)
+    ) for j in range(v.shape[1])]).T
+    v_inf=zeros(v.shape[0])
+    dp_dv_real=zeros(v.shape[0])
+    d2p_dv2_real=zeros(v.shape[0])
+    idx=((v.imag==0) & (dp_dv<0)).sum(axis=1)==1
+    v_inf[idx] = v[idx][(v.imag==0) & (dp_dv<0)].real
+    d2p_dv2_real[idx] = d2p_dv2[idx][(v.imag==0) & (dp_dv<0)].real
+    dp_dv_real[idx] = dp_dv[idx][(v.imag==0) & (dp_dv<0)].real
+    # above pseudocritical temperature, no extrema
+    idx=((v.imag==0) & (dp_dv<0)).sum(axis=1)==2
+    for j in range(idx.shape[0]):
+        if idx[j]:
+            col=dp_dv[j,:]==dp_dv[j,:][dp_dv[j,:].imag==0].max()
+            v_inf[j] = v[j,col]
+            d2p_dv2_real = d2p_dv2_real[j,col]
+            dp_dv_real = dp_dv[j,col]
+    # above Boyle-temperature
+    idx=((v.imag==0) & (dp_dv<0)).sum(axis=1)<1
+    v_inf[idx]=0
+    p_rho_inf = r * t / (v_inf - b) - a / \
+        ((v_inf + epsilon * b) * (v_inf + sigma * b))
+    z_inf = p * v_inf / (r * t)
+
+    beta = b * p_rho_inf / (r * t)
+
+    a0 = ones(q.shape)
+    a1 = beta * (epsilon + sigma) - beta - 1
+    a2 = q * beta + epsilon * sigma * beta ** 2 \
+        - beta * (epsilon + sigma) * (1 + beta)
+    a3 = -(epsilon * sigma * beta ** 2 * (1 + beta) +
+           q * beta ** 2)
+
+    soln = solve_cubic([a0, a1, a2, a3])
+    z_p_inf = array(soln['roots'])
+    z_l_p_inf = z_p_inf[:,-1].real
+    z_v_p_inf = z_p_inf[:,0].real
+    v_l_p_inf = z_l_p_inf * r * t / p_rho_inf
+    v_v_p_inf = z_v_p_inf * r * t / p_rho_inf
+    # if abs((p - p_old)/p) <= -tol:
+    #    break
+
+    # find local min and max (extrema)
+    p0 = a * b ** 3 * epsilon + a * b ** 3 * sigma - \
+        b ** 4 * epsilon ** 2 * r * sigma ** 2 * t
+    p1 = -2 * a * b ** 2 * epsilon - 2 * a * b ** 2 * sigma + \
+        2 * a * b ** 2 - 2 * b ** 3 * epsilon ** 2 * r * sigma * t - \
+        2 * b ** 3 * epsilon * r * sigma ** 2 * t
+    p2 = a * b * epsilon + a * b * sigma - 4 * a * b - b ** 2 * epsilon ** 2 * r * t - \
+        4 * b ** 2 * epsilon * r * sigma * t - b ** 2 * r * sigma ** 2 * t
+    p3 = 2 * a - 2 * b * epsilon * r * t - 2 * b * r * sigma * t
+    p4 = -r * t
+
+    # v_roots = zroots([p0, p1, p2, p3, p4])
+    soln = solve_quartic([p4, p3, p2, p1, p0])
+    v_roots = soln['roots']
+    v=zeros([v_roots.shape[0],2])
+    for j in range(v.shape[0]):
+        v[j,0]=v_roots[j,:][(v_roots[j,:].imag==0) & (v_roots[j,:]>b[j])].real.max()
+        v[j,1]=v_roots[j,:][(v_roots[j,:].imag==0) & (v_roots[j,:]>b[j])].real.min()
+
+
+    v_l = v.min(axis=1)
+    v_v = v.max(axis=1)
+    z_l = p * v_l / (r * t)
+    z_v = p * v_v / (r * t)
+    rho_l = 1 / v_l
+    rho_v = 1 / v_v
+
+    p_min_l = r * t / (v_l - b) - a / \
+        ((v_l + epsilon * b) * (v_l + sigma * b))
+    p_max_v = r * t / (v_v - b) - a / \
+        ((v_v + epsilon * b) * (v_v + sigma * b))
+
+    idx=t>t_mc
+    if idx.any():
+        # single real root, vapor-like
+        beta[idx] = b * p[idx] / (r * t[idx])
+        a0 = ones(t[idx].shape)
+        a1 = beta[idx] * (epsilon + sigma) - beta[idx] - 1
+        a2 = q * beta[idx] + epsilon * sigma * beta[idx] ** 2 \
+            - beta[idx] * (epsilon + sigma) * (1 + beta[idx])
+        a3 = -(epsilon * sigma * beta[idx] ** 2 * (1 + beta[idx]) +
+               q[idx] * beta[idx] ** 2)
+        soln = solve_cubic([a0, a1, a2, a3])
+        z_v[idx] = soln['roots'][:,0].real # largest real
+        v_v[idx] = z_v[idx] * r * t / p
+        rho_v[idx] = 1 / v_v[idx]
+
+        # pseudo liquid density
+        dp_dv_at_rho_mc = -r * t[idx] / (v_mc - b[idx]) ** 2 + a / (
+            (v_mc + epsilon * b[idx]) * (v_mc + sigma * b[idx])) * (
+            1 / (v_mc + epsilon * b[idx]) + 1 / (v_mc + sigma * b[idx])
         )
-        d2p_dv2 = 2 * r * t / (v - b) ** 3 - a / ((v + epsilon * b) * (v + sigma * b)) * (
-            1 / (v + epsilon * b) ** 2 + 1 / (v + sigma * b) ** 2
-        ) - a / ((v + epsilon * b) * (v + sigma * b)) ** 2 * (
-            1 + (v + epsilon * b) / (v + sigma * b) +
-            1 + (v + sigma * b) / (v + epsilon * b)
-        )
-        if len(v) == 2 and all(dp_dv < 0):
-            # above pseudocritical temperature, no extrema
-            v_inf = v[dp_dv == max(dp_dv)].item()
-            d2p_dv2 = d2p_dv2[dp_dv == max(dp_dv)].item()
-            dp_dv = dp_dv[dp_dv == max(dp_dv)].item()
-        elif len(v) == 1:
-            v_inf = v.item()
-            d2p_dv2 = d2p_dv2.item()
-            dp_dv = dp_dv.item()
-        elif len(v) == 2:
-            v_inf = v[dp_dv > 0].item()
-            d2p_dv2 = d2p_dv2[dp_dv > 0].item()
-            dp_dv = dp_dv[dp_dv > 0].item()
-        else:
-            # above Boyle-temperature
-            no_inflection = len(v) == 0
-            v_inf = 0
+        dp_drho_at_rho_mc = -v_mc**2 * dp_dv_at_rho_mc
+        c1 = dp_drho_at_rho_mc * (rho_mc - 0.7 * rho_mc)
+        c0 = p_mc - c1 * log(rho_mc - 0.7 * rho_mc)
+        rho_l[idx] = exp((p[idx] - c0) / c1) + 0.7 * rho_mc
+        v_l[idx] = 1 / rho_l[idx]
+        z_l[idx] = p * v_l[idx] / (r * t[idx])
+        rho_l[idx] = 1 / v_l[idx]
 
-        p_rho_inf = r * t / (v_inf - b) - a / \
-            ((v_inf + epsilon * b) * (v_inf + sigma * b))
-        z_inf = p * v_inf / (r * t)
-
-        beta = b * p_rho_inf / (r * t)
-
-        a1 = beta * (epsilon + sigma) - beta - 1
-        a2 = q * beta + epsilon * sigma * beta ** 2 \
-            - beta * (epsilon + sigma) * (1 + beta)
-        a3 = -(epsilon * sigma * beta ** 2 * (1 + beta) +
-               q * beta ** 2)
-
-        soln = solve_cubic([1, a1, a2, a3])
-        z_p_inf = array(soln['roots'])
-        v_p_inf = z_p_inf * r * t / p_rho_inf
-        z_l_p_inf = z_p_inf[-1][0]
-        z_v_p_inf = z_p_inf[0][0]
-        v_l_p_inf = v_p_inf[-1][0]
-        v_v_p_inf = v_p_inf[0][0]
-        # if abs((p - p_old)/p) <= -tol:
-        #    break
-
-        # find local min and max (extrema)
-        p0 = a * b ** 3 * epsilon + a * b ** 3 * sigma - \
-            b ** 4 * epsilon ** 2 * r * sigma ** 2 * t
-        p1 = -2 * a * b ** 2 * epsilon - 2 * a * b ** 2 * sigma + \
-            2 * a * b ** 2 - 2 * b ** 3 * epsilon ** 2 * r * sigma * t - \
-            2 * b ** 3 * epsilon * r * sigma ** 2 * t
-        p2 = a * b * epsilon + a * b * sigma - 4 * a * b - b ** 2 * epsilon ** 2 * r * t - \
-            4 * b ** 2 * epsilon * r * sigma * t - b ** 2 * r * sigma ** 2 * t
-        p3 = 2 * a - 2 * b * epsilon * r * t - 2 * b * r * sigma * t
-        p4 = -r * t
-
-        # v_roots = zroots([p0, p1, p2, p3, p4])
-        soln = solve_quartic([p4, p3, p2, p1, p0])
-        v_roots = array(soln['roots'])
-        re_v_roots = v_roots[v_roots[:, 1] == 0][:, 0]
-        v = re_v_roots[re_v_roots > b]
-
-        # mechanical critical point
-        z_mc = -1 / 3 * ((epsilon + sigma) * omega - omega - 1)
-        p_mc = sum(x_i * pc_i)
-        t_mc = x_i.dot(sqrt(outer(tc_i, tc_i))).dot(x_i).item()
-        rho_mc = p_mc / (r * t_mc * z_mc)
-        v_mc = 1 / rho_mc
-
-        if t < t_mc and len(v) < 2:
-            pass
-        elif t > t_mc and len(v) < 2:
-            # single real root, vapor-like
-            beta = b * p / (r * t)
-            a1 = beta * (epsilon + sigma) - beta - 1
-            a2 = q * beta + epsilon * sigma * beta ** 2 \
-                - beta * (epsilon + sigma) * (1 + beta)
-            a3 = -(epsilon * sigma * beta ** 2 * (1 + beta) +
-                   q * beta ** 2)
-            soln = solve_cubic([1, a1, a2, a3])
-            z_v = soln['roots'][0][0]
-            v_v = z_v * r * t / p
-            rho_v = 1 / v_v
-
-            # pseudo liquid density
-            dp_dv_at_rho_mc = -r * t / (v_mc - b) ** 2 + a / (
-                (v_mc + epsilon * b) * (v_mc + sigma * b)) * (
-                1 / (v_mc + epsilon * b) + 1 / (v_mc + sigma * b)
-            )
-            dp_drho_at_rho_mc = -v_mc**2 * dp_dv_at_rho_mc
-            c1 = dp_drho_at_rho_mc * (rho_mc - 0.7 * rho_mc)
-            c0 = p_mc - c1 * log(rho_mc - 0.7 * rho_mc)
-            rho_l = exp((p - c0) / c1) + 0.7 * rho_mc
-            v_l = 1 / rho_l
-            z_l = p * v_l / (r * t)
-            rho_l = 1 / v_l
-
-        else:
-            v_l = min(v)
-            v_v = max(v)
-            z_l = p * v_l / (r * t)
-            z_v = p * v_v / (r * t)
-            rho_l = 1 / v_l
-            rho_v = 1 / v_v
-
-            p_min_l = r * t / (v_l - b) - a / \
-                ((v_l + epsilon * b) * (v_l + sigma * b))
-            p_max_v = r * t / (v_v - b) - a / \
-                ((v_v + epsilon * b) * (v_v + sigma * b))
-
-            if p <= p_min_l:
-                p = p_min_l
-            elif p >= p_max_v:
-                p = p_max_v
     for item in ['p', 'p_rho_inf', 'z_rho_inf', 'v_rho_inf', 'p_min_l', 'p_max_v',
                  'z_l', 'z_v', 'v_l', 'v_v', 'rho_l', 'rho_v']:
         soln[item] = locals().get(item)
@@ -1363,9 +1366,10 @@ def p_est(t, p, x_i, tc_i, pc_i, af_omega_i, alpha_tr,
 
 
 def z_phase(t, p, z_i, tc_i, pc_i, af_omega_i, alpha_tr, epsilon, sigma, psi, omega, tol=abs_tol, r=r_def):
-    z_i = asarray(z_i)
-    t=asarray(t).flatten()
-    p=asarray(p).flatten()
+    # ensure shape is possible
+    t,p,tc_i,pc_i,af_omega_i=[array(x,ndmin=1) for x in [t,p,tc_i,pc_i,af_omega_i]] 
+    z_i=array(z_i,ndmin=2)
+
     tr_i=outer(t,1/tc_i)
     pr_i=outer(p,1/pc_i)
     a_i=psi*alpha_tr(tr_i,af_omega_i)*r**2*tc_i**2/pc_i
@@ -1415,8 +1419,7 @@ def z_phase(t, p, z_i, tc_i, pc_i, af_omega_i, alpha_tr, epsilon, sigma, psi, om
     #p_cross = roots_p.real.max(axis=1)
 
     idx=(q0!=0) # full cubic
-    roots_p[idx,:]=solve_cubic([x[idx] for x in [q0,q1,q2,q3]])['roots']
-
+    roots_p[idx,:]=solve_cubic([x[idx] for x in [q0,q1,q2,q3]])['roots'].reshape([sum(idx),3])
 
     n_positive_roots_p = ((roots_p.imag==0) & (roots_p>0)).sum(axis=1)
 
@@ -1507,11 +1510,9 @@ def z_phase(t, p, z_i, tc_i, pc_i, af_omega_i, alpha_tr, epsilon, sigma, psi, om
 
 def isot_flash(t, p, x_i, y_i, z_i, tc_i, pc_i, af_omega_i,
                alpha_tr, epsilon, sigma, psi, omega):
-    soln_l = phi(t, p, x_i, tc_i, pc_i, af_omega_i,
-                 alpha_tr, epsilon, sigma, psi, omega)
-    soln_v = phi(t, p, y_i, tc_i, pc_i, af_omega_i,
-                 alpha_tr, epsilon, sigma, psi, omega)
-    k_i = soln_l['phi_i'] / soln_v['phi_i']
+    soln_l = phi(t, p, x_i, tc_i, pc_i, af_omega_i, alpha_tr, epsilon, sigma, psi, omega)
+    soln_v = phi(t, p, y_i, tc_i, pc_i, af_omega_i, alpha_tr, epsilon, sigma, psi, omega)
+    k_i = soln_l['phi_i_l'] / soln_v['phi_i_v']
     soln_v_f = secant_ls_3p(
         lambda v_f_var: sum(z_i * (1 - k_i) / (1 + v_f_var * (k_i - 1))),
         0.5, tol=1e-10,
@@ -1611,7 +1612,7 @@ def pt_flash(t, p, z_i, tc_i, pc_i, af_omega_i,
             if sec_j is None:
                 soln_phi_l = phi(t, p, x_i, tc_i, pc_i, af_omega_i,
                               alpha_tr, epsilon, sigma, psi, omega)
-                phi_i_l = soln_phi_l['phi_i']
+                phi_i_l = soln_phi_l['phi_i_l']
                 k_i = phi_i_l / phi_i_v
             else:
                 phi_coef_fun_i = phi_i_v / phi_i_sat * poynting_i
@@ -1637,8 +1638,8 @@ def pt_flash(t, p, z_i, tc_i, pc_i, af_omega_i,
             delta_v_f = v_f - v_f_old
             sum_rr = sum(z_i * (k_i - 1) / (1 + v_f * (k_i - 1)))
             # criterion as vector sum of distance to convergence
-            criterion = sqrt(sum_rr**2 + delta_x_i.dot(delta_x_i) +
-                             delta_y_i.dot(delta_y_i) + delta_v_f**2)
+            criterion = sqrt(sum_rr**2 + delta_x_i.dot(delta_x_i.T) +
+                             delta_y_i.dot(delta_y_i.T) + delta_v_f**2)
             success = criterion <= tol
             if success:
                 break
@@ -1650,7 +1651,7 @@ def pt_flash(t, p, z_i, tc_i, pc_i, af_omega_i,
                 gamma_i = gamma_u(t, x_i, sec_j, nu_ij, unifac_data_dict)
             soln_phi_v = phi(t, p, y_i, tc_i, pc_i, af_omega_i,
                           alpha_tr, epsilon, sigma, psi, omega)
-            phi_i_v = soln_phi_v['phi_i']
+            phi_i_v = soln_phi_v['phi_i_v']
     elif p_dew >= p:
         v_f = 1.0
     elif p_bubl <= p:
@@ -1725,8 +1726,8 @@ def gamma_u(t, x_j, sec_j, nu_ij, unifac_data_dict):
 
     r_j = nu_ij.dot(r_m)
     q_j = nu_ij.dot(q_m)
-    phi_j = r_j * x_j / r_j.dot(x_j)
-    theta_j = q_j * x_j / q_j.dot(x_j)
+    phi_j = r_j * x_j / r_j.dot(x_j.T)
+    theta_j = q_j * x_j / q_j.dot(x_j.T)
     z = 10
     i_j = z / 2 * (r_j - q_j) - (r_j - 1)
     ln_gamma_c_j = log(phi_j / x_j) + z / 2 * q_j * log(

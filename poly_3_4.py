@@ -108,7 +108,7 @@ def solve_quartic(abcde):
     y3=-1/2*(2*z-p)**(1/2)+(-1/2*z-1/4*p-s*(z**2-r)**(1/2))**(1/2)
     y4=-1/2*(2*z-p)**(1/2)-(-1/2*z-1/4*p-s*(z**2-r)**(1/2))**(1/2)
     # roots of the complete equation by substitution xk=yk-b/(4a)
-    z_roots=array([yi-b/(4*a) for yi in [y1,y2,y3,y4]]).T
+    z_roots=array([yi-b/(4*a) for yi in [y1,y2,y3,y4]])
 
     # sort the roots by real (descending), then imaginary part (0 first)
     z_real_parts=z_roots.real

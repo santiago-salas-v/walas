@@ -47,10 +47,10 @@ def vdi_atlas():
                    max_it=100, tol=tol,print_iterations=False)['p'].item()
     soln = secant_ls_3p(lambda p_var:
                  phi(-256.6 + 273.15, p_var, 1, 33.19, 13.13, -0.216,
-                     alpha_tr, epsilon, sigma, psi, omega
-                     )['phi_i'].item() -
+                     alpha_tr, epsilon, sigma, psi, omega)['phi_i_l'].squeeze()
+                     -
                  phi(-256.6 + 273.15, p_var, 1, 33.19, 13.13, -0.216,
-                             alpha_tr, epsilon, sigma, psi, omega)['phi_i'].item()
+                             alpha_tr, epsilon, sigma, psi, omega)['phi_i_v'].squeeze()
                  , 0.7, tol=tol, x_1=1.001 * 0.7,
                  restriction=lambda p_val: p_val > 0,
                  print_iterations=False)
@@ -151,7 +151,7 @@ def vdi_atlas():
 
         soln = solve_cubic([1, a1, a2, a3])
         roots, disc = soln['roots'], soln['disc']
-        re_roots = array([roots[0][0], roots[1][0], roots[2][0]])
+        re_roots = soln['re_roots']
 
         if disc <= 0:
             # 3 real roots. smallest ist liq. largest is gas.
@@ -176,12 +176,10 @@ def vdi_atlas():
             z_complex += [re_roots[1]]
             p_complex += [p]
 
-    for p in linspace(1e-4, max(p_range), 30):
-        rho_l_phase += [
-            z_phase(t, p, z_i, tc_i, pc_i, af_omega_i, alpha_tr, epsilon, sigma, psi, omega, tol)['rho']]
-        rho_v_phase += [
-            z_phase(t, p, z_i, tc_i, pc_i, af_omega_i, alpha_tr, epsilon, sigma, psi, omega, tol)['rho']]
-        p_v_phase += [p]
+    p=linspace(1e-4, max(p_range), 30)
+    soln=z_phase(t*ones(p.shape), p, z_i*ones([p.shape[0],1]), tc_i, pc_i, af_omega_i, alpha_tr, epsilon, sigma, psi, omega, tol, r)
+    rho_l_phase=soln['rho_l']
+    rho_v_phase=soln['rho_v']
 
     current_marker = markers[randint(0, len(markers))]
     plot1.axvline(b, linestyle='--')
@@ -195,10 +193,10 @@ def vdi_atlas():
     plot2.plot(rho_plot, p_plot, markers[randint(0, len(markers))],
                label=r'$z_1={:g}$'.format(z_i),
                fillstyle='none')
-    plot4.plot(rho_l_phase, p_v_phase, current_marker, markeredgewidth=0.5,
+    plot4.plot(rho_l_phase, p, current_marker, markeredgewidth=0.5,
                color=current_color, markersize=4, fillstyle='bottom', linestyle='none',
                label=r'$L: x_1={:g}$'.format(z_i))
-    plot4.plot(rho_v_phase, p_v_phase, current_marker, markeredgewidth=0.25,
+    plot4.plot(rho_v_phase, p, current_marker, markeredgewidth=0.25,
                    color=current_color, markersize=4, fillstyle='none', linestyle='--',
                    label=r'$V: y_1={:g}$'.format(z_i))
 
@@ -207,11 +205,11 @@ def vdi_atlas():
                fillstyle='bottom', linestyle='none')
     plot3.plot(z_complex, p_complex, current_marker, markersize=4, linestyle='--',
                fillstyle='none', color=current_color, markeredgewidth=0.25, linewidth=0.5)
-    p_low = z_phase(t, p, z_i, tc_i, pc_i, af_omega_i, alpha_tr, epsilon, sigma, psi, omega, tol)['p_low']
-    plot1.axhline(p_low, linestyle='-.', color='gray', linewidth=0.5, label='$P_{low}$')
-    plot2.axhline(p_low, linestyle='-.', color='gray', linewidth=0.5, label='$P_{low}$')
-    plot3.axhline(p_low, linestyle='-.', color='gray', linewidth=0.5, label='$P_{low}$')
-    plot4.axhline(p_low, linestyle='-.', color='gray', linewidth=0.5, label='$P_{low}$')
+    p_low = z_phase(t*ones(p.shape), p, z_i*ones([p.shape[0],1]), tc_i, pc_i, af_omega_i, alpha_tr, epsilon, sigma, psi, omega, tol)['p_low']
+    plot1.axhline(p_low[0], linestyle='-.', color='gray', linewidth=0.5, label='$P_{low}$')
+    plot2.axhline(p_low[0], linestyle='-.', color='gray', linewidth=0.5, label='$P_{low}$')
+    plot3.axhline(p_low[0], linestyle='-.', color='gray', linewidth=0.5, label='$P_{low}$')
+    plot4.axhline(p_low[0], linestyle='-.', color='gray', linewidth=0.5, label='$P_{low}$')
     plot1.set_xlabel(r'$\frac{v}{cm^3/mol}$')
     plot1.set_ylabel('p / bar')
     plot1.legend()
@@ -241,7 +239,9 @@ def svn_14_1():
     for key in soln:
         length = asarray(soln[key]).size
         if length > 1:
-            print(key + ': ' + ('{:0.6g}\t' * length).format(*soln[key]))
+            print(key + ': ' + ('{:0.6g}\t' * length).format(*soln[key].squeeze()))
+        elif length==1:
+            print(key + ': ' + ('{:0.6g}\t' * length).format(soln[key].item()))
         else:
             print(key + ': ' + ('{:0.6g}\t').format(soln[key]))
     print('\n' * 2)
@@ -629,7 +629,7 @@ def svn_fig_14_8():
 
             soln = solve_cubic([1, a1, a2, a3])
             roots, disc = soln['roots'], soln['disc']
-            re_roots = array([roots[0][0], roots[1][0], roots[2][0]])
+            re_roots = roots.real
 
             if disc <= 0 and all(re_roots >= 0):
                 # 3 real roots. smallest ist liq. largest is gas.
@@ -656,12 +656,10 @@ def svn_fig_14_8():
                 z_complex += [re_roots[1]]
                 p_complex += [p]
 
-        for p in linspace(1e-4, max(p_range), 30):
-            rho_l_phase += [
-                z_phase(t, p, z_i, tc_i, pc_i, af_omega_i, alpha_tr, epsilon, sigma, psi, omega, tol)['rho']]
-            rho_v_phase += [
-                z_phase(t, p, z_i, tc_i, pc_i, af_omega_i, alpha_tr, epsilon, sigma, psi, omega, tol)['rho']]
-            p_v_phase += [p]
+        p=linspace(1e-4, max(p_range), 30)
+        soln=z_phase(t*ones(p.shape), p, z_i*ones([p.shape[0],1]), tc_i, pc_i, af_omega_i, alpha_tr, epsilon, sigma, psi, omega, tol, r)
+        rho_l_phase=soln['rho_l']
+        rho_v_phase=soln['rho_v']
 
         current_marker = markers[randint(0, len(markers))]
         plot1.axvline(b, linestyle='--')
@@ -677,10 +675,10 @@ def svn_fig_14_8():
                    label=r'$z_1={:g}, z_2={:g}$'.format(z_i[0], z_i[1]),
                    fillstyle='none')
         if round(x, 1) in [0.0, 0.3, 0.6, 0.9]:
-            plot4.plot(rho_l_phase, p_v_phase, current_marker, markeredgewidth=0.5,
+            plot4.plot(rho_l_phase, p, current_marker, markeredgewidth=0.5,
                        color=current_color, markersize=4, fillstyle='bottom', linestyle='none',
                        label=r'$L: x_1={:g}$'.format(z_i[0]))
-            plot4.plot(rho_v_phase, p_v_phase, current_marker, markeredgewidth=0.25,
+            plot4.plot(rho_v_phase, p, current_marker, markeredgewidth=0.25,
                        color=current_color, markersize=4, fillstyle='none', linestyle='--',
                        label=r'$V: y_1={:g}$'.format(z_i[0]))
 
@@ -690,7 +688,8 @@ def svn_fig_14_8():
         plot3.plot(z_complex, p_complex, current_marker, markersize=4, linestyle='--',
                    fillstyle='none', color=current_color, markeredgewidth=0.25, linewidth=0.5)
         if x in [0.4, 0.5, 0.6, 0.7]:
-            p_est(t, p, z_i, tc_i, pc_i, af_omega_i,
+            # FIXME: this is not used
+            p_est(t*ones(p.shape), p, z_i*ones([p.shape[0],z_i.shape[0]]), tc_i, pc_i, af_omega_i,
                   alpha_tr, epsilon, sigma, psi, omega, max_it, tol)
     plot1.set_xlabel(r'$\frac{v}{cm^3/mol}$')
     plot1.set_ylabel('p / bar')
@@ -731,12 +730,12 @@ def svn_tab_14_1_2():
                   alpha_tr, epsilon, sigma, psi, omega,
                   sec_i, nu_ji, unifac_data_dict,
                   max_it, 1e-10, print_iterations=True)
-    y_i = soln['y_i']
-    k_i = soln['k_i']
+    y_i = soln['y_i'].squeeze()
+    k_i = soln['k_i'].squeeze()
     t = soln['t']
     p_i_sat = soln['p_i_sat']
     n_it = soln['n_it']
-    phi_coef_fun_i = soln['phi_coef_fun_i']
+    phi_coef_fun_i = soln['phi_coef_fun_i'].squeeze()
 
     unifac_data_dict = setup_unifac_data()
     gamma_j = gamma_u(t, z_i, sec_i, nu_ji, unifac_data_dict)
@@ -761,16 +760,16 @@ def svn_tab_14_1_2():
                     alpha_tr, epsilon, sigma, psi, omega,
                     sec_i, nu_ji, unifac_data_dict,
                     max_it=max_it, tol=tol)
-    y_i = soln['y_i']
-    x_i = soln['x_i']
-    z_i = soln['z_i']
-    k_i = soln['k_i']
+    y_i = soln['y_i'].squeeze()
+    x_i = soln['x_i'].squeeze()
+    z_i = soln['z_i'].squeeze()
+    k_i = soln['k_i'].squeeze()
     v_f = soln['v_f']
     t = soln['t']
     p = soln['p']
     n_it = soln['n_it']
-    phi_coef_fun_i = soln['phi_coef_fun_i']
-    criterion = soln['criterion']
+    phi_coef_fun_i = soln['phi_coef_fun_i'].squeeze()
+    criterion = soln['criterion'].squeeze()
 
     print('svn table 14.2 - n-hexane (1) / ethanol (2) / methylcyclopentane (3) /' +
           'benzene (4) at {:0.4g} bar and {:0.4g} K'.format(p, t))
@@ -1362,15 +1361,15 @@ def fredenslund_t_6():
     print('\n')
 
 
-# vdi_atlas()
-# svn_14_1()
-# plt.figure()
-# svn_fig_14_8()
-# plt.figure()
-# svn_14_2()
-# plt.figure()
-# svn_14_2_behchmark()
-# plt.figure()
+vdi_atlas()
+svn_14_1()
+plt.figure()
+svn_fig_14_8()
+plt.figure()
+svn_14_2()
+plt.figure()
+svn_14_2_behchmark()
+plt.figure()
 zs_1998()
 ppo_ex_8_12()
 svn_h_1()
