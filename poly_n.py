@@ -32,7 +32,7 @@ def laguerre(a, x):
     ad_v = a
     mr = 8
     mt = 10
-    maxit = mt * mr * min(3,a.shape[0])
+    maxit = mt * mr
     eps = finfo(float).eps
     # EPS here: estimated fractional roundoff error
 
@@ -80,9 +80,9 @@ def laguerre(a, x):
         if (dx == 0).all():
             return ad_v, x, its  # converged
         if iter % mt != 0:
-            x = x1
+            x[idx] = x1[idx]
         else:
-            x -= frac[int(iter/maxit)] * dx
+            x[idx] -= frac[int(iter/mt)] * dx[idx]
 
     print('not converged')
     raise Exception("too many iterations in laguerre")
@@ -121,7 +121,7 @@ def test_poly_n():
     print(tabulate(x.imag))
 
     print('re(y(roots)):')
-    print(tabulate(array([[a[:,j]*x[:,k]**j for j in range(a.shape[1])] for k in range(x.shape[1])]).real.sum(axis=1).T))
+    print(tabulate(array([[a[:,j]*x[:,k]**j for j in range(a.shape[1])] for k in range(x.shape[1])]).sum(axis=1).T.real))
     print('im(y(roots)):')
-    print(tabulate(array([[a[:,j]*x[:,k]**j for j in range(a.shape[1])] for k in range(x.shape[1])]).imag.sum(axis=1).T))
+    print(tabulate(array([[a[:,j]*x[:,k]**j for j in range(a.shape[1])] for k in range(x.shape[1])]).sum(axis=1).T.imag))
 
