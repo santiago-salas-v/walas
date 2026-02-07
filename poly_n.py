@@ -1,6 +1,6 @@
 from numpy import array, exp, empty, finfo, zeros, maximum, emath
 
-# Ref. Press, William H., et al. "Numerical recipes in C++." The art of scientific computing 2 (2007): 1002.
+# Ref. Press, William H., et al. "Numerical recipes in C++." The art of scientific computing 2 (2007): pp. 468,1002.
 
 def zroots(a, polish=False):
     a=array(a,ndmin=2)
@@ -24,7 +24,14 @@ def zroots(a, polish=False):
             c = ad[:,jj].copy()
             ad[:,jj] = b
             b = x * b + c
-    return roots
+    if not polish:
+        return roots
+    else:
+        # polish the roots using the undeflated coefficients
+        roots_polish=empty(roots.shape,dtype=complex)
+        for j in range(m):
+            ad_v,roots_polish[:,j],its=laguerre(a, roots[:,j])
+        return roots_polish
 
 def laguerre(a, x):
     a=array(a,ndmin=2)
@@ -43,9 +50,8 @@ def laguerre(a, x):
     m = n-1
     dx=empty(N,dtype=complex) # init. dx
     idx=empty(N,dtype=bool) # init indices
-    for iter in range(1, maxit+1):
+    for its in range(1, maxit+1):
         # loop over iterations up to allowed maximum
-        its = iter
         b = a[:,m]
         err = abs(b)
         d = f = zeros(N,dtype=complex)
@@ -75,14 +81,14 @@ def laguerre(a, x):
         gp[abp<abm]=gm[abp<abm]
         idx[b!=0]=maximum(abp,abm)>0
         dx[idx]=float(m)/gp
-        dx[~idx]=(1+abx[~idx])*exp(iter*1j) # equivalent to polar(1+abx, iter)
+        dx[~idx]=(1+abx[~idx])*exp(its*1j) # equivalent to polar(1+abx, its)
         x1 = x - dx
         if (dx == 0).all():
             return ad_v, x, its  # converged
-        if iter % mt != 0:
+        if its % mt != 0:
             x[idx] = x1[idx]
         else:
-            x[idx] -= frac[int(iter/mt)] * dx[idx]
+            x[idx] -= frac[int(its/mt)] * dx[idx]
 
     print('not converged')
     raise Exception("too many iterations in laguerre")
@@ -110,6 +116,7 @@ def test_poly_n():
            [ 4.1e+01,  4.2e+01,  4.3e+01,  4.4e+01,  4.5e+01],
            [ 4.6e+01,  4.7e+01,  4.8e+01,  4.9e+01,  5.0e+01]])
     x=zroots(a)
+    x_polished=zroots(a,polish=True)
 
     from tabulate import tabulate
     print('order n={:d}, poly N={:d}:'.format(a.shape[1],a.shape[0]))
@@ -125,3 +132,7 @@ def test_poly_n():
     print('im(y(roots)):')
     print(tabulate(array([[a[:,j]*x[:,k]**j for j in range(a.shape[1])] for k in range(x.shape[1])]).sum(axis=1).T.imag))
 
+    print('re(y(roots)-y(roots_polished)):')
+    print(tabulate(array([[a[:,j]*x[:,k]**j-a[:,j]*x_polished[:,k]**j for j in range(a.shape[1])] for k in range(x.shape[1])]).sum(axis=1).T.real))
+    print('im(y(roots)-y(roots_polished)):')
+    print(tabulate(array([[a[:,j]*x[:,k]**j-a[:,j]*x_polished[:,k]**j for j in range(a.shape[1])] for k in range(x.shape[1])]).sum(axis=1).T.imag))
