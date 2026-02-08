@@ -61,6 +61,8 @@ def vdi_atlas():
     p_sat_vals = empty([len(t), len(pc)])
     p_sat_vals_ceos = empty([len(t), len(pc)]) * nan
     p0 = 1.0 * ones(len(pc))
+    z_i=concatenate(array([[[1 if j==i else 0 for j in range(pc.shape[0])] for _ in range(t.shape[0])] for i in range(pc.shape[0])]))
+    p_est(concatenate([t for _ in range(pc.shape[0])]),ones(t.shape[0]*pc.shape[0]),z_i,tc,pc,omega_af,alpha_tr,epsilon,sigma,psi, omega, 100, tol)
     for i in range(len(t)):
         p_sat_vals[i, :] = 10**(
                 ant_a - ant_b / (t[i] - 273.15 + ant_c)
@@ -218,7 +220,7 @@ def vdi_atlas():
     plot2.set_title(r'$\rho$' + ', act.')
     plot3.set_xlabel(r'$Z$')
     plot3.set_ylabel('p / bar')
-    plot3.legend(['real root', 'real part of complex root'], fontsize=6)
+    plot3.legend(['real root', 'real part of complex root'])
     plot4.set_xlabel(r'$\frac{rho}{mol / cm^3}$')
     plot4.set_ylabel('p / bar')
     plot4.set_title(r'pseudo-$\rho$' + ', L/V [3]')
@@ -299,34 +301,26 @@ def svn_14_2():
     x_dew = y.copy()
     p_v_dew = p_v.copy()
 
-    x_i = array([x[0], 1 - x[0]])
-    y_i_est = array([x[0], 1 - x[0]])
-
-    y_i_dew = array([y_dew[0], 1 - y_dew[0]])
-    x_i_est_dew = array([y_dew[0], 1 - y_dew[0]])
+    x_i=array([x,1-x]).T
+    y_i_dew = array([y_dew,1-y_dew]).T
 
     p_v0 = 1.0
     p_v_0_dew = 1.0
-    for i in range(len(x)):
-        x_i = array([x[i], 1 - x[i]])
-        soln = bubl_p(310.92, p_v0, x_i, tc_i, pc_i, af_omega_i, alpha_tr, epsilon, sigma, psi, omega,
-                      max_it=max_it, tol=1e-10, y_i_est=y_i_est)
-        p_v[i] = soln['p']
-        y[i] = soln['y_i'][0]
-        p_v0 = p_v[i]
-        y_i_est = soln['y_i']
+    soln = bubl_p(310.92*ones(x.shape[0]), p_v0*ones(x.shape[0]), x_i, tc_i, pc_i, af_omega_i, alpha_tr, epsilon, sigma, psi, omega,
+                      max_it=max_it, tol=1e-10, y_i_est=x_i)
+    p_v[i] = soln['p']
+    y[i] = soln['y_i'][:,0]
+    p_v0 = p_v[i]
+    y_i_est = soln['y_i']
 
+    y_i_dew = array([y_dew[i], 1 - y_dew[i]])
+    soln_dew = dew_p(310.92*ones(x.shape[0]), p_v_0_dew*ones(x.shape[0]), y_i_dew, tc_i, pc_i, af_omega_i, alpha_tr, epsilon, sigma, psi, omega,
+                     max_it=max_it, tol=1e-10, x_i_est=y_i_dew)
+    p_v_dew[i] = soln_dew['p']
+    x_dew[i] = soln_dew['x_i'][:,0]
+    p_v_0_dew = p_v_dew[i]
+    x_i_est_dew = soln_dew['x_i']
 
-        y_i_dew = array([y_dew[i], 1 - y_dew[i]])
-        soln_dew = dew_p(310.92, p_v_0_dew, y_i_dew, tc_i, pc_i, af_omega_i, alpha_tr, epsilon, sigma, psi, omega,
-                         max_it=max_it, tol=1e-10, x_i_est=x_i_est_dew)
-        p_v_dew[i] = soln_dew['p']
-        x_dew[i] = soln_dew['x_i'][0]
-        p_v_0_dew = p_v_dew[i]
-        x_i_est_dew = soln_dew['x_i']
-
-        if p_v[i] > 140:
-            break
     line1 = plt.plot(x, p_v, label=r'$x_1(L)$ bubl_p')
     line2 = plt.plot(y, p_v, label=r'$y_1(V)$ bubl_p')
     plt.plot(x_dew, p_v_dew, 'o', fillstyle='none',
@@ -381,7 +375,7 @@ def svn_14_2_behchmark():
         soln = bubl_p(310.92, p_v0, x_i, tc_i, pc_i, af_omega_i, alpha_tr, epsilon, sigma, psi, omega,
                       max_it=max_it, tol=1e-10, y_i_est=y_i_est)
         p_v[i] = soln['p']
-        y[i] = soln['y_i'][0]
+        y[i] = soln['y_i'][:,0]
         p_v0 = p_v[i]
         y_i_est = soln['y_i']
     line1 = plt.plot(x, p_v, label=r'$x_1(L)$ bubl_p')
@@ -1022,10 +1016,10 @@ def pat_ue_03_vollstaendig(rlv, print_output=False):
         y_i = 1 / len(n2) * ones(len(n2))
         for i in range(10):
             soln = isot_flash(t_flash, p, x_i, y_i, z_i, tc, pc, omega_af, alpha_tr, epsilon, sigma, psi, omega)
-            y_i = soln['y_i']
-            x_i = soln['x_i']
-            v_f = soln['v_f']
-            k_i_verteilung = soln['k_i']
+            y_i = soln['y_i'].squeeze()
+            x_i = soln['x_i'].squeeze()
+            v_f = soln['v_f'].squeeze()
+            k_i_verteilung = soln['k_i'].squeeze()
             # print('k_i: ')
             # print(k_i_verteilung)
             # print('l_i: ')
@@ -1360,23 +1354,126 @@ def fredenslund_t_6():
     print('gamma_1: {:0.4f}\tgamma_2: {:0.4f}\tgamma_3: {:0.4f}'.format(*gamma_j))
     print('\n')
 
+def hd_calculations():
+    components_list=['H2','CH4','CO2','CO','H2O','N2','O2','Ar','He','C6H6','C6H12','C6H14','CH3OH','NH3'] # order of components
+    M=array([0.00201588,0.01604246,0.0440095,0.0280101,0.01801528,0.0280134,0.031998,0.039948,0.0040026,0.078114,0.084162,0.086178,0.032042,0.017031]) # kg/mol
+    # coefficients of NASA polynomials from Burcat, A., & Ruscic, B. (2001). Third millennium ideal gas and condensed phase thermochemical database for combustion. Technion-Israel Institute of Technology.
+    a1_a7_low=array([x.split('\t') for x in """
+    3.50207268	8.65475654e-05	-2.63683344e-07	3.37306621e-10	-2.92359706e-14	-1046.31279	-4.25875759
+    5.14825732	-0.013700241	4.93749414e-05	-4.91952339e-08	1.70097299e-11	-10245.3222	-4.63322726
+    2.356813	0.0089841299	-7.1220632e-06	2.4573008e-09	-1.4288548e-13	-48371.971	9.9009035
+    3.5795335	-0.00061035369	1.0168143e-06	9.0700586e-10	-9.0442449e-13	-14344.086	3.5084093
+    4.1986352	-0.0020364017	6.5203416e-06	-5.4879269e-09	1.771968e-12	-30293.726	-0.84900901
+    3.53100528	-0.000123660988	-5.02999433e-07	2.43530612e-09	-1.40881235e-12	-1046.97628	2.96747038
+    3.78245636	-0.00299673416	9.84730201e-06	-9.68129509e-09	3.24372837e-12	-1063.94356	3.65767573
+    2.5	0	0	0	0	-745.375	4.37967491
+    2.5	0	0	0	0	-745.375	0.928723974
+    0.504818632	0.0185020642	7.38345881e-05	-1.18135741e-07	5.07210429e-11	8552.47913	21.6412893
+    4.04357527	-0.00619608335	0.000176622274	-2.22968474e-07	8.63668578e-11	-16920.3544	8.52527441
+    9.87121167	-0.00936699002	0.000169887865	-2.1501952e-07	8.45407091e-11	-23718.5495	-12.4999353
+    5.65851051	-0.0162983419	6.91938156e-05	-7.58372926e-08	2.8042755e-11	-25611.9736	-0.897330508
+    4.46075151	-0.00568781763	2.11411484e-05	-2.0284998e-08	6.89500555e-12	-6707.53514	-1.34450793
+    """.replace(',','.').split('\n') if len(x)>0],dtype=float) 
+    a1_a7_high=array([x.split() for x in """
+    2.98711895	0.000736069465	-9.00982609e-08	-7.4122472e-13	6.58618037e-16	-835.448659	-1.33268877
+    1.911786	0.0096026796	-3.38387841e-06	5.3879724e-10	-3.19306807e-14	-10099.2136	8.48241861
+    4.6365111	0.0027414569	-9.9589759e-07	1.6038666e-10	-9.1619857e-15	-49024.904	-1.9348955
+    3.0484859	0.0013517281	-4.8579405e-07	7.8853644e-11	-4.6980746e-15	-14266.117	6.0170977
+    2.6770389	0.0029731816	-7.7376889e-07	9.4433514e-11	-4.2689991e-15	-29885.894	6.88255
+    2.95257637	0.0013969004	-4.92631603e-07	7.86010195e-11	-4.60755204e-15	-923.948688	5.87188762
+    3.66096065	0.000656365811	-1.41149627e-07	2.05797935e-11	-1.29913436e-15	-1215.97718	3.41536279
+    2.5	0	0	0	0	-745.375	4.37967491
+    2.5	0	0	0	0	-745.375	0.928723974
+    11.0809576	0.0207176746	-7.52145991e-06	1.22320984e-09	-7.36091279e-14	4306.41035	-40.041331
+    13.214597	0.0358243434	-1.32110852e-05	2.17202521e-09	-1.31730622e-13	-22809.2102	-55.3518322
+    19.5158086	0.0267753942	-7.49783741e-06	1.19510646e-09	-7.51957473e-14	-29436.2466	-77.4895497
+    3.52726795	0.0103178783	-3.62892944e-06	5.77448016e-10	-3.42182632e-14	-26002.8834	5.16758693
+    2.09566674	0.00614750045	-2.00328925e-06	3.01334626e-10	-1.71227204e-14	-6309.45436	9.59574081
+    """.replace(',','.').split('\n') if len(x)>0],dtype=float)
+    wagn_abcd=array([x.split() for x in """
+    -4.83622	0.942	0.7665	-0.47071
+    -6.02388	1.26813	-0.56948	-1.37648
+    -7.02916	1.53937	-2.2833	-2.34853
+    -6.19574	1.32502	-0.95226	-1.98513
+    -7.86975	1.90561	-2.30891	-2.06472
+    -6.12498	1.26499	-0.76765	-1.78173
+    -6.05148	1.23506	-0.62883	-1.61288
+    -5.92801	1.21982	-0.53967	-1.52312
+    -4.06856	1.04379	1.11594	0.08835
+    -7.11451	1.83981	-2.25158	-3.15179
+    -7.00979	1.57475	-1.9682	-3.26095
+    -7.61075	2.00527	-2.74158	-2.82824
+    -8.72963	1.4586	-2.78449	-0.70669
+    -7.30274	1.64638	-2.01606	-1.96884
+    """.split('\n') if len(x)>0],dtype=float)
+    tc,pc,vc,zc,omega=array([x.split() for x in """
+    32.98	12.93	64.2	0.303	-0.217
+    190.56	45.992	98.6	0.286	0.011
+    304.12	73.74	94.07	0.274	0.225
+    132.85	34.94	93.1	0.292	0.045
+    647.14	220.64	55.95	0.229	0.344
+    126.2	34	90.1	0.289	0.037
+    154.58	50.43	73.37	0.288	0.0229684188
+    150.86	48.98	74.57	0.291	-0.002
+    5.19	2.27	57.3	0.301	-0.39
+    562.05	48.98	256	0.268	0.21
+    553.5	40.73	308	0.273	0.211
+    507.6	30.35	368	0.264	0.3
+    512.64	80.92	118	0.224	0.565
+    405.4	113.53	72.47	0.255	0.257
+    """.split('\n') if len(x)>0],dtype=float).T # Tc in K, Pc in bar, Vc in cm^3/gmol
+    pc=1e5*pc # Pc in Pa
+    vc=(1/100)**3*vc # Vc in m3/gmol
+    vc=zc*(R*tc)/pc # Vc in m3/gmol (keep consistent with zc)
+
+    Cp_R_coefs_200_1000_K=a1_a7_low[:,:4+1] # for Cp function, coefficients from a1 to a5 are applicable
+    Cp_R_coefs_1000_6000_K=a1_a7_high[:,:4+1] # for Cp function, coefficients from a1 to a5 are applicable
+    h_ig_coefs_200_1000_K=array([[1/1,1/2,1/3,1/4,1/5,1] for _ in range(a1_a7_low.shape[0])])*a1_a7_low[:,:6]
+    h_ig_coefs_1000_6000_K=array([[1/1,1/2,1/3,1/4,1/5,1] for _ in range(a1_a7_low.shape[0])])*a1_a7_high[:,:6]
+    s_ig_coefs_200_1000_K=array([[1,1,1/2,1/3,1/4,0,1] for _ in range(a1_a7_low.shape[0])])*a1_a7_low[:,:7]
+    s_ig_coefs_1000_6000_K=array([[1,1,1/2,1/3,1/4,0,1] for _ in range(a1_a7_low.shape[0])])*a1_a7_high[:,:7]
+
+    def cp_ig(T):
+        result=((200<=T)&(T<=1000))*R*Cp_R_coefs_200_1000_K.dot(pow(T,array([[0],[1],[2],[3],[4]],dtype=float)))+\
+                ((1000<T)&(T<=6000))*R*Cp_R_coefs_1000_6000_K.dot(pow(T,array([[0],[1],[2],[3],[4]],dtype=float)))
+        return result.T # ensure row dimension is T
+
+
+    def h_ig(T):
+        result=((200<=T)&(T<=1000))*R*T*h_ig_coefs_200_1000_K.dot(pow(T,array([[0],[1],[2],[3],[4],[-1]],dtype=float)))+\
+                ((1000<T)&(T<=6000))*R*T*h_ig_coefs_1000_6000_K.dot(pow(T,array([[0],[1],[2],[3],[4],[-1]],dtype=float)))
+        return result.T # ensure row dimension is T
+
+
+    def s_ig(T):
+        result=((200<=T)&(T<=1000))*R*s_ig_coefs_200_1000_K.dot(concatenate([log(array(T,ndmin=2)),pow(T,array([[1],[2],[3],[4],[0],[0]],dtype=float))]))+\
+                ((1000<T)&(T<=6000))*R*s_ig_coefs_1000_6000_K.dot(concatenate([log(array(T,ndmin=2)),pow(T,array([[1],[2],[3],[4],[0],[0]],dtype=float))]))
+        return result.T # ensure row dimension is T
+
+
+    def cp_mid(T0,T):
+        result=(
+            ((200<=T)&(T<=1000))*R*h_ig_coefs_200_1000_K+((1000<T)&(T<=6000))*R*T*h_ig_coefs_1000_6000_K).dot(
+                array([sum([(T**(i-j)*T0**j) for j in range(i,0-1,-1)]) for i in range(4+1)]))
+        return result # ensure row dimension is T
+
 
 vdi_atlas()
-svn_14_1()
-plt.figure()
-svn_fig_14_8()
-plt.figure()
-svn_14_2()
-plt.figure()
-svn_14_2_behchmark()
-plt.figure()
-zs_1998()
-ppo_ex_8_12()
-svn_h_1()
-fredenslund_t_6()
-svn_tab_14_1_2()
-pat_ue_03_flash()
-isot_flash_seader_4_1()
+# svn_14_1()
+# plt.figure()
+# svn_fig_14_8()
+# plt.figure()
+# svn_14_2()
+# plt.figure()
+# svn_14_2_behchmark()
+# plt.figure()
+# zs_1998()
+# ppo_ex_8_12()
+# svn_h_1()
+# fredenslund_t_6()
+# svn_tab_14_1_2()
+# pat_ue_03_flash()
+# isot_flash_seader_4_1()
 # pat_ue_03_vollstaendig(0.2)
 # optimize.root(
 #    lambda rlv: 350.0 - pat_ue_03_vollstaendig(rlv),
@@ -1388,5 +1485,5 @@ isot_flash_seader_4_1()
 # 0,70 (400kmol/h), aber in jenem Bereich entsteht ein
 # Stabilitätsproblem
 #pat_ue_03_vollstaendig(0.65, True)
-
+svn_14_2()
 plt.show(block=False)

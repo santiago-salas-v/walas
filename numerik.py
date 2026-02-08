@@ -740,7 +740,7 @@ def secant_ls_3p(y, x_0, tol, x_1=None, f_prime=None,
         y_k = y_k_plus_1
         g_k = g_k_plus_1
         g_prime_k = - y_k ** 2
-        if abs(p) <= tol or isnan(p):
+        if (abs(p) <= tol).all() or isnan(p).any():
             # avoid 1/0 division
             success = False
             break

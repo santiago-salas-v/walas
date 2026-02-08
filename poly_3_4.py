@@ -64,9 +64,9 @@ def solve_cubic(p):
     positions = lexsort([-z_real_parts, z_imag_parts, abs(z_imag_parts)],axis=0)
     # array of complex, sorted first real, then imag
     if len(z_roots.shape)>1:
-        z_roots=array([z_roots[positions[:,j],j] for j in range(z_roots.shape[1])])
-        re_z_roots=array([z_real_parts[positions[:,j],j] for j in range(z_real_parts.shape[1])])
-        im_z_roots=array([z_imag_parts[positions[:,j],j] for j in range(z_imag_parts.shape[1])])
+        z_roots=array([z_roots[positions[:,j].squeeze(),j] for j in range(z_roots.shape[1])])
+        re_z_roots=array([z_real_parts[positions[:,j].squeeze(),j] for j in range(z_real_parts.shape[1])])
+        im_z_roots=array([z_imag_parts[positions[:,j].squeeze(),j] for j in range(z_imag_parts.shape[1])])
     else:
         z_roots=z_roots[positions]
         re_z_roots=z_real_parts[positions]

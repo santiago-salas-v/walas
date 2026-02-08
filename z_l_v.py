@@ -1262,18 +1262,16 @@ def p_est(t, p, x_i, tc_i, pc_i, af_omega_i, alpha_tr,
     v_inf=zeros(v.shape[0])
     dp_dv_real=zeros(v.shape[0])
     d2p_dv2_real=zeros(v.shape[0])
+    # single solution cases with dp_dv<0
     idx=((v.imag==0) & (dp_dv<0)).sum(axis=1)==1
-    v_inf[idx] = v[idx][(v.imag==0) & (dp_dv<0)].real
-    d2p_dv2_real[idx] = d2p_dv2[idx][(v.imag==0) & (dp_dv<0)].real
-    dp_dv_real[idx] = dp_dv[idx][(v.imag==0) & (dp_dv<0)].real
+    v_inf[idx] = (v[idx]*((v.imag==0) & (dp_dv<0))[idx]).sum(axis=1).real
+    d2p_dv2_real[idx] = (d2p_dv2[idx]*((v.imag==0) & (dp_dv<0))[idx]).sum(axis=1).real
+    dp_dv_real[idx] = (dp_dv[idx]*((v.imag==0) & (dp_dv<0))[idx]).sum(axis=1).real
     # above pseudocritical temperature, no extrema
     idx=((v.imag==0) & (dp_dv<0)).sum(axis=1)==2
-    for j in range(idx.shape[0]):
-        if idx[j]:
-            col=dp_dv[j,:]==dp_dv[j,:][dp_dv[j,:].imag==0].max()
-            v_inf[j] = v[j,col]
-            d2p_dv2_real = d2p_dv2_real[j,col]
-            dp_dv_real = dp_dv[j,col]
+    v_inf[idx] = (v[idx]*(v.imag==0)[idx]).sum(axis=1).real
+    d2p_dv2_real[idx] = (d2p_dv2[idx]*(v.imag==0)[idx]).sum(axis=1).real
+    dp_dv_real[idx] = (dp_dv[idx]*(v.imag==0)[idx]).sum(axis=1).real
     # above Boyle-temperature
     idx=((v.imag==0) & (dp_dv<0)).sum(axis=1)<1
     v_inf[idx]=0
@@ -1314,10 +1312,9 @@ def p_est(t, p, x_i, tc_i, pc_i, af_omega_i, alpha_tr,
     soln = solve_quartic([p4, p3, p2, p1, p0])
     v_roots = soln['roots']
     v=zeros([v_roots.shape[0],2])
-    for j in range(v.shape[0]):
-        v[j,0]=v_roots[j,:][(v_roots[j,:].imag==0) & (v_roots[j,:]>b[j])].real.max()
-        v[j,1]=v_roots[j,:][(v_roots[j,:].imag==0) & (v_roots[j,:]>b[j])].real.min()
-
+    idx=(v_roots.imag==0) & array([v_roots[:,j]>b for j in range(v_roots.shape[1])]).T
+    v[:,0]=(v_roots*idx).real.max(axis=1)
+    v[:,1]=(v_roots*idx).real.min(axis=1)
 
     v_l = v.min(axis=1)
     v_v = v.max(axis=1)
@@ -1334,29 +1331,29 @@ def p_est(t, p, x_i, tc_i, pc_i, af_omega_i, alpha_tr,
     idx=t>t_mc
     if idx.any():
         # single real root, vapor-like
-        beta[idx] = b * p[idx] / (r * t[idx])
+        beta[idx] = b[idx] * p[idx] / (r * t[idx])
         a0 = ones(t[idx].shape)
         a1 = beta[idx] * (epsilon + sigma) - beta[idx] - 1
-        a2 = q * beta[idx] + epsilon * sigma * beta[idx] ** 2 \
+        a2 = q[idx] * beta[idx] + epsilon * sigma * beta[idx] ** 2 \
             - beta[idx] * (epsilon + sigma) * (1 + beta[idx])
         a3 = -(epsilon * sigma * beta[idx] ** 2 * (1 + beta[idx]) +
                q[idx] * beta[idx] ** 2)
         soln = solve_cubic([a0, a1, a2, a3])
         z_v[idx] = soln['roots'][:,0].real # largest real
-        v_v[idx] = z_v[idx] * r * t / p
+        v_v[idx] = z_v[idx] * r * t[idx] / p[idx]
         rho_v[idx] = 1 / v_v[idx]
 
         # pseudo liquid density
-        dp_dv_at_rho_mc = -r * t[idx] / (v_mc - b[idx]) ** 2 + a / (
-            (v_mc + epsilon * b[idx]) * (v_mc + sigma * b[idx])) * (
-            1 / (v_mc + epsilon * b[idx]) + 1 / (v_mc + sigma * b[idx])
+        dp_dv_at_rho_mc = -r * t[idx] / (v_mc[idx] - b[idx]) ** 2 + a[idx] / (
+            (v_mc[idx] + epsilon * b[idx]) * (v_mc[idx] + sigma * b[idx])) * (
+            1 / (v_mc[idx] + epsilon * b[idx]) + 1 / (v_mc[idx] + sigma * b[idx])
         )
-        dp_drho_at_rho_mc = -v_mc**2 * dp_dv_at_rho_mc
-        c1 = dp_drho_at_rho_mc * (rho_mc - 0.7 * rho_mc)
-        c0 = p_mc - c1 * log(rho_mc - 0.7 * rho_mc)
-        rho_l[idx] = exp((p[idx] - c0) / c1) + 0.7 * rho_mc
+        dp_drho_at_rho_mc = -v_mc[idx]**2 * dp_dv_at_rho_mc
+        c1 = dp_drho_at_rho_mc * (rho_mc[idx] - 0.7 * rho_mc[idx])
+        c0 = p_mc[idx] - c1 * log(rho_mc[idx] - 0.7 * rho_mc[idx])
+        rho_l[idx] = exp((p[idx] - c0) / c1) + 0.7 * rho_mc[idx]
         v_l[idx] = 1 / rho_l[idx]
-        z_l[idx] = p * v_l[idx] / (r * t[idx])
+        z_l[idx] = p[idx] * v_l[idx] / (r * t[idx])
         rho_l[idx] = 1 / v_l[idx]
 
     for item in ['p', 'p_rho_inf', 'z_rho_inf', 'v_rho_inf', 'p_min_l', 'p_max_v',
