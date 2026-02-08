@@ -4,6 +4,7 @@ from numpy import array, zeros, abs, ones, empty, argwhere, asarray
 from numpy import nan, finfo
 from numpy import sqrt, outer, sum, log, exp, diag, sign, diagonal, maximum
 from scipy import optimize
+from scipy.optimize import fsolve
 
 from numerik import secant_ls_3p, line_search
 from poly_3_4 import solve_cubic, solve_quartic
@@ -340,75 +341,63 @@ def p_i_sat_ceos(t, p, tc_i, pc_i, af_omega_i,
     # ensure shape is possible
     t,p,tc_i,pc_i,af_omega_i=[array(x,ndmin=1) for x in [t,p,tc_i,pc_i,af_omega_i]] 
 
-    n_comps = asarray(tc_i).size
-    p_sat_list = empty(n_comps)
-    success = empty(n_comps, dtype=bool)
-    n_fev = zeros(n_comps, dtype=int)
-    zero_fun = empty(n_comps)
-    z_l = empty(n_comps)
-    z_v = empty(n_comps)
-    phi_l = empty(n_comps)
-    phi_v = empty(n_comps)
-    first_step_soln = dict()  # init
-    for i in range(n_comps):
-        if n_comps > 1:
-            tc, pc, af_omega = tc_i[i], pc_i[i], af_omega_i[i]
-        else:
-            tc, pc, af_omega = tc_i, pc_i, af_omega_i
-        if tc < t:
-            # no p_sat if supercritical
-            success[i] = False
-        else:
-            # approach saturation if possible
-            first_step_soln = approach_pt_i_sat_ceos(
-                t, p, tc, pc, af_omega, alpha_tr, epsilon, sigma, psi, omega,
-                p_or_t='p', max_it=max_it, tol=tol)
-            n_fev[i] += first_step_soln['n_fev']
-            success[i] = first_step_soln['success']
-        if not success[i]:
-            p_sat_list[i] = nan
-        else:
-            p0_it = first_step_soln['p']
-            inv_slope = 1 / first_step_soln['ddisc_dp']
-            p1_it = p0_it * (1 + sign(-inv_slope) * 0.01)
-            if first_step_soln['n_fev'] == 1:
-                # initial slope not necessarily convergent, direct it toward
-                # descending disc
-                second_step_soln = approach_pt_i_sat_ceos(
-                    t, p1_it, tc, pc, af_omega, alpha_tr, epsilon, sigma, psi, omega,
-                    p_or_t='p', max_it=max_it, tol=tol)
-                disc_0 = first_step_soln['disc']
-                disc_1 = second_step_soln['disc']
-                n_fev[i] += second_step_soln['n_fev']
-                inv_slope = -(p1_it - p0_it) / (disc_1 - disc_0)
-                p1_it = p0_it * (1 + sign(-inv_slope) * 0.001)
-            phi_sat_ceos(t, 3e-8, tc, pc, af_omega, alpha_tr, epsilon, sigma, psi, omega)['zero_fun']
-            from scipy.optimize import fsolve
-            S1 = fsolve(lambda pvar:phi_sat_ceos(t, pvar, tc, pc, af_omega, alpha_tr, epsilon, sigma, psi, omega)['zero_fun'].real,x0=p0_it)
-            soln_temp = secant_ls_3p(
-                lambda p_var: phi_sat_ceos(
-                    t, p_var, tc, pc, af_omega,
-                    alpha_tr, epsilon, sigma, psi, omega)['zero_fun'],
-                p0_it, tol, x_1=p1_it,
-                restriction=lambda p_var: p_var > 0 and phi_sat_ceos(
-                    t, p_var, tc, pc, af_omega, alpha_tr, epsilon,
-                    sigma, psi, omega)['success'],
-                print_iterations=False
-            )
-            n_fev[i] += soln_temp['iterations'] + soln_temp['total_backtracks']
-            p_sat_list[i] = soln_temp['x']
-            soln_temp = phi_sat_ceos(t, p_sat_list[i], tc, pc, af_omega,
-                                     alpha_tr, epsilon, sigma, psi, omega)
-            success[i] = soln_temp['success'].item()
-            zero_fun[i] = soln_temp['zero_fun'].item()
-            z_l[i] = soln_temp['z_l'].item()
-            z_v[i] = soln_temp['z_v'].item()
-            phi_l[i] = soln_temp['phi_l'].item()
-            phi_v[i] = soln_temp['phi_v'].item()
+    n_comps = tc_i.size
+    p_sat = empty([t.shape[0],n_comps])
+    success = empty([t.shape[0],n_comps], dtype=bool)
+    n_fev = 0
 
-    p = p_sat_list
+    tr_i=outer(t,1/tc_i)
+    pr_i=outer(p,1/pc_i)
+    # approach saturation if possible
+    first_step_soln = approach_pt_i_sat_ceos(
+        tr_i, pr_i, tc_i, pc_i, af_omega_i, alpha_tr, epsilon, sigma, psi, omega,
+        p_or_t='p', max_it=max_it, tol=tol)
+    n_fev += first_step_soln['n_fev']
+    success = first_step_soln['success']
+    p_sat[~success]=nan
+    p0_it=first_step_soln['p']
+    inv_slope=1/first_step_soln['ddisc_dp']
+    p1_it = p0_it * (1 + sign(-inv_slope) * 0.01)
+
+    if first_step_soln['n_fev'] == 1:
+        # initial slope not necessarily convergent, direct it toward descending disc
+        second_step_soln = approach_pt_i_sat_ceos(
+            tr_i, pr_i, tc_i, pc_i, af_omega_i, alpha_tr, epsilon, sigma, psi, omega,
+            p_or_t='p', max_it=max_it, tol=tol)
+        disc_0 = first_step_soln['disc']
+        disc_1 = second_step_soln['disc']
+        n_fev += second_step_soln['n_fev']
+        inv_slope = -(p1_it - p0_it) / (disc_1 - disc_0)
+        p1_it = p0_it * (1 + sign(-inv_slope) * 0.001) # override
+
+    phi_sat_ceos(tr_i, 3e-8/pc_i, tc_i, pc_i, af_omega_i, alpha_tr, epsilon, sigma, psi, omega)['zero_fun']
+    tr_i_ravel=tr_i.ravel() # turn to 1D
+    pr_i_1_ravel=(p1_it/pc_i).ravel()
+    pr_i_0_ravel=(p0_it/pc_i).ravel()
+    S1 = fsolve(lambda pr_i_var:phi_sat_ceos(tr_i_ravel, pr_i_var, tc_i, pc_i, af_omega_i, alpha_tr, epsilon, sigma, psi, omega)['zero_fun'].ravel(),x0=pr_i_0_ravel)
+    soln_temp = secant_ls_3p(lambda pr_i_var: phi_sat_ceos(tr_i_ravel, pr_i_var, tc_i, pc_i, af_omega_i,
+            alpha_tr, epsilon, sigma, psi, omega)['zero_fun'].ravel(),
+        pr_i_0_ravel, tol, x_1=pr_i_1_ravel,
+        restriction=lambda pr_i_var: (pr_i_var > 0).all() and phi_sat_ceos(
+            tr_i_ravel, pr_i_var, tc_i, pc_i, af_omega_i, alpha_tr, epsilon,
+            sigma, psi, omega)['success'].all(),
+        print_iterations=False
+    )
+    n_fev += soln_temp['iterations'] + soln_temp['total_backtracks']
+    pr_i_sat = soln_temp['x'].reshape(pr_i.shape) # unravel to original dimensions
+    p_sat = pr_i_sat*pc_i
+    soln_temp = phi_sat_ceos(tr_i, pr_i_sat, tc_i, pc_i, af_omega_i,
+                             alpha_tr, epsilon, sigma, psi, omega)
+    success = soln_temp['success']
+    zero_fun = soln_temp['zero_fun']
+    z_l = soln_temp['z_l']
+    z_v = soln_temp['z_v']
+    phi_l = soln_temp['phi_l']
+    phi_v = soln_temp['phi_v']
+
+    p = pr_i_sat/pc_i
     soln = dict()
-    for item in ['p', 't', 'success', 'n_fev',
+    for item in ['pr_i', 'tr_i', 'success', 'n_fev',
                  'zero_fun', 'z_l', 'z_v', 'phi_l', 'phi_v']:
         soln[item] = locals().get(item)
     return soln
@@ -483,61 +472,54 @@ def t_i_sat_ceos(t, p, tc_i, pc_i, af_omega_i,
     return soln
 
 
-def approach_pt_i_sat_ceos(t, p, tc_i, pc_i, af_omega_i,
+def approach_pt_i_sat_ceos(tr_i, pr_i, tc_i, pc_i, af_omega_i,
                            alpha_tr, epsilon, sigma, psi, omega,
                            p_or_t='p', max_it=100, tol=abs_tol, r=r_def):
+    """
+    Find Tr or Pr such that discriminant becomes negative (two-phase region)
+    """
     b_i = omega * r * tc_i / pc_i
     n_fev = 0
-    it_outer = 0
+    idx_sc=(tc_i<tr_i*tc_i) if p_or_t=='p' else (pc_i<pr_i*pc_i) 
+    success=idx_sc.copy() # short circuit if p_sat or t_sat supercritical
+    f=zeros(tr_i.shape)
     while n_fev in range(max_it):
-        n_fev += 1
-        tr_i = t / tc_i
-        a_i = psi * alpha_tr(tr_i, af_omega_i) * r ** 2 * tc_i ** 2 / pc_i
-        beta = b_i * p / (r * t)
-        q = a_i / (b_i * r * t)
-        a1 = beta * (epsilon + sigma) - beta - 1
-        a2 = q * beta + epsilon * sigma * beta ** 2 \
-            - beta * (epsilon + sigma) * (1 + beta)
-        a3 = -(epsilon * sigma * beta ** 2 * (1 + beta) +
-               q * beta ** 2)
+        n_fev+=1
+        a_i=psi*alpha_tr(tr_i,af_omega_i)*r**2*tc_i**2/pc_i
+        beta=b_i*pr_i*pc_i/(r*tr_i*tc_i)
+        q=a_i/(b_i*r*tr_i*tc_i)
+        a1=beta*(epsilon+sigma)-beta-1
+        a2=q*beta+epsilon*sigma*beta**2-beta*(epsilon+sigma)*(1+beta)
+        a3=-(epsilon*sigma*beta**2*(1+beta)+q*beta**2)
         # partial derivative of discriminant with respect to p
-        da1_dp = 1 / p * beta * (epsilon + sigma - 1)
-        da2_dp = 1 / p * (q * beta + 2 * epsilon * sigma * beta ** 2
-                          - beta * (epsilon + sigma) * (1 + 2 * beta))
-        da3_dp = 1 / p * (-(epsilon * sigma * beta ** 2 * (2 + 3 * beta) +
-                            2 * q * beta ** 2))
-        disc = 1 / 27 * (- 1 / 3 * a1 ** 2 + a2) ** 3 + \
-            1 / 4 * (2 / 27 * a1 ** 3 - 1 / 3 * a1 * a2 + a3) ** 2
-        ddisc_dp = 1 / 9 * (- 1 / 3 * a1 ** 2 + a2) ** 2 * (
-            -2 / 3 * a1 * da1_dp + da2_dp) + \
-            1 / 2 * (2 / 27 * a1 ** 3 - 1 / 3 * a1 * a2 + a3) * (
-            2 / 9 * a1 ** 2 * da1_dp
-            - 1 / 3 * (a1 * da2_dp + a2 * da1_dp) + da3_dp)
+        da1_dp=1/(pr_i*pc_i)*beta*(epsilon+sigma-1)
+        da2_dp=1/(pr_i*pc_i)*(q*beta+2*epsilon*sigma*beta**2-beta*(epsilon+sigma)*(1+2*beta))
+        da3_dp=1/(pr_i*pc_i)*(-(epsilon*sigma*beta**2*(2+3*beta)+2*q*beta**2))
+        disc=1/27*(-1/3*a1**2+a2)**3+1/4*(2/27*a1**3-1/3*a1*a2+a3)**2
+        ddisc_dp=1/9*(-1/3*a1**2+a2)**2*(-2/3*a1*da1_dp+da2_dp)+\
+        1/2*(2/27*a1**3-1/3*a1*a2+a3)*(2/9*a1**2*da1_dp-1/3*(a1*da2_dp+a2*da1_dp)+da3_dp)
         # partial derivative of discriminant with respect to t
-        da1_dt = -1 / t * beta * (epsilon + sigma - 1)
-        da2_dt = -2 / t * (q * beta + epsilon * sigma * beta ** 2
-                           - beta * (epsilon + sigma) * (1 / 2 + beta))
-        da3_dt = -1 / t * (-(epsilon * sigma * beta ** 2 * (2 + 3 * beta) +
-                             3 * q * beta ** 2))
-        ddisc_dt = 1 / 9 * (- 1 / 3 * a1 ** 2 + a2) ** 2 * (
-            -2 / 3 * a1 * da1_dt + da2_dt) + \
-            1 / 2 * (2 / 27 * a1 ** 3 - 1 / 3 * a1 * a2 + a3) * (
-            2 / 9 * a1 ** 2 * da1_dt
-            - 1 / 3 * (a1 * da2_dt + a2 * da1_dt) + da3_dt)
-        success = disc < -tol
-        if success:
-            break
-        f = disc + tol
+        da1_dt=-1/(tr_i*tc_i)*beta*(epsilon+sigma-1)
+        da2_dt=-2/(tr_i*tc_i)*(q*beta+epsilon*sigma*beta**2-beta*(epsilon+sigma)*(1/2+beta))
+        da3_dt=-1/(tr_i*tc_i)*(-(epsilon*sigma*beta**2*(2+3*beta)+3*q*beta**2))
+        ddisc_dt=1/9*(-1/3*a1**2+a2)**2*(-2/3*a1*da1_dt+da2_dt)+\
+        1/2*(2/27*a1**3-1/3*a1*a2+a3)*(2/9*a1**2*da1_dt-1/3*(a1*da2_dt+a2*da1_dt)+da3_dt)
+        f[success] = 0 # only process if not converged and subcritical
+        f[~success] = disc[~success] + tol
         if p_or_t == 'p':
             df_dp = ddisc_dp
             inv_slope = 1 / df_dp
-            p_old = p
-            p = p_old - inv_slope * f
+            pr_i -= inv_slope * f / pc_i
         elif p_or_t == 't':
             df_dt = ddisc_dt
             inv_slope = 1 / df_dt
-            t_old = t
-            t = t_old - inv_slope * f
+            tr_i -= inv_slope * f / tc_i
+        success[~idx_sc]=(disc <= -tol/100)[~idx_sc]
+        if success[~idx_sc].all():
+            break
+        #print(n_fev,pc_i*pr_i,tc_i*tr_i,disc,inv_slope)
+    p=(~idx_sc)*(pr_i*pc_i)
+    t=(~idx_sc)*(tr_i*tc_i)
     soln = dict()
     for item in ['p', 't', 'success', 'n_fev',
                  'ddisc_dt', 'ddisc_dp', 'f', 'disc']:
@@ -545,16 +527,12 @@ def approach_pt_i_sat_ceos(t, p, tc_i, pc_i, af_omega_i,
     return soln
 
 
-def phi_sat_ceos(t, p, tc_i, pc_i, af_omega_i, alpha_tr, epsilon, sigma, psi, omega, r=r_def):
-    # ensure shape is possible
-    t,p,tc_i,pc_i,af_omega_i=[array(x,ndmin=1) for x in [t,p,tc_i,pc_i,af_omega_i]] 
-
-    tr_i = t / tc_i
+def phi_sat_ceos(tr_i, pr_i, tc_i, pc_i, af_omega_i, alpha_tr, epsilon, sigma, psi, omega, r=r_def):
     a_i = psi * alpha_tr(tr_i, af_omega_i) * r ** 2 * tc_i ** 2 / pc_i
     b_i = omega * r * tc_i / pc_i
-    beta = b_i * p / (r * t)
-    q = a_i / (b_i * r * t)
-    a0 = ones(t.shape)
+    beta = b_i * pr_i*pc_i / (r * tr_i*tc_i)
+    q = a_i / (b_i * r * tr_i*tc_i)
+    a0 = ones(beta.shape)
     a1 = beta * (epsilon + sigma) - beta - 1
     a2 = q * beta + epsilon * sigma * beta ** 2 \
         - beta * (epsilon + sigma) * (1 + beta)
@@ -563,8 +541,8 @@ def phi_sat_ceos(t, p, tc_i, pc_i, af_omega_i, alpha_tr, epsilon, sigma, psi, om
 
     soln = solve_cubic(array([a0, a1, a2, a3]))
     success = soln['disc'] <= 0
-    z_l = soln['roots'][:,-1].real
-    z_v = soln['roots'][:,0].real
+    z_l = soln['roots'][:,-1].real # l: smallest root
+    z_v = soln['roots'][:,0].real # v: largest real root
 
     i_i_l = +1 / (sigma - epsilon) * log(
         (z_l + sigma * beta) / (z_l + epsilon * beta)
@@ -1249,7 +1227,7 @@ def p_est(t, p, x_i, tc_i, pc_i, af_omega_i, alpha_tr,
 
     v_inf_roots = zroots(array([p0, p1, p2, p3, p4, p5, p6]).T)
 
-    v = v_inf_roots#[v_inf_roots.imag == 0].real
+    v = v_inf_roots
     dp_dv=array([-r*t/(v[:,j]-b)**2+a/((v[:,j]+epsilon*b)*(v[:,j]+sigma*b))*(
         1/(v[:,j]+epsilon*b)+1/(v[:,j]+sigma*b)
     ) for j in range(v.shape[1])]).T
@@ -1262,7 +1240,7 @@ def p_est(t, p, x_i, tc_i, pc_i, af_omega_i, alpha_tr,
     v_inf=zeros(v.shape[0])
     dp_dv_real=zeros(v.shape[0])
     d2p_dv2_real=zeros(v.shape[0])
-    # single solution cases with dp_dv<0
+    # single real root with dp_dv<0
     idx=((v.imag==0) & (dp_dv<0)).sum(axis=1)==1
     v_inf[idx] = (v[idx]*((v.imag==0) & (dp_dv<0))[idx]).sum(axis=1).real
     d2p_dv2_real[idx] = (d2p_dv2[idx]*((v.imag==0) & (dp_dv<0))[idx]).sum(axis=1).real
@@ -1290,23 +1268,19 @@ def p_est(t, p, x_i, tc_i, pc_i, af_omega_i, alpha_tr,
 
     soln = solve_cubic([a0, a1, a2, a3])
     z_p_inf = array(soln['roots'])
-    z_l_p_inf = z_p_inf[:,-1].real
-    z_v_p_inf = z_p_inf[:,0].real
+    z_l_p_inf = z_p_inf[:,-1].real # l: smaller real root
+    z_v_p_inf = z_p_inf[:,0].real # v: larger real root
     v_l_p_inf = z_l_p_inf * r * t / p_rho_inf
     v_v_p_inf = z_v_p_inf * r * t / p_rho_inf
-    # if abs((p - p_old)/p) <= -tol:
-    #    break
 
     # find local min and max (extrema)
-    p0 = a * b ** 3 * epsilon + a * b ** 3 * sigma - \
-        b ** 4 * epsilon ** 2 * r * sigma ** 2 * t
-    p1 = -2 * a * b ** 2 * epsilon - 2 * a * b ** 2 * sigma + \
-        2 * a * b ** 2 - 2 * b ** 3 * epsilon ** 2 * r * sigma * t - \
-        2 * b ** 3 * epsilon * r * sigma ** 2 * t
-    p2 = a * b * epsilon + a * b * sigma - 4 * a * b - b ** 2 * epsilon ** 2 * r * t - \
-        4 * b ** 2 * epsilon * r * sigma * t - b ** 2 * r * sigma ** 2 * t
-    p3 = 2 * a - 2 * b * epsilon * r * t - 2 * b * r * sigma * t
-    p4 = -r * t
+    p0=a*b**3*epsilon+a*b**3*sigma-b**4*epsilon**2*r*sigma**2*t
+    p1=-2*a*b**2*epsilon-2*a*b**2*sigma+2*a*b**2-\
+    2*b**3*epsilon**2*r*sigma*t-2*b**3*epsilon*r*sigma**2*t
+    p2=a*b*epsilon+a*b*sigma-4*a*b-b**2*epsilon**2*r*t-\
+    4*b**2*epsilon*r*sigma*t-b**2*r*sigma**2*t
+    p3=2*a-2*b*epsilon*r*t-2*b*r*sigma*t
+    p4=-r*t
 
     # v_roots = zroots([p0, p1, p2, p3, p4])
     soln = solve_quartic([p4, p3, p2, p1, p0])
@@ -1437,7 +1411,7 @@ def z_phase(t, p, z_i, tc_i, pc_i, af_omega_i, alpha_tr, epsilon, sigma, psi, om
     a2_low=q*beta_low+epsilon*sigma*beta_low**2-beta_low*(epsilon+sigma)*(1+beta_low)
     a3_low=-(epsilon*sigma*beta_low**2*(1+beta_low)+q*beta_low**2)
     soln_z_low = solve_cubic([a0_low, a1_low, a2_low, a3_low])
-    roots_z_low = array(soln_z_low['roots'])
+    roots_z_low = soln_z_low['roots']
     disc_z_low = soln_z_low['disc']
     idx=(disc_z_low<=0) # 3 real roots
     z_l_low[idx]=roots_z_low[idx,2].real # smallest is liq

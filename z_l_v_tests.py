@@ -16,7 +16,7 @@ from z_l_v import use_pr_eos, use_srk_eos, isot_flash, pt_flash
 r = 8.314 * 10. ** 6 / 10. ** 5  # bar cm^3/(mol K)
 rlv = 0.8  # Rücklaufverhältnis
 t_flash = 273.16 + 60  # K
-tol = finfo(float).eps
+eps = finfo(float).eps
 setup_log_file('log_z_l_v.log', with_console=False)
 
 # Nach unten hin: CO, H2, CO2, H2O, CH3OH, N2, CH4
@@ -40,52 +40,30 @@ def vdi_atlas():
                   alpha_tr, epsilon, sigma, psi, omega).x.item() * 1000
         ) + ' mbar. (Literaturwert 250mbar)'
     )
-    p_new = p_i_sat_ceos(-256.6 + 273.15, 10, 33.19, 13.13, -0.216, alpha_tr, epsilon, sigma, psi, omega, max_it=100,
-                         tol=tol)
+    p_new = p_i_sat_ceos(-256.6 + 273.15, 10, 33.19, 13.13, -0.216, alpha_tr, epsilon, sigma, psi, omega, max_it=100,tol=eps*1000)
     p_new = bubl_p(-256.6 + 273.15, 1, 1.0, 33.19, 13.13, -0.216,
                    alpha_tr, epsilon, sigma, psi, omega,
-                   max_it=100, tol=tol,print_iterations=False)['p'].item()
+                   max_it=100, tol=eps*100,print_iterations=False)['p'].item()
     soln = secant_ls_3p(lambda p_var:
                  phi(-256.6 + 273.15, p_var, 1, 33.19, 13.13, -0.216,
                      alpha_tr, epsilon, sigma, psi, omega)['phi_i_l'].squeeze()
                      -
                  phi(-256.6 + 273.15, p_var, 1, 33.19, 13.13, -0.216,
                              alpha_tr, epsilon, sigma, psi, omega)['phi_i_v'].squeeze()
-                 , 0.7, tol=tol, x_1=1.001 * 0.7,
+                 , 0.7, tol=eps*100, x_1=1.001 * 0.7,
                  restriction=lambda p_val: p_val > 0,
                  print_iterations=False)
-    phi_sat = phi(-256.6 + 273.15, soln['x'], 1, 33.19, 13.13, -0.216,
-                             alpha_tr, epsilon, sigma, psi, omega)
+    phi_sat = phi(-256.6 + 273.15, soln['x'], 1, 33.19, 13.13, -0.216, alpha_tr, epsilon, sigma, psi, omega)
 
-    t = 273.15 + linspace(-260, 400, 50)
-    p_sat_vals = empty([len(t), len(pc)])
-    p_sat_vals_ceos = empty([len(t), len(pc)]) * nan
-    p0 = 1.0 * ones(len(pc))
-    z_i=concatenate(array([[[1 if j==i else 0 for j in range(pc.shape[0])] for _ in range(t.shape[0])] for i in range(pc.shape[0])]))
-    p_est(concatenate([t for _ in range(pc.shape[0])]),ones(t.shape[0]*pc.shape[0]),z_i,tc,pc,omega_af,alpha_tr,epsilon,sigma,psi, omega, 100, tol)
-    for i in range(len(t)):
-        p_sat_vals[i, :] = 10**(
-                ant_a - ant_b / (t[i] - 273.15 + ant_c)
-        ) * 1 / 760 * 101325 / 1e5  # bar
-        for j in range(len(pc)):
-            if t[i] >= tc[j]:
-                pass  # skip
-            else:
-                p_min = p_est(t[i], p0[j], 1.0, tc[j], pc[j], omega_af[j],
-                              alpha_tr, epsilon, sigma, psi, omega, 100, tol)['p_min_l']
-                if p_min < -1000:
-                    pass
-                    # print(bubl_point_step_l_k(t[i], p0[j], 1.0, tc[j], pc[j], omega_af[j],
-                    #                           alpha_tr, epsilon, sigma, psi, omega,
-                    #                           max_it=100, tol=1e-10, full_output=False, y_i_est=1.0))
-                else:
-                    # p_sat_vals_ceos[i, j] = bubl_p(
-                    #     t[i], p0[j], 1.0, tc[j], pc[j], omega_af[j],
-                    #     alpha_tr, epsilon, sigma, psi, omega,
-                    #     max_it=100, tol=1e-10, print_iterations=False)['p'].item()
-                    p_sat_vals_ceos[i, j] = p_i_sat_ceos(t[i], p0[j], tc[j], pc[j], omega_af[j], alpha_tr, epsilon,
-                                                         sigma, psi, omega, max_it=100, tol=1e-10)['p']
-                    p0[j] = p_sat_vals_ceos[i, j]
+    n=50 # points
+    t=concatenate([273.15 + linspace(-260, 400, n) for _ in range(pc.shape[0])])
+    p=ones(n*pc.shape[0])
+    z_i=concatenate(array([[[1 if j==i else 0 for j in range(pc.shape[0])] for _ in range(n)] for i in range(pc.shape[0])]))
+    tr=outer(t,1/tc)
+
+    p_min=p_est(t,p,z_i,tc,pc,omega_af,alpha_tr,epsilon,sigma,psi,omega,100,eps)['p_min_l'] # bar
+    p_sat_vals=10**(ant_a-ant_b/(tr*tc-273.15+ant_c))*1/760*101325/1e5 # bar
+    p_sat_vals_ceos=p_i_sat_ceos(t,p,tc,pc,omega_af,alpha_tr,epsilon,sigma,psi,omega,max_it=100,tol=1e-10)['p'] # bar
 
     lines = plt.plot(t, p_sat_vals)
     lines_2 = plt.plot(t, p_sat_vals_ceos, 'x', fillstyle='none')
@@ -102,13 +80,10 @@ def vdi_atlas():
     pc_i = 13.13
     af_omega_i = -0.216
     z_i = asarray(1.0)
-    p_min = p_est(t, 1e-3, z_i, tc_i, pc_i, af_omega_i, alpha_tr, epsilon, sigma, psi, omega,
-                  100, tol)['p_min_l']
+    p_min = p_est(t, 1e-3, z_i, tc_i, pc_i, af_omega_i, alpha_tr, epsilon, sigma, psi, omega, 100, eps)['p_min_l']
 
-    phi(-256.6 + 273.15, 0.2620861427179638, 1, 33.19, 13.13, -0.216,
-        alpha_tr, epsilon, sigma, psi, omega)
-    p_i_sat_ceos(-256.6 + 273.15, 0.2620861427179638, 33.19, 13.13, -0.216, alpha_tr, epsilon, sigma, psi, omega,
-                 max_it=100, tol=tol)
+    phi(-256.6 + 273.15, 0.2620861427179638, 1, 33.19, 13.13, -0.216, alpha_tr, epsilon, sigma, psi, omega)
+    p_i_sat_ceos(-256.6 + 273.15, 0.2620861427179638, 33.19, 13.13, -0.216, alpha_tr, epsilon, sigma, psi, omega, max_it=100, tol=eps)
     p_range = concatenate([linspace(-71, 0.001, 10), linspace(0.001, 10, 20)])
 
     markers = plt.Line2D.filled_markers
@@ -179,7 +154,7 @@ def vdi_atlas():
             p_complex += [p]
 
     p=linspace(1e-4, max(p_range), 30)
-    soln=z_phase(t*ones(p.shape), p, z_i*ones([p.shape[0],1]), tc_i, pc_i, af_omega_i, alpha_tr, epsilon, sigma, psi, omega, tol, r)
+    soln=z_phase(t*ones(p.shape), p, z_i*ones([p.shape[0],1]), tc_i, pc_i, af_omega_i, alpha_tr, epsilon, sigma, psi, omega, eps, r)
     rho_l_phase=soln['rho_l']
     rho_v_phase=soln['rho_v']
 
@@ -207,7 +182,7 @@ def vdi_atlas():
                fillstyle='bottom', linestyle='none')
     plot3.plot(z_complex, p_complex, current_marker, markersize=4, linestyle='--',
                fillstyle='none', color=current_color, markeredgewidth=0.25, linewidth=0.5)
-    p_low = z_phase(t*ones(p.shape), p, z_i*ones([p.shape[0],1]), tc_i, pc_i, af_omega_i, alpha_tr, epsilon, sigma, psi, omega, tol)['p_low']
+    p_low = z_phase(t*ones(p.shape), p, z_i*ones([p.shape[0],1]), tc_i, pc_i, af_omega_i, alpha_tr, epsilon, sigma, psi, omega, eps)['p_low']
     plot1.axhline(p_low[0], linestyle='-.', color='gray', linewidth=0.5, label='$P_{low}$')
     plot2.axhline(p_low[0], linestyle='-.', color='gray', linewidth=0.5, label='$P_{low}$')
     plot3.axhline(p_low[0], linestyle='-.', color='gray', linewidth=0.5, label='$P_{low}$')
@@ -414,8 +389,8 @@ def zs_1998():
     a_ij=array([[sqrt(a_i[:,i]*a_i[:,j]) for i in range(tc_i.shape[0])] for j in range(tc_i.shape[0])]).T
     
     # two important points
-    #z_phase(500,6e6,array([[0.5,0.5]]),tc_i,pc_i,af_omega_i,alpha_tr,epsilon, sigma, psi, omega,tol,r)
-    #z_phase(420,140e6,array([[0.5,0.5]]),tc_i,pc_i,af_omega_i,alpha_tr,epsilon, sigma, psi, omega,tol,r)
+    #z_phase(500,6e6,array([[0.5,0.5]]),tc_i,pc_i,af_omega_i,alpha_tr,epsilon, sigma, psi, omega,eps,r)
+    #z_phase(420,140e6,array([[0.5,0.5]]),tc_i,pc_i,af_omega_i,alpha_tr,epsilon, sigma, psi, omega,eps,r)
 
     # Variablen, die von der Flüssigkeit-Zusammensetzung abhängig sind
     b=z_i.dot(b_i)
@@ -458,7 +433,7 @@ def zs_1998():
     z_complex = roots[idx,1].real # real part of complex root
     p_complex = p[idx]
 
-    soln=z_phase(t, p, z_i, tc_i, pc_i, af_omega_i, alpha_tr, epsilon, sigma, psi, omega, tol, r)
+    soln=z_phase(t, p, z_i, tc_i, pc_i, af_omega_i, alpha_tr, epsilon, sigma, psi, omega, eps, r)
     rho_l_phase=soln['rho_l']
     rho_v_phase=soln['rho_v']
 
@@ -515,7 +490,7 @@ def zs_1998():
         plot1.axvline(b, linestyle='-')
         plot2.axvline(1 / b, linestyle='-')
         plot4.axvline(1 / b, linestyle='-')
-    p_low = z_phase(420, 140e5, array([[0.5,0.5]]), tc_i, pc_i, af_omega_i, alpha_tr, epsilon, sigma, psi, omega, tol, r)['p_low']
+    p_low = z_phase(420, 140e5, array([[0.5,0.5]]), tc_i, pc_i, af_omega_i, alpha_tr, epsilon, sigma, psi, omega, eps, r)['p_low']
     plot1.axhline(p_low, linestyle='-.', color='gray', linewidth=0.5, label='$P_{low}$')
     plot2.axhline(p_low, linestyle='-.', color='gray', linewidth=0.5)
     plot4.axhline(p_low, linestyle='-.', color='gray', linewidth=0.5, label='$P_{low}$')
@@ -651,7 +626,7 @@ def svn_fig_14_8():
                 p_complex += [p]
 
         p=linspace(1e-4, max(p_range), 30)
-        soln=z_phase(t*ones(p.shape), p, z_i*ones([p.shape[0],1]), tc_i, pc_i, af_omega_i, alpha_tr, epsilon, sigma, psi, omega, tol, r)
+        soln=z_phase(t*ones(p.shape), p, z_i*ones([p.shape[0],1]), tc_i, pc_i, af_omega_i, alpha_tr, epsilon, sigma, psi, omega, eps, r)
         rho_l_phase=soln['rho_l']
         rho_v_phase=soln['rho_v']
 
@@ -684,7 +659,7 @@ def svn_fig_14_8():
         if x in [0.4, 0.5, 0.6, 0.7]:
             # FIXME: this is not used
             p_est(t*ones(p.shape), p, z_i*ones([p.shape[0],z_i.shape[0]]), tc_i, pc_i, af_omega_i,
-                  alpha_tr, epsilon, sigma, psi, omega, max_it, tol)
+                  alpha_tr, epsilon, sigma, psi, omega, max_it, eps)
     plot1.set_xlabel(r'$\frac{v}{cm^3/mol}$')
     plot1.set_ylabel('p / bar')
     plot1.legend()
