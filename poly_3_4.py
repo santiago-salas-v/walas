@@ -1,4 +1,4 @@
-from numpy import array, lexsort, pi, cos, arccos, log10, sign, emath, abs, sqrt, ones
+from numpy import array, lexsort, pi, cos, arccos, log10, sign, emath, abs, sqrt, ones, take_along_axis
 from numpy import finfo
 eps=finfo(float).eps
 
@@ -63,14 +63,9 @@ def solve_cubic(p):
     z_imag_parts = array([im_z1, im_z2, im_z3])
     positions = lexsort([-z_real_parts, z_imag_parts, abs(z_imag_parts)],axis=0)
     # array of complex, sorted first real, then imag
-    if len(z_roots.shape)>1:
-        z_roots=array([z_roots[positions[:,j].squeeze(),j] for j in range(z_roots.shape[1])])
-        re_z_roots=array([z_real_parts[positions[:,j].squeeze(),j] for j in range(z_real_parts.shape[1])])
-        im_z_roots=array([z_imag_parts[positions[:,j].squeeze(),j] for j in range(z_imag_parts.shape[1])])
-    else:
-        z_roots=z_roots[positions]
-        re_z_roots=z_real_parts[positions]
-        im_z_roots=z_imag_parts[positions]
+    z_roots=take_along_axis(z_roots,positions,axis=0)
+    re_z_roots=take_along_axis(z_real_parts,positions,axis=0)
+    im_z_roots=take_along_axis(z_imag_parts,positions,axis=0)
     return {'roots':z_roots,'disc':disc,'p':p_coef,'q':q_coef,'re_roots':re_z_roots,'im_roots':im_z_roots}
 
 
@@ -98,7 +93,7 @@ def solve_quartic(abcde):
     # solve cubic resolvent z^3-p/2z^2-rz+pr/2-q^2/8=0
     z=solve_cubic([ones(p.shape),-p/2,-r,p*r/2-q**2/8])['roots']
     # chose any root (here the real one)
-    z=z[:,0] if len(z.shape)>1 else z[0]
+    z=z[0]
     s=(-q/2<0)*(-1)+(-q/2>=0)*(+1)
 
     # roots to biquadratic
@@ -114,14 +109,10 @@ def solve_quartic(abcde):
     z_real_parts=z_roots.real
     z_imag_parts=z_roots.imag
     positions = lexsort([-z_real_parts, z_imag_parts, abs(z_imag_parts)],axis=0)
-    if len(z_roots.shape)>1:
-        z_roots=array([z_real_parts[positions[:,j],j] for j in range(z_roots.shape[1])])
-        re_z_roots=array([z_real_parts[positions[:,j],j] for j in range(z_real_parts.shape[1])])
-        im_z_roots=array([z_imag_parts[positions[:,j],j] for j in range(z_imag_parts.shape[1])])
-    else:
-        z_roots=z_roots[positions]
-        re_z_roots=z_real_parts[positions]
-        im_z_roots=z_imag_parts[positions]
+    # array of complex, sorted first real, then imag
+    z_roots=take_along_axis(z_roots,positions,axis=0)
+    re_z_roots=take_along_axis(z_real_parts,positions,axis=0)
+    im_z_roots=take_along_axis(z_imag_parts,positions,axis=0)
     return {'roots':z_roots,'re_roots':re_z_roots,'im_roots':im_z_roots}
 
 

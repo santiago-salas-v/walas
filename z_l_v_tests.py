@@ -40,6 +40,7 @@ def vdi_atlas():
                   alpha_tr, epsilon, sigma, psi, omega).x.item() * 1000
         ) + ' mbar. (Literaturwert 250mbar)'
     )
+    secant_ls_3p(lambda x:array([x**2-1]).ravel(),x_0=array([0.01,0.02,0.03]),x_1=array([0.04,0.05,0.06]),tol=1e-6)
     p_new = p_i_sat_ceos(-256.6 + 273.15, 10, 33.19, 13.13, -0.216, alpha_tr, epsilon, sigma, psi, omega, max_it=100,tol=eps*1000)
     p_new = bubl_p(-256.6 + 273.15, 1, 1.0, 33.19, 13.13, -0.216,
                    alpha_tr, epsilon, sigma, psi, omega,
@@ -55,15 +56,15 @@ def vdi_atlas():
                  print_iterations=False)
     phi_sat = phi(-256.6 + 273.15, soln['x'], 1, 33.19, 13.13, -0.216, alpha_tr, epsilon, sigma, psi, omega)
 
-    n=50 # points
-    t=concatenate([273.15 + linspace(-260, 400, n) for _ in range(pc.shape[0])])
-    p=ones(n*pc.shape[0])
-    z_i=concatenate(array([[[1 if j==i else 0 for j in range(pc.shape[0])] for _ in range(n)] for i in range(pc.shape[0])]))
+    n_points=50 # points
+    t=concatenate([273.15 + linspace(-260, 400, n_points) for _ in range(pc.shape[0])])
+    p=ones(n_points*pc.shape[0])
+    z_i=concatenate(array([[[1 if j==i else 0 for j in range(pc.shape[0])] for _ in range(n_points)] for i in range(pc.shape[0])]))
     tr=outer(t,1/tc)
 
     p_min=p_est(t,p,z_i,tc,pc,omega_af,alpha_tr,epsilon,sigma,psi,omega,100,eps)['p_min_l'] # bar
     p_sat_vals=10**(ant_a-ant_b/(tr*tc-273.15+ant_c))*1/760*101325/1e5 # bar
-    p_sat_vals_ceos=p_i_sat_ceos(t,p,tc,pc,omega_af,alpha_tr,epsilon,sigma,psi,omega,max_it=100,tol=1e-10)['p'] # bar
+    p_sat_vals_ceos=p_i_sat_ceos(t,p,tc,pc,omega_af,alpha_tr,epsilon,sigma,psi,omega,max_it=100,tol=1e-10)['pr_i']*pc # bar
 
     lines = plt.plot(t, p_sat_vals)
     lines_2 = plt.plot(t, p_sat_vals_ceos, 'x', fillstyle='none')

@@ -356,6 +356,7 @@ def p_i_sat_ceos(t, p, tc_i, pc_i, af_omega_i,
     success = first_step_soln['success']
     p_sat[~success]=nan
     p0_it=first_step_soln['p']
+    idx_sc=first_step_soln['idx_sc']
     inv_slope=1/first_step_soln['ddisc_dp']
     p1_it = p0_it * (1 + sign(-inv_slope) * 0.01)
 
@@ -374,17 +375,23 @@ def p_i_sat_ceos(t, p, tc_i, pc_i, af_omega_i,
     tr_i_ravel=tr_i.ravel() # turn to 1D
     pr_i_1_ravel=(p1_it/pc_i).ravel()
     pr_i_0_ravel=(p0_it/pc_i).ravel()
-    S1 = fsolve(lambda pr_i_var:phi_sat_ceos(tr_i_ravel, pr_i_var, tc_i, pc_i, af_omega_i, alpha_tr, epsilon, sigma, psi, omega)['zero_fun'].ravel(),x0=pr_i_0_ravel)
-    soln_temp = secant_ls_3p(lambda pr_i_var: phi_sat_ceos(tr_i_ravel, pr_i_var, tc_i, pc_i, af_omega_i,
-            alpha_tr, epsilon, sigma, psi, omega)['zero_fun'].ravel(),
-        pr_i_0_ravel, tol, x_1=pr_i_1_ravel,
-        restriction=lambda pr_i_var: (pr_i_var > 0).all() and phi_sat_ceos(
-            tr_i_ravel, pr_i_var, tc_i, pc_i, af_omega_i, alpha_tr, epsilon,
-            sigma, psi, omega)['success'].all(),
+    tc_i_ravel=(tc_i*ones(tr_i.shape)).ravel()
+    pc_i_ravel=(pc_i*ones(tr_i.shape)).ravel()
+    af_omega_i_ravel=(af_omega_i*ones(tr_i.shape)).ravel()
+    idx=(~idx_sc).ravel()
+    #S1 = fsolve(lambda pr_i_var:phi_sat_ceos(tr_i_ravel, pr_i_var, tc_i_ravel, pc_i_ravel, af_omega_i_ravel, alpha_tr, epsilon, sigma, psi, omega)['zero_fun'].ravel(),x0=pr_i_0_ravel)
+    phi_sat_ceos(tr_i_ravel[idx], pr_i_0_ravel[idx], tc_i_ravel[idx], pc_i_ravel[idx], af_omega_i_ravel[idx],alpha_tr, epsilon, sigma, psi, omega)['success']
+    soln_temp = secant_ls_3p(lambda pr_i_var: phi_sat_ceos(tr_i_ravel[idx], pr_i_var, tc_i_ravel[idx], pc_i_ravel[idx], af_omega_i_ravel[idx],
+            alpha_tr, epsilon, sigma, psi, omega)['zero_fun'],
+        pr_i_0_ravel[idx], tol, x_1=pr_i_1_ravel[idx],
+        restriction=lambda pr_i_var: (pr_i_var > 0) & phi_sat_ceos(
+            tr_i_ravel[idx], pr_i_var, tc_i_ravel[idx], pc_i_ravel[idx], af_omega_i_ravel[idx], alpha_tr, epsilon,
+            sigma, psi, omega)['success'],
         print_iterations=False
     )
     n_fev += soln_temp['iterations'] + soln_temp['total_backtracks']
-    pr_i_sat = soln_temp['x'].reshape(pr_i.shape) # unravel to original dimensions
+    pr_i_sat=zeros(idx_sc.shape)
+    pr_i_sat[~idx_sc]=soln_temp['x'] # unravel to original dimensions (alt. .reshape(pr_i.shape) )
     p_sat = pr_i_sat*pc_i
     soln_temp = phi_sat_ceos(tr_i, pr_i_sat, tc_i, pc_i, af_omega_i,
                              alpha_tr, epsilon, sigma, psi, omega)
@@ -520,9 +527,10 @@ def approach_pt_i_sat_ceos(tr_i, pr_i, tc_i, pc_i, af_omega_i,
         #print(n_fev,pc_i*pr_i,tc_i*tr_i,disc,inv_slope)
     p=(~idx_sc)*(pr_i*pc_i)
     t=(~idx_sc)*(tr_i*tc_i)
+    success=(~idx_sc) & success
     soln = dict()
     for item in ['p', 't', 'success', 'n_fev',
-                 'ddisc_dt', 'ddisc_dp', 'f', 'disc']:
+                 'ddisc_dt', 'ddisc_dp', 'f', 'disc', 'idx_sc']:
         soln[item] = locals().get(item)
     return soln
 
@@ -541,24 +549,25 @@ def phi_sat_ceos(tr_i, pr_i, tc_i, pc_i, af_omega_i, alpha_tr, epsilon, sigma, p
 
     soln = solve_cubic(array([a0, a1, a2, a3]))
     success = soln['disc'] <= 0
-    z_l = soln['roots'][:,-1].real # l: smallest root
-    z_v = soln['roots'][:,0].real # v: largest real root
+    z_l = soln['roots'][2].real # l: smallest root
+    z_v = soln['roots'][0].real # v: largest real root
 
-    i_i_l = +1 / (sigma - epsilon) * log(
-        (z_l + sigma * beta) / (z_l + epsilon * beta)
-    )
-    i_i_v = +1 / (sigma - epsilon) * log(
-        (z_v + sigma * beta) / (z_v + epsilon * beta)
-    )
-    if z_l - beta > 0:
-        # $G^R/(RT) = Z - 1 - ln(1-\rho b) - ln(Z) - q I$
-        # and $\beta = \rho b Z$
-        ln_phi_l = + z_l - 1 - log(z_l - beta) - q * i_i_l
-    else:
-        # $G^R/(RT) = Z - 1 - ln(1-\rho b) + ln(-Z) - q I$
-        # and $\beta = \rho b Z$
-        ln_phi_l = + z_l - 1 - log(beta / z_l**2 - 1 / z_l) - q * i_i_l
-    ln_phi_v = + z_v - 1 - log(z_v - beta) - q * i_i_v
+    if epsilon != sigma:
+        # vdw: epsilon = sigma
+        i_int_l=1/(sigma-epsilon)*log((z_l+sigma*beta)/(z_l+epsilon*beta))
+        i_int_v=1/(sigma-epsilon)*log((z_v+sigma*beta)/(z_v+epsilon*beta))
+    elif epsilon == sigma:
+        # only vdw
+        i_int_l=beta/(z_l+epsilon*beta)
+        i_int_v=beta/(z_v+epsilon*beta)
+    # $G^R/(RT) = Z - 1 - ln(1-\rho b) - ln(Z) - q I$
+    # and $\beta = \rho b Z$
+    ln_phi_l,ln_phi_v=zeros(i_int_l.shape),zeros(i_int_l.shape)
+    idx=(z_l-beta>0)
+    ln_phi_l[idx] = + z_l[idx] - 1 - log(z_l[idx] - beta[idx]) - q[idx] * i_int_l[idx]
+    idx=(z_l-beta<=0)
+    ln_phi_l[idx]= + z_l[idx] - 1 - log(beta[idx] / z_l[idx]**2 - 1 / z_l[idx]) - q[idx] * i_int_l[idx]
+    ln_phi_v = + z_v - 1 - log(z_v - beta) - q * i_int_v
     phi_l = exp(ln_phi_l)
     phi_v = exp(ln_phi_v)
     zero_fun = -ln_phi_v + ln_phi_l
@@ -1268,8 +1277,8 @@ def p_est(t, p, x_i, tc_i, pc_i, af_omega_i, alpha_tr,
 
     soln = solve_cubic([a0, a1, a2, a3])
     z_p_inf = array(soln['roots'])
-    z_l_p_inf = z_p_inf[:,-1].real # l: smaller real root
-    z_v_p_inf = z_p_inf[:,0].real # v: larger real root
+    z_l_p_inf = z_p_inf[2].real # l: smaller real root
+    z_v_p_inf = z_p_inf[0].real # v: larger real root
     v_l_p_inf = z_l_p_inf * r * t / p_rho_inf
     v_v_p_inf = z_v_p_inf * r * t / p_rho_inf
 
@@ -1285,10 +1294,10 @@ def p_est(t, p, x_i, tc_i, pc_i, af_omega_i, alpha_tr,
     # v_roots = zroots([p0, p1, p2, p3, p4])
     soln = solve_quartic([p4, p3, p2, p1, p0])
     v_roots = soln['roots']
-    v=zeros([v_roots.shape[0],2])
-    idx=(v_roots.imag==0) & array([v_roots[:,j]>b for j in range(v_roots.shape[1])]).T
-    v[:,0]=(v_roots*idx).real.max(axis=1)
-    v[:,1]=(v_roots*idx).real.min(axis=1)
+    v=zeros([v_roots.shape[1],2])
+    idx=(v_roots.imag==0).T & array([v_roots[j]>b for j in range(v_roots.shape[0])]).T
+    v[:,0]=(v_roots.T*idx).real.max(axis=1)
+    v[:,1]=(v_roots.T*idx).real.min(axis=1)
 
     v_l = v.min(axis=1)
     v_v = v.max(axis=1)
@@ -1313,7 +1322,7 @@ def p_est(t, p, x_i, tc_i, pc_i, af_omega_i, alpha_tr,
         a3 = -(epsilon * sigma * beta[idx] ** 2 * (1 + beta[idx]) +
                q[idx] * beta[idx] ** 2)
         soln = solve_cubic([a0, a1, a2, a3])
-        z_v[idx] = soln['roots'][:,0].real # largest real
+        z_v[idx] = soln['roots'][0].real # largest real
         v_v[idx] = z_v[idx] * r * t[idx] / p[idx]
         rho_v[idx] = 1 / v_v[idx]
 
@@ -1414,10 +1423,10 @@ def z_phase(t, p, z_i, tc_i, pc_i, af_omega_i, alpha_tr, epsilon, sigma, psi, om
     roots_z_low = soln_z_low['roots']
     disc_z_low = soln_z_low['disc']
     idx=(disc_z_low<=0) # 3 real roots
-    z_l_low[idx]=roots_z_low[idx,2].real # smallest is liq
+    z_l_low[idx]=roots_z_low[2,idx].real # smallest is liq
     idx=(disc_z_low>0) # 1 real, 2 complex
-    z_l_low[idx]=roots_z_low[idx,0].real
-    z_v_low=roots_z_low[:,0].real # at any rate largest real root
+    z_l_low[idx]=roots_z_low[0,idx].real
+    z_v_low=roots_z_low[0,:].real # at any rate largest real root
 
     # phase: L
     v_l_low=z_l_low*r*t/p_low
@@ -1426,7 +1435,7 @@ def z_phase(t, p, z_i, tc_i, pc_i, af_omega_i, alpha_tr, epsilon, sigma, psi, om
         1/(v_l_low+epsilon*b)+1/(v_l_low+sigma*b)))*(-v_l_low**2)
     # liquid pseudo-density single real fallback
     idx=((t>=t_mc) | (n_positive_roots_p<=1)) & (p>p_mc_bound)
-    z_l[idx]=roots_z[idx,0].real
+    z_l[idx]=roots_z[0,idx].real
     # liquid pseudo-density - eq. 36, 38, 39 fallback
     idx=((t>=t_mc) | (n_positive_roots_p<=1)) & (p<=p_mc_bound)
     c1=dp_drho_at_rho_mc[idx]*(rho_mc-0.7*rho_mc)[idx]
@@ -1435,10 +1444,10 @@ def z_phase(t, p, z_i, tc_i, pc_i, af_omega_i, alpha_tr, epsilon, sigma, psi, om
     z_l[idx]=p[idx]*1/rho_l/(r*t[idx])
     # liquid density smallest real
     idx=((t<t_mc) | (n_positive_roots_p>1)) & (p>p_low) & (disc_z<=0)
-    z_l[idx]=roots_z[idx,2].real
+    z_l[idx]=roots_z[2,idx].real
     # liquid density only real
     idx=((t<t_mc) | (n_positive_roots_p>1)) & (p>p_low) & (disc_z>0)
-    z_l[idx]=roots_z[idx,0].real
+    z_l[idx]=roots_z[0,idx].real
     # liquid pseudo-density complex
     idx=((t<t_mc) | (n_positive_roots_p>1)) & (p<=p_low) & (
         (rho_l_low-0.7*rho_mc<=0) | (dp_drho_at_rho_l_low<0))
@@ -1463,10 +1472,10 @@ def z_phase(t, p, z_i, tc_i, pc_i, af_omega_i, alpha_tr, epsilon, sigma, psi, om
     dp_drho_at_rho_v_low=maximum(dp_drho_at_rho_v_low,0.1*r*t)
     # vapor density fallback
     idx=((t>=t_mc) | (n_positive_roots_p<=0))
-    z_v[idx]=roots_z[idx,0].real
+    z_v[idx]=roots_z[0,idx].real
     # vapor density single real
     idx=((t<t_mc) | (n_positive_roots_p>1)) & (p<=p_low)
-    z_v[idx]=roots_z[idx,0].real
+    z_v[idx]=roots_z[0,idx].real
     # vapor pseudo-density - eq. 24, 28, 29, 30
     idx=((t<t_mc) | (n_positive_roots_p>1)) & (p>p_low)
     rho0=(rho_v_low+1.4*rho_mc)/2

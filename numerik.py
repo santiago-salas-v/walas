@@ -577,8 +577,7 @@ def secant_ls_3p(y, x_0, tol, x_1=None, f_prime=None,
         :return: dict with keys: ['x', 'f', 'x_list', 'f_list',
                  'iterations', 'total_backtracks', 'steps', 'success']
         """
-    x_k = array(x_0)
-    y_k = array(y(x_k))
+    x_k,y_k,x_0,x_1 = [array(z,ndmin=1) for z in [x_0,y(x_0),x_0,x_1]]
     g_k = 1 / 2 * y_k**2
     g_prime_k = - y_k**2
     # initialize to prevent
@@ -591,51 +590,53 @@ def secant_ls_3p(y, x_0, tol, x_1=None, f_prime=None,
         inv_slope = 1 / f_prime(x_k)
         p = -inv_slope * y_k
     else:
-        p = x_1 - x_0
+        p = asarray(x_1 - x_0)
     rellength = abs(p / x_k)
-    lambda_min = tol / rellength
-    accum_step = 0.0
-    total_backtracks = 0
-    backtrackcount = 0
+    lambda_min = (tol / rellength).mean()
+    accum_step = zeros(1)
+    total_backtracks = zeros(1)
+    backtrackcount = zeros(1)
     success = False
-    steps = array([])
-    y_list = array([])
-    x_list = array([])
+    steps = []
+    y_list = []
+    x_list = []
+    lambda_ls = ones(y_k.shape)
+    lambda_temp,lambda_prev = zeros(lambda_ls.shape), zeros(lambda_ls.shape)
     for j in range(max_it):
-        y_list = append(y_list,y_k)
-        x_list = append(x_list,x_k)
-        steps = append(steps,accum_step)
-        if abs(y_k) <= tol:
+        y_list += [y_k.copy()]
+        x_list += [x_k.copy()]
+        steps += [accum_step.copy()]
+        if (abs(y_k) <= tol).all():
             success = True
             break
         if f_prime is not None:
             inv_slope = - 1 / f_prime(x_k)
             p = -inv_slope * y_k
 
-            x_k_minus_1 = x_k
-            y_k_minus_1 = y_k
-            g_k_minus_1 = g_k
-            g_prime_k_minus_1 = g_prime_k
+            x_k_minus_1 = x_k.copy()
+            y_k_minus_1 = y_k.copy()
+            g_k_minus_1 = g_k.copy()
+            g_prime_k_minus_1 = g_prime_k.copy()
         elif j == 0:
             inv_slope = -(x_1 - x_0) / y_k
             p = -inv_slope * y_k
 
-            x_k_minus_1 = x_k
-            y_k_minus_1 = y_k
-            g_k_minus_1 = g_k
-            g_prime_k_minus_1 = g_prime_k
+            x_k_minus_1 = x_k.copy()
+            y_k_minus_1 = y_k.copy()
+            g_k_minus_1 = g_k.copy()
+            g_prime_k_minus_1 = g_prime_k.copy()
 
         elif j == 1:
             inv_slope = (x_k - x_k_minus_1) / (y_k - y_k_minus_1)
             p = -inv_slope * y_k
 
-            x_k_minus_2 = x_k_minus_1
-            x_k_minus_1 = x_k
+            x_k_minus_2 = x_k_minus_1.copy()
+            x_k_minus_1 = x_k.copy()
 
-            y_k_minus_2 = y_k_minus_1
-            y_k_minus_1 = y_k
-            g_k_minus_1 = g_k
-            g_prime_k_minus_1 = g_prime_k
+            y_k_minus_2 = y_k_minus_1.copy()
+            y_k_minus_1 = y_k.copy()
+            g_k_minus_1 = g_k.copy()
+            g_prime_k_minus_1 = g_prime_k.copy()
         else:
             p = (x_k_minus_2 - x_k) - y_k_minus_2 * (
                 y_k - y_k_minus_1
@@ -646,45 +647,45 @@ def secant_ls_3p(y, x_0, tol, x_1=None, f_prime=None,
             )
             )
 
-            x_k_minus_2 = x_k_minus_1
-            x_k_minus_1 = x_k
+            x_k_minus_2 = x_k_minus_1.copy()
+            x_k_minus_1 = x_k.copy()
 
-            y_k_minus_2 = y_k_minus_1
-            y_k_minus_1 = y_k
-            g_k_minus_1 = g_k
-            g_prime_k_minus_1 = g_prime_k
+            y_k_minus_2 = y_k_minus_1.copy()
+            y_k_minus_1 = y_k.copy()
+            g_k_minus_1 = g_k.copy()
+            g_prime_k_minus_1 = g_prime_k.copy()
 
-        stop = False
-        lambda_ls = 1.0
+        stop = False & ones(y_k.shape,dtype=bool)
+        lambda_ls = ones(y_k.shape) # reset lambda_ls
         total_backtracks += backtrackcount
         backtrackcount = 0
-        g_0 = g_k_minus_1
-        g_prime_0 = g_prime_k_minus_1
-        f_0 = y_k_minus_1
-        while not stop and j + backtrackcount <= max_it + 1:
+        g_0 = g_k_minus_1.copy()
+        g_prime_0 = g_prime_k_minus_1.copy()
+        f_0 = y_k_minus_1.copy()
+        g_1,g_2=empty(g_0.shape),empty(g_0.shape)
+        a,b=empty(lambda_ls.shape),empty(lambda_ls.shape)
+        while not stop.all() and j + backtrackcount <= max_it + 1:
             if j + backtrackcount + 1 >= max_it:
                 success = False
             # backtracking, line search - numerical recipes 3ed
-            accum_step += lambda_ls
-            if lambda_ls <= lambda_min:
-                # opposite direction
-                p = -p
-                lambda_ls = 1.0
-                stop = False
+            accum_step += lambda_ls.min()
+            idx=(lambda_ls <= lambda_min)
+            p[idx]=-p[idx] # opposite direction
+            lambda_ls[idx] = 1.0
+            stop[idx] = False
 
             x_2 = x_k + lambda_ls * p
-            if restriction is not None and not restriction(x_2):
+            if restriction is not None:
+                idx=(~restriction(x_2))
                 # restriction not fulfilled - cannot evaluate func.
-                x_2 = x_k
-                f_2 = y(x_2)
-            else:
-                f_2 = y(x_2)
+                x_2[idx] = x_k[idx]
+            f_2 = array(y(x_2),ndmin=1)
             g_2 = 1 / 2 * f_2**2
             descent = alpha * lambda_ls * g_prime_0
             g_max = g_0 + descent
 
             satisfactory = g_2 <= g_max
-            stop = satisfactory or lambda_ls <= lambda_min
+            stop = satisfactory | (lambda_ls <= lambda_min)
             if print_iterations:
                 print(
                     ('{:d}-{:d}:\t x_2: {:.4f}\ty_2: {:.4g}' +
@@ -694,57 +695,43 @@ def secant_ls_3p(y, x_0, tol, x_1=None, f_prime=None,
                     )
                 )
 
-            if not stop:
+            if not stop.all():
                 # backtrack - reduce lambda
-                x_list =append(x_list,x_2)
-                y_list = append(y_list,f_2)
-                steps = append(steps,accum_step)
+                x_list += [x_2.copy()]
+                y_list += [f_2.copy()]
+                steps += [accum_step.copy()]
                 backtrackcount += 1
-                accum_step -= lambda_ls
-                if lambda_ls == 1:
-                    # first backtrack quadratic fit
-                    lambda_temp = (-g_prime_0 / (
-                        2 * (g_2 - g_0 - g_prime_0)
-                    )).item()
-                elif lambda_ls < 1:
-                    # subsequent backtracks cubic fit
-                    a, b = 1 / (lambda_ls - lambda_prev) * array(
-                        [[+1 / lambda_ls**2, -1 / lambda_prev**2],
-                         [-lambda_prev / lambda_ls**2,
-                          +lambda_ls / lambda_prev**2]]
-                    ).dot(array(
-                        [g_2 - g_0 - g_prime_0 * lambda_ls,
-                         g_1 - g_0 - g_prime_0 * lambda_prev]
-                    ))
-                    a, b = a.item(), b.item()
-                    disc = b**2 - 3 * a * g_prime_0
-                    if a == 0:
-                        # actually quadratic
-                        lambda_temp = (- g_prime_0 / (2 * b)).item()
-                    else:
-                        # legitimate cubic
-                        lambda_temp = ((-b + sqrt(disc)) / (3 * a)).item()
-                    if lambda_temp > 1 / 2 * lambda_ls:
-                        lambda_temp = 1 / 2 * lambda_ls
-                lambda_prev = lambda_ls
-                g_1 = g_2
-                if lambda_temp <= 0.1 * lambda_ls:
-                    lambda_ls = 0.1 * lambda_ls
-                else:
-                    lambda_ls = lambda_temp
-            x_k_plus_1 = x_2
-            y_k_plus_1 = f_2
-            g_k_plus_1 = g_2
+                accum_step -= lambda_ls.min()
+                idx=(lambda_ls==1) # first backtrack quadratic fit
+                lambda_temp[idx]=(-g_prime_0/(2*(g_2-g_0-g_prime_0)))[idx]
+                idx=(lambda_ls < 1) # subsequent backtracks cubic fit
+                a[idx]=1/(lambda_ls[idx]-lambda_prev[idx])*(1/lambda_ls[idx]**2*(g_2-g_0-g_prime_0*lambda_ls)[idx]-1/lambda_prev[idx]**2*(g_1-g_0-g_prime_0*lambda_prev)[idx])
+                b[idx]=1/(lambda_ls[idx]-lambda_prev[idx])*(-lambda_prev[idx]/lambda_ls[idx]**2*(g_2-g_0-g_prime_0*lambda_ls)[idx]+lambda_ls[idx]/lambda_prev[idx]**2*(g_1-g_0-g_prime_0*lambda_prev)[idx])
+                disc=b**2-3*a*g_prime_0
+                idx=(lambda_ls < 1) & (a==0) # actually quadratic
+                lambda_temp[idx] = (- g_prime_0 / (2 * b))[idx]
+                idx=(lambda_ls < 1) & (a!=0) # legitimate cubic
+                lambda_temp[idx] = ((-b[idx] + sqrt(disc[idx])) / (3 * a[idx]))
+                idx=(lambda_ls < 1) & (lambda_temp > 1 / 2 * lambda_ls)
+                lambda_temp[idx] = 1 / 2 * lambda_ls[idx]
+                lambda_prev = lambda_ls.copy()
+                g_1 = g_2.copy()
+                idx=lambda_temp <= 0.1 * lambda_ls
+                lambda_ls[idx] = 0.1 * lambda_ls[idx]
+                lambda_ls[~idx] = lambda_temp[~idx]
+            x_k_plus_1 = x_2.copy()
+            y_k_plus_1 = f_2.copy()
+            g_k_plus_1 = g_2.copy()
 
-        x_k = x_k_plus_1
-        y_k = y_k_plus_1
-        g_k = g_k_plus_1
+        x_k = x_k_plus_1.copy()
+        y_k = y_k_plus_1.copy()
+        g_k = g_k_plus_1.copy()
         g_prime_k = - y_k ** 2
-        if (abs(p) <= tol).all() or isnan(p).any():
+        if (abs(p) <= tol).any() or isnan(p).any():
             # avoid 1/0 division
-            success = False
+            success = False & success
             break
-    success = success and j <= max_it - 1
+    success = success & (j <= max_it - 1)
     x = x_k
     f = y_k
     f_list = y_list
