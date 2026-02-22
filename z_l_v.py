@@ -380,22 +380,38 @@ def p_i_sat_ceos(t, p, tc_i, pc_i, af_omega_i,
         # limiting density value for which 2 phases cease to coexist, limit of mechanical stability
         return (-r*t/(1/rho-b)**2+a*(1/(1/rho+epsilon*b)+1/(1/rho+sigma*b))/((1/rho+epsilon*b)*(1/rho+sigma*b)))*-(1/rho**2)
 
+    # exclude supercritical temperature cases (no p_sat)
+    idx_sc=(tr_i>1)
+    t=(tr_i*tc_i)[~idx_sc]
+    p=(pr_i*pc_i)[~idx_sc]
+    q=q[~idx_sc]
+    a=a[~idx_sc]
+    beta=beta[~idx_sc]
+    b=array([b for _ in range(tr_i.shape[0])])[~idx_sc]
+    rho_mc=array([rho_mc for _ in range(tr_i.shape[0])])[~idx_sc]
+    rho_hi=array([rho_hi for _ in range(tr_i.shape[0])])[~idx_sc]
+    rho_lo=array([rho_lo for _ in range(tr_i.shape[0])])[~idx_sc]
+    tc_i_ravel=array([tc_i for _ in range(tr_i.shape[0])])[~idx_sc]
+    pc_i_ravel=array([pc_i for _ in range(tr_i.shape[0])])[~idx_sc]
+    af_omega_i_ravel=array([af_omega_i for _ in range(tr_i.shape[0])])[~idx_sc]
+
     # find local min and max (extrema)
-    p0=a*b**3*epsilon+a*b**3*sigma-b**4*epsilon**2*r*sigma**2*tr_i*tc_i
+    p0=a*b**3*epsilon+a*b**3*sigma-b**4*epsilon**2*r*sigma**2*t
     p1=-2*a*b**2*epsilon-2*a*b**2*sigma+2*a*b**2-\
-    2*b**3*epsilon**2*r*sigma*tr_i*tc_i-2*b**3*epsilon*r*sigma**2*tr_i*tc_i
-    p2=a*b*epsilon+a*b*sigma-4*a*b-b**2*epsilon**2*r*tr_i*tc_i-\
-    4*b**2*epsilon*r*sigma*tr_i*tc_i-b**2*r*sigma**2*tr_i*tc_i
-    p3=2*a-2*b*epsilon*r*tr_i*tc_i-2*b*r*sigma*tr_i*tc_i
-    p4=-r*tr_i*tc_i
+    2*b**3*epsilon**2*r*sigma*t-2*b**3*epsilon*r*sigma**2*t
+    p2=a*b*epsilon+a*b*sigma-4*a*b-b**2*epsilon**2*r*t-\
+    4*b**2*epsilon*r*sigma*t-b**2*r*sigma**2*t
+    p3=2*a-2*b*epsilon*r*t-2*b*r*sigma*t
+    p4=-r*t
 
     soln = solve_quartic([p4, p3, p2, p1, p0])
     v_roots = soln['roots']
-    v=zeros([v_roots.shape[1],2,n_comps])
+    v_roots = soln['roots']
+    v=zeros([v_roots.shape[1],2])
     idx=(v_roots.imag==0).T & array([v_roots[j]>b for j in range(v_roots.shape[0])]).T
-    v[:,0,:]=(v_roots.T*idx).real.max(axis=2)
-    v[:,1,:]=(v_roots.T*idx+(~idx)*inf).real.min(axis=2) # mask 0 to get positive min
-    rho_v_eos,rho_l_eos=1/v[:,0,:],1/v[:,1,:]
+    v[:,0]=(v_roots.T*idx).real.max(axis=1)
+    v[:,1]=(v_roots.T*idx+(~idx)*inf).real.min(axis=1) # mask 0 to get positive min # FIXME: case v_roots.T*idx==0 yields min=0, not positive minimum
+    rho_v_eos,rho_l_eos=1/v[:,0],1/v[:,1]
     rho_v_omega,rho_l_omega=rho_v_eos,rho_l_eos
     rho_l_bound=mid(rho_mc,rho_l_omega,rho_hi)
     rho_v_bound=mid(rho_lo,rho_v_omega,k*rho_mc)
@@ -416,16 +432,17 @@ def p_i_sat_ceos(t, p, tc_i, pc_i, af_omega_i,
     A_V=1/p_bound_v
     B_V=-dp_drho_t_bound/p_bound_v**2
     C_V=-abs(A_V+1/2*B_V*(rho_mc-rho_v_bound))/(1/2*(rho_mc-rho_v_bound))**2
-    rho_v_extrap=mid(0,rho_hi,rho_v_bound+minimum(0,p-p_bound_v)/dp_drho_t_omega+(-B_V-sqrt(B_V**2-4*C_V*maximum(0,A_V-1/p)))/(2*C_V)+maximum(0,t-tc_i)*maximum(0,dp_drho_t_bound-dp_drho_t_omega)*(rho_v_eos-rho_v_bound)) # eq. (29) of paper
+    rho_v_extrap=mid(0,rho_hi,rho_v_bound+minimum(0,p-p_bound_v)/dp_drho_t_omega+(-B_V-sqrt(B_V**2-4*C_V*maximum(0,A_V-1/(p))))/(2*C_V)+maximum(0,t-tc_i_ravel)*maximum(0,dp_drho_t_bound-dp_drho_t_omega)*(rho_v_eos-rho_v_bound)) # eq. (29) of paper
     rho_v=mid(rho_v_eos,rho_v_bound,rho_v_extrap)
 
-    pr_i_lo_bis=eps*beta*r*t*rho_v_bound/pc_i # some very low reduced pressure to fulfill sign>0 for bisection
-    pr_i_hi_bis=p_bound_v*k/pc_i
+    pr_i_lo_bis=eps*beta*r*t*rho_v_bound/pc_i_ravel # some very low reduced pressure to fulfill sign>0 for bisection
+    pr_i_hi_bis=p_bound_v*(1-eps*10)/pc_i_ravel # k=0.95 is too small to make all zero_fun <0, but k=1 causes some nans. Ok between (1-1e-10) and (1-eps)
 
     #n=100;from matplotlib import pyplot as plt;from numpy import linspace;fig,ax=plt.subplots();x=linspace(pr_i_lo_bis,1e-14,n);y=array([phi_sat_ceos(tr_i,v1,tc_i,pc_i,af_omega_i,alpha_tr,epsilon,sigma,psi,omega,zc,rho_lims)['zero_fun'] for v1 in x]).squeeze();print(x[[0,1,-2,-1]],y[[0,1,-2-1]]);ax.plot(x.squeeze(),y,'o',linestyle='none');x=linspace(1e-14,pr_i_hi_bis,n);y=array([phi_sat_ceos(tr_i,v1,tc_i,pc_i,af_omega_i,alpha_tr,epsilon,sigma,psi,omega,zc,rho_lims)['zero_fun'] for v1 in x]).squeeze();ax.plot(x.squeeze(),y,'.',linestyle='none');print(x[[0,1,-2,-1]],y[[0,1,-2-1]]);ax.axhline(0,color='black');plt.show()
-    soln=bisection(lambda x:phi_sat_ceos(tr_i,x,tc_i,pc_i,af_omega_i,alpha_tr,epsilon,sigma,psi,omega,zc,rho_lims)['zero_fun'],pr_i_hi_bis,pr_i_lo_bis,full_output=True,tol=1e-7)
+    soln=bisection(lambda x:phi_sat_ceos(tr_i[~idx_sc],x,tc_i_ravel,pc_i_ravel,af_omega_i_ravel,alpha_tr,epsilon,sigma,psi,omega,zc,rho_lims)['zero_fun'],pr_i_hi_bis,pr_i_lo_bis,full_output=True,tol=1e-7)
     
-    pr_i=soln['c']
+    pr_i[~idx_sc]=soln['c'] # unravel (return to expected format)
+    pr_i[idx_sc]=nan
     n_fev=soln['n_fev']
     soln_out=phi_sat_ceos(tr_i,pr_i,tc_i,pc_i,af_omega_i,alpha_tr,epsilon,sigma,psi,omega,zc,rho_lims)
     success=soln_out['success']
