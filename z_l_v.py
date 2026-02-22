@@ -402,6 +402,9 @@ def p_i_sat_ceos(t, p, tc_i, pc_i, af_omega_i,
     phi_l = soln_temp['phi_l']
     phi_v = soln_temp['phi_v']
 
+    # since secant_ls_3p has poor performance near zero, use bisection
+    
+
     p = pr_i_sat/pc_i
     soln = dict()
     for item in ['pr_i', 'tr_i', 'success', 'n_fev',

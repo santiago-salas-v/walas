@@ -743,3 +743,31 @@ def secant_ls_3p(y, x_0, tol, x_1=None, f_prime=None,
                  'iterations', 'total_backtracks', 'steps', 'success']:
         soln[item] = locals().get(item)
     return soln
+
+
+def bisection(f,a,b,tol=1e-6,maxit=100):
+    """
+    bisection algorithm vectorized.
+    
+    Examples
+    --------
+    >>> bisection(lambda x:x**3-x-2,1,2)
+    np.float64(1.5213797092437744)
+    >>> bisection(lambda x:diagonal(array([x**3-x-2,x**2-1])),array([1,0.5]),array([2,2]))
+    array([1.52137971, 0.99999988])
+    """
+    a,b=array(a,dtype=float),array(b,dtype=float)
+    f_a,f_b=f(a),f(b)
+    assert ((f_a<0) & (0<f_b)).all()
+    c=1/2*(a+b)
+    f_c=f(c)
+    j=0
+    while (f_c**2).sum()>tol**2 and j<maxit:
+        #print(j,a,b,c,f_c)
+        b[f_c>0]=c[f_c>0]
+        a[f_c<0]=c[f_c<0]
+        c=1/2*(a+b)
+        f_c=f(c)
+        j+=1
+    return c
+
