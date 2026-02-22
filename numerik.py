@@ -745,7 +745,7 @@ def secant_ls_3p(y, x_0, tol, x_1=None, f_prime=None,
     return soln
 
 
-def bisection(f,a,b,tol=1e-6,maxit=100):
+def bisection(f,a,b,tol=1e-6,maxit=100,full_output=False):
     """
     bisection algorithm vectorized.
     
@@ -758,7 +758,7 @@ def bisection(f,a,b,tol=1e-6,maxit=100):
     """
     a,b=array(a,dtype=float),array(b,dtype=float)
     f_a,f_b=f(a),f(b)
-    assert ((f_a<0) & (0<f_b)).all()
+    assert ((f_a<0) & (0<f_b)).all() # solution must be between a and b
     c=1/2*(a+b)
     f_c=f(c)
     j=0
@@ -769,5 +769,8 @@ def bisection(f,a,b,tol=1e-6,maxit=100):
         c=1/2*(a+b)
         f_c=f(c)
         j+=1
-    return c
+    if full_output:
+        return {'c':c,'n_fev':j,'f_c':f_c}
+    else:
+        return c
 

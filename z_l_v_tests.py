@@ -32,29 +32,30 @@ labels = ['CO', 'H2', 'CO2', 'H2O', 'CH3OH', 'N2', 'CH4']
 
 
 def vdi_atlas():
-    alpha_tr, epsilon, sigma, psi, omega = use_pr_eos()
+    alpha_tr, epsilon, sigma, psi, omega, zc, rho_lims = use_pr_eos()
     print(
         'ref. VDI Wärmeatlas H2 psat, -256.6K: ' +
         '{:.4g}'.format(
             p_sat(-256.6 + 273.15, -0.216, 33.19, 13.13,
-                  alpha_tr, epsilon, sigma, psi, omega).x.item() * 1000
+                  alpha_tr, epsilon, sigma, psi, omega, zc, rho_lims).x.item() * 1000
         ) + ' mbar. (Literaturwert 250mbar)'
     )
     secant_ls_3p(lambda x:array([x**2-1]).ravel(),x_0=array([0.01,0.02,0.03]),x_1=array([0.04,0.05,0.06]),tol=1e-6)
-    p_new = p_i_sat_ceos(-256.6 + 273.15, 10, 33.19, 13.13, -0.216, alpha_tr, epsilon, sigma, psi, omega, max_it=100,tol=eps*1000)
+    p_new = p_i_sat_ceos(420 , 40, 469.7, 33.75, 0.252, alpha_tr, epsilon, sigma, psi, omega, zc, rho_lims, max_it=100,tol=eps*1000)
+    p_new = p_i_sat_ceos(-256.6 + 273.15, 10, 33.19, 13.13, -0.216, alpha_tr, epsilon, sigma, psi, omega, zc, rho_lims, max_it=100,tol=eps*1000)
     p_new = bubl_p(-256.6 + 273.15, 1, 1.0, 33.19, 13.13, -0.216,
-                   alpha_tr, epsilon, sigma, psi, omega,
+                   alpha_tr, epsilon, sigma, psi, omega, zc, rho_lims,
                    max_it=100, tol=eps*100,print_iterations=False)['p'].item()
     soln = secant_ls_3p(lambda p_var:
                  phi(-256.6 + 273.15, p_var, 1, 33.19, 13.13, -0.216,
-                     alpha_tr, epsilon, sigma, psi, omega)['phi_i_l'].squeeze()
+                     alpha_tr, epsilon, sigma, psi, omega, zc, rho_lims)['phi_i_l'].squeeze()
                      -
                  phi(-256.6 + 273.15, p_var, 1, 33.19, 13.13, -0.216,
-                             alpha_tr, epsilon, sigma, psi, omega)['phi_i_v'].squeeze()
+                             alpha_tr, epsilon, sigma, psi, omega, zc, rho_lims)['phi_i_v'].squeeze()
                  , 0.7, tol=eps*100, x_1=1.001 * 0.7,
                  restriction=lambda p_val: p_val > 0,
                  print_iterations=False)
-    phi_sat = phi(-256.6 + 273.15, soln['x'], 1, 33.19, 13.13, -0.216, alpha_tr, epsilon, sigma, psi, omega)
+    phi_sat = phi(-256.6 + 273.15, soln['x'], 1, 33.19, 13.13, -0.216, alpha_tr, epsilon, sigma, psi, omega, zc, rho_lims)
 
     n_points=50 # points
     t=concatenate([273.15 + linspace(-260, 400, n_points) for _ in range(pc.shape[0])])
@@ -62,9 +63,9 @@ def vdi_atlas():
     z_i=concatenate(array([[[1 if j==i else 0 for j in range(pc.shape[0])] for _ in range(n_points)] for i in range(pc.shape[0])]))
     tr=outer(t,1/tc)
 
-    p_min=p_est(t,p,z_i,tc,pc,omega_af,alpha_tr,epsilon,sigma,psi,omega,100,eps)['p_min_l'] # bar
+    p_min=p_est(t,p,z_i,tc,pc,omega_af,alpha_tr,epsilon,sigma,psi,omega,zc,rho_lims,100,eps)['p_min_l'] # bar
     p_sat_vals=10**(ant_a-ant_b/(tr*tc-273.15+ant_c))*1/760*101325/1e5 # bar
-    p_sat_vals_ceos=p_i_sat_ceos(t,p,tc,pc,omega_af,alpha_tr,epsilon,sigma,psi,omega,max_it=100,tol=1e-10)['pr_i']*pc # bar
+    p_sat_vals_ceos=p_i_sat_ceos(t,p,tc,pc,omega_af,alpha_tr,epsilon,sigma,psi,omega,zc,rho_lims,max_it=100,tol=1e-10)['pr_i']*pc # bar
 
     lines = plt.plot(t, p_sat_vals)
     lines_2 = plt.plot(t, p_sat_vals_ceos, 'x', fillstyle='none')
@@ -81,10 +82,10 @@ def vdi_atlas():
     pc_i = 13.13
     af_omega_i = -0.216
     z_i = asarray(1.0)
-    p_min = p_est(t, 1e-3, z_i, tc_i, pc_i, af_omega_i, alpha_tr, epsilon, sigma, psi, omega, 100, eps)['p_min_l']
+    p_min = p_est(t, 1e-3, z_i, tc_i, pc_i, af_omega_i, alpha_tr, epsilon, sigma, psi, omega, zc, rho_lims, 100, eps)['p_min_l']
 
-    phi(-256.6 + 273.15, 0.2620861427179638, 1, 33.19, 13.13, -0.216, alpha_tr, epsilon, sigma, psi, omega)
-    p_i_sat_ceos(-256.6 + 273.15, 0.2620861427179638, 33.19, 13.13, -0.216, alpha_tr, epsilon, sigma, psi, omega, max_it=100, tol=eps)
+    phi(-256.6 + 273.15, 0.2620861427179638, 1, 33.19, 13.13, -0.216, alpha_tr, epsilon, sigma, psi, omega, zc, rho_lims)
+    p_i_sat_ceos(-256.6 + 273.15, 0.2620861427179638, 33.19, 13.13, -0.216, alpha_tr, epsilon, sigma, psi, omega, zc, rho_lims, max_it=100, tol=eps)
     p_range = concatenate([linspace(-71, 0.001, 10), linspace(0.001, 10, 20)])
 
     markers = plt.Line2D.filled_markers
@@ -155,7 +156,7 @@ def vdi_atlas():
             p_complex += [p]
 
     p=linspace(1e-4, max(p_range), 30)
-    soln=z_phase(t*ones(p.shape), p, z_i*ones([p.shape[0],1]), tc_i, pc_i, af_omega_i, alpha_tr, epsilon, sigma, psi, omega, eps, r)
+    soln=z_phase(t*ones(p.shape), p, z_i*ones([p.shape[0],1]), tc_i, pc_i, af_omega_i, alpha_tr, epsilon, sigma, psi, omega, zc, rho_lims, eps, r)
     rho_l_phase=soln['rho_l']
     rho_v_phase=soln['rho_v']
 
@@ -183,7 +184,7 @@ def vdi_atlas():
                fillstyle='bottom', linestyle='none')
     plot3.plot(z_complex, p_complex, current_marker, markersize=4, linestyle='--',
                fillstyle='none', color=current_color, markeredgewidth=0.25, linewidth=0.5)
-    p_low = z_phase(t*ones(p.shape), p, z_i*ones([p.shape[0],1]), tc_i, pc_i, af_omega_i, alpha_tr, epsilon, sigma, psi, omega, eps)['p_low']
+    p_low = z_phase(t*ones(p.shape), p, z_i*ones([p.shape[0],1]), tc_i, pc_i, af_omega_i, alpha_tr, epsilon, sigma, psi, omega, zc, rho_lims, eps)['p_low']
     plot1.axhline(p_low[0], linestyle='-.', color='gray', linewidth=0.5, label='$P_{low}$')
     plot2.axhline(p_low[0], linestyle='-.', color='gray', linewidth=0.5, label='$P_{low}$')
     plot3.axhline(p_low[0], linestyle='-.', color='gray', linewidth=0.5, label='$P_{low}$')
@@ -226,7 +227,7 @@ def svn_14_1():
 
 
 def svn_14_2():
-    alpha_tr, epsilon, sigma, psi, omega = use_pr_eos()
+    alpha_tr, epsilon, sigma, psi, omega, zc, rho_lims = use_pr_eos()
     x_i = array([0.2, 0.8])
     y_i = array([0.2, 0.8])  # Est
     tc_i = array([190.6, 425.1])
@@ -237,15 +238,15 @@ def svn_14_2():
     ant_c = array([266.681, 238.789])
     max_it = 100
     soln = bubl_point_step_l_k(
-        310.92, 30, x_i, tc_i, pc_i, af_omega_i, alpha_tr, epsilon, sigma, psi, omega,
+        310.92, 30, x_i, tc_i, pc_i, af_omega_i, alpha_tr, epsilon, sigma, psi, omega, zc, rho_lims,
         max_it=max_it,full_output=True, y_i_est=y_i)
     # print(soln)
     y_i = bubl_point_step_l_k(
-        310.92, 30, x_i, tc_i, pc_i, af_omega_i, alpha_tr, epsilon, sigma, psi, omega,
+        310.92, 30, x_i, tc_i, pc_i, af_omega_i, alpha_tr, epsilon, sigma, psi, omega, zc, rho_lims,
         max_it=max_it, full_output=True, y_i_est=y_i)['y_i']
     for i in range(5):
         soln = bubl_point_step_l_k(
-            310.92, 30, x_i, tc_i, pc_i, af_omega_i, alpha_tr, epsilon, sigma, psi, omega,
+            310.92, 30, x_i, tc_i, pc_i, af_omega_i, alpha_tr, epsilon, sigma, psi, omega, zc, rho_lims,
             max_it=max_it, full_output=True, y_i_est=y_i)
         y_i = soln['y_i']
         k_i = soln['k_i']
@@ -253,19 +254,19 @@ def svn_14_2():
         # print(1 - sum(y_i))
         # print(sum(k_i * x_i))
     soln = bubl_p(
-        310.92, 1., x_i, tc_i, pc_i, af_omega_i, alpha_tr, epsilon, sigma, psi, omega,
+        310.92, 1., x_i, tc_i, pc_i, af_omega_i, alpha_tr, epsilon, sigma, psi, omega, zc, rho_lims,
         max_it=max_it, tol=1e-10, y_i_est=y_i)
     # print(soln)
     soln_2 = dew_point_step_l_k(
-        310.92, soln['p'], soln['y_i'], tc_i, pc_i, af_omega_i, alpha_tr, epsilon, sigma, psi, omega,
+        310.92, soln['p'], soln['y_i'], tc_i, pc_i, af_omega_i, alpha_tr, epsilon, sigma, psi, omega, zc, rho_lims,
         max_it=max_it)
     # print(soln_2)
     soln_2 = dew_p(
-        310.92, 30, soln['y_i'], tc_i, pc_i, af_omega_i, alpha_tr, epsilon, sigma, psi, omega,
+        310.92, 30, soln['y_i'], tc_i, pc_i, af_omega_i, alpha_tr, epsilon, sigma, psi, omega, zc, rho_lims,
         max_it=max_it, tol=1e-10, x_i_est=x_i, print_iterations=False)
     # print(soln_2)
     soln_2 = bubl_point_step_l_k(
-        310.92, soln['p'], x_i, tc_i, pc_i, af_omega_i, alpha_tr, epsilon, sigma, psi, omega,
+        310.92, soln['p'], x_i, tc_i, pc_i, af_omega_i, alpha_tr, epsilon, sigma, psi, omega, zc, rho_lims,
         max_it=max_it, full_output=True, y_i_est=y_i)
     # print(soln_2)
 
@@ -282,7 +283,7 @@ def svn_14_2():
 
     p_v0 = 1.0
     p_v_0_dew = 1.0
-    soln = bubl_p(310.92*ones(x.shape[0]), p_v0*ones(x.shape[0]), x_i, tc_i, pc_i, af_omega_i, alpha_tr, epsilon, sigma, psi, omega,
+    soln = bubl_p(310.92*ones(x.shape[0]), p_v0*ones(x.shape[0]), x_i, tc_i, pc_i, af_omega_i, alpha_tr, epsilon, sigma, psi, omega, zc, rho_lims,
                       max_it=max_it, tol=1e-10, y_i_est=x_i)
     p_v[i] = soln['p']
     y[i] = soln['y_i'][:,0]
@@ -290,7 +291,7 @@ def svn_14_2():
     y_i_est = soln['y_i']
 
     y_i_dew = array([y_dew[i], 1 - y_dew[i]])
-    soln_dew = dew_p(310.92*ones(x.shape[0]), p_v_0_dew*ones(x.shape[0]), y_i_dew, tc_i, pc_i, af_omega_i, alpha_tr, epsilon, sigma, psi, omega,
+    soln_dew = dew_p(310.92*ones(x.shape[0]), p_v_0_dew*ones(x.shape[0]), y_i_dew, tc_i, pc_i, af_omega_i, alpha_tr, epsilon, sigma, psi, omega, zc, rho_lims,
                      max_it=max_it, tol=1e-10, x_i_est=y_i_dew)
     p_v_dew[i] = soln_dew['p']
     x_dew[i] = soln_dew['x_i'][:,0]
@@ -310,7 +311,7 @@ def svn_14_2():
 
 
 def svn_14_2_behchmark():
-    alpha_tr, epsilon, sigma, psi, omega = use_srk_eos()
+    alpha_tr, epsilon, sigma, psi, omega, zc, rho_lims = use_srk_eos()
     x_i = array([0.2, 0.8])
     y_i = array([0.2, 0.8])  # Est
     tc_i = array([190.6, 425.1])
@@ -318,14 +319,14 @@ def svn_14_2_behchmark():
     af_omega_i = array([0.012, 0.200])
     max_it = 100
     print(bubl_point_step_l_k(
-        310.92, 30, x_i, tc_i, pc_i, af_omega_i, alpha_tr, epsilon, sigma, psi, omega,
+        310.92, 30, x_i, tc_i, pc_i, af_omega_i, alpha_tr, epsilon, sigma, psi, omega, zc, rho_lims,
         max_it=max_it,full_output=True, y_i_est=y_i))
     y_i = bubl_point_step_l_k(
-        310.92, 30, x_i, tc_i, pc_i, af_omega_i, alpha_tr, epsilon, sigma, psi, omega,
+        310.92, 30, x_i, tc_i, pc_i, af_omega_i, alpha_tr, epsilon, sigma, psi, omega, zc, rho_lims,
         max_it=max_it, full_output=True, y_i_est=y_i)['y_i']
     for i in range(5):
         soln = bubl_point_step_l_k(
-            310.92, 30, x_i, tc_i, pc_i, af_omega_i, alpha_tr, epsilon, sigma, psi, omega,
+            310.92, 30, x_i, tc_i, pc_i, af_omega_i, alpha_tr, epsilon, sigma, psi, omega, zc, rho_lims,
             max_it=max_it, full_output=True, y_i_est=y_i)
         y_i = soln['y_i']
         k_i = soln['k_i']
@@ -333,11 +334,11 @@ def svn_14_2_behchmark():
         print(1 - sum(y_i))
         print(sum(k_i * x_i))
     soln = bubl_p(
-        310.92, 1., x_i, tc_i, pc_i, af_omega_i, alpha_tr, epsilon, sigma, psi, omega,
+        310.92, 1., x_i, tc_i, pc_i, af_omega_i, alpha_tr, epsilon, sigma, psi, omega, zc, rho_lims,
         max_it=max_it, tol=1e-10, y_i_est=y_i)
     print(soln)
     print(bubl_point_step_l_k(
-        310.92, soln['p'], x_i, tc_i, pc_i, af_omega_i, alpha_tr, epsilon, sigma, psi, omega,
+        310.92, soln['p'], x_i, tc_i, pc_i, af_omega_i, alpha_tr, epsilon, sigma, psi, omega, zc, rho_lims,
         max_it=max_it, full_output=True, y_i_est=y_i))
 
     x = linspace(0.0, 0.8, 50)
@@ -348,7 +349,7 @@ def svn_14_2_behchmark():
     p_v0 = 1.0
     for i in range(len(x)):
         x_i = array([x[i], 1 - x[i]])
-        soln = bubl_p(310.92, p_v0, x_i, tc_i, pc_i, af_omega_i, alpha_tr, epsilon, sigma, psi, omega,
+        soln = bubl_p(310.92, p_v0, x_i, tc_i, pc_i, af_omega_i, alpha_tr, epsilon, sigma, psi, omega, zc, rho_lims,
                       max_it=max_it, tol=1e-10, y_i_est=y_i_est)
         p_v[i] = soln['p']
         y[i] = soln['y_i'][:,0]
@@ -364,7 +365,7 @@ def svn_14_2_behchmark():
 
 def zs_1998():
     # doi:10.1021/ie970639k
-    alpha_tr, epsilon, sigma, psi, omega = use_pr_eos()
+    alpha_tr, epsilon, sigma, psi, omega, zc, rho_lims = use_pr_eos()
     r = 8.3145 # Pa m^3 / (mol K)
     tc_i = array([305.32, 540.2])
     pc_i = array([48.71, 27.35]) * 1e5 # Pa
@@ -434,7 +435,7 @@ def zs_1998():
     z_complex = roots[idx,1].real # real part of complex root
     p_complex = p[idx]
 
-    soln=z_phase(t, p, z_i, tc_i, pc_i, af_omega_i, alpha_tr, epsilon, sigma, psi, omega, eps, r)
+    soln=z_phase(t, p, z_i, tc_i, pc_i, af_omega_i, alpha_tr, epsilon, sigma, psi, omega, zc, rho_lims, eps, r)
     rho_l_phase=soln['rho_l']
     rho_v_phase=soln['rho_v']
 
@@ -491,7 +492,7 @@ def zs_1998():
         plot1.axvline(b, linestyle='-')
         plot2.axvline(1 / b, linestyle='-')
         plot4.axvline(1 / b, linestyle='-')
-    p_low = z_phase(420, 140e5, array([[0.5,0.5]]), tc_i, pc_i, af_omega_i, alpha_tr, epsilon, sigma, psi, omega, eps, r)['p_low']
+    p_low = z_phase(420, 140e5, array([[0.5,0.5]]), tc_i, pc_i, af_omega_i, alpha_tr, epsilon, sigma, psi, omega, zc, rho_lims, eps, r)['p_low']
     plot1.axhline(p_low, linestyle='-.', color='gray', linewidth=0.5, label='$P_{low}$')
     plot2.axhline(p_low, linestyle='-.', color='gray', linewidth=0.5)
     plot4.axhline(p_low, linestyle='-.', color='gray', linewidth=0.5, label='$P_{low}$')
@@ -518,7 +519,7 @@ def zs_1998():
 
     fig2 = plt.figure()
     p_list = linspace(1e-4, 80, 30) * 1e5
-    phi_soln=phi(t, p, z_i, tc_i, pc_i, af_omega_i, alpha_tr, epsilon, sigma, psi, omega)
+    phi_soln=phi(t, p, z_i, tc_i, pc_i, af_omega_i, alpha_tr, epsilon, sigma, psi, omega, zc, rho_lims)
     phi_i_l,phi_i_v=phi_soln['phi_i_l'],phi_soln['phi_i_v']
     for j,t_val in enumerate([420,500]):
         idx=(t==t_val)
@@ -533,7 +534,7 @@ def zs_1998():
         plt.ylabel(r'$log \phi$')
         plt.title('T={:g}K'.format(t_val))
         if j == 1:
-            plt.vlines(z_phase(t[idx], p[idx], z_i[idx,:], tc_i, pc_i, af_omega_i, alpha_tr, epsilon, sigma, psi, omega)['p_low'],ymin=-2,ymax=4,linestyle='--', label='$P_{low}$')
+            plt.vlines(z_phase(t[idx], p[idx], z_i[idx,:], tc_i, pc_i, af_omega_i, alpha_tr, epsilon, sigma, psi, omega, zc, rho_lims)['p_low'],ymin=-2,ymax=4,linestyle='--', label='$P_{low}$')
             plt.ylim(-2, 4)
         else:
             plt.ylim(-3, 3)
@@ -545,7 +546,7 @@ def zs_1998():
 
 def svn_fig_14_8():
     # plot fig 14.8
-    alpha_tr, epsilon, sigma, psi, omega = use_srk_eos()
+    alpha_tr, epsilon, sigma, psi, omega, zc, rho_lims = use_srk_eos()
     x_i = array([0.2, 0.8])
     y_i = array([0.2, 0.8])  # Est
     tc_i = array([190.6, 425.1])
@@ -627,7 +628,7 @@ def svn_fig_14_8():
                 p_complex += [p]
 
         p=linspace(1e-4, max(p_range), 30)
-        soln=z_phase(t*ones(p.shape), p, z_i*ones([p.shape[0],1]), tc_i, pc_i, af_omega_i, alpha_tr, epsilon, sigma, psi, omega, eps, r)
+        soln=z_phase(t*ones(p.shape), p, z_i*ones([p.shape[0],1]), tc_i, pc_i, af_omega_i, alpha_tr, epsilon, sigma, psi, omega, zc, rho_lims, eps, r)
         rho_l_phase=soln['rho_l']
         rho_v_phase=soln['rho_v']
 
@@ -660,7 +661,7 @@ def svn_fig_14_8():
         if x in [0.4, 0.5, 0.6, 0.7]:
             # FIXME: this is not used
             p_est(t*ones(p.shape), p, z_i*ones([p.shape[0],z_i.shape[0]]), tc_i, pc_i, af_omega_i,
-                  alpha_tr, epsilon, sigma, psi, omega, max_it, eps)
+                  alpha_tr, epsilon, sigma, psi, omega, zc, rho_lims, max_it, eps)
     plot1.set_xlabel(r'$\frac{v}{cm^3/mol}$')
     plot1.set_ylabel('p / bar')
     plot1.legend()
@@ -679,7 +680,7 @@ def svn_fig_14_8():
 
 
 def svn_tab_14_1_2():
-    alpha_tr, epsilon, sigma, psi, omega = use_pr_eos()
+    alpha_tr, epsilon, sigma, psi, omega, zc, rho_lims = use_pr_eos()
     p = 1.01325 # bar
     max_it = 100
     tol = 1e-10
@@ -693,11 +694,11 @@ def svn_tab_14_1_2():
     unifac_data_dict = setup_unifac_data()
 
     soln = bubl_p(334.82, 1.0, z_i, tc_i, pc_i, af_omega_i,
-                  alpha_tr, epsilon, sigma, psi, omega,
+                  alpha_tr, epsilon, sigma, psi, omega, zc, rho_lims,
                   sec_i, nu_ji, unifac_data_dict,
                   max_it, tol, print_iterations=True)
     soln = bubl_t(273.15, p, z_i, tc_i, pc_i, af_omega_i,
-                  alpha_tr, epsilon, sigma, psi, omega,
+                  alpha_tr, epsilon, sigma, psi, omega, zc, rho_lims,
                   sec_i, nu_ji, unifac_data_dict,
                   max_it, 1e-10, print_iterations=True)
     y_i = soln['y_i'].squeeze()
@@ -722,12 +723,12 @@ def svn_tab_14_1_2():
 
     z_i = array([0.250, 0.400, 0.200, 0.150])
     soln = bubl_t(273.15, p, z_i, tc_i, pc_i, af_omega_i,
-                  alpha_tr, epsilon, sigma, psi, omega,
+                  alpha_tr, epsilon, sigma, psi, omega, zc, rho_lims,
                   sec_i, nu_ji, unifac_data_dict,
                   max_it, 1e-10, print_iterations=True)
     t = soln['t']
     soln = pt_flash(334.152 / 334.85 * 334.15, p, z_i, tc_i, pc_i, af_omega_i,
-                    alpha_tr, epsilon, sigma, psi, omega,
+                    alpha_tr, epsilon, sigma, psi, omega, zc, rho_lims,
                     sec_i, nu_ji, unifac_data_dict,
                     max_it=max_it, tol=tol)
     y_i = soln['y_i'].squeeze()
@@ -754,7 +755,7 @@ def svn_tab_14_1_2():
 
 
 def pat_ue_03_flash():
-    alpha_tr, epsilon, sigma, psi, omega = use_pr_eos()
+    alpha_tr, epsilon, sigma, psi, omega, zc, rho_lims = use_pr_eos()
     n = array([
         205.66,
         14377.78,
@@ -774,9 +775,9 @@ def pat_ue_03_flash():
     t = 60 + 273.15
     p = 50.
 
-    # soln = isot_flash(t, p, x_i, y_i, z_i, tc_i, pc_i, af_omega_i, alpha_tr, epsilon, sigma, psi, omega)
-    # p_i_sat_ceos(t, 1.0, tc_i, pc_i, af_omega_i, alpha_tr, epsilon, sigma, psi, omega)
-    soln = pt_flash(t, p, z_i, tc_i, pc_i, af_omega_i, alpha_tr, epsilon, sigma, psi, omega, tol=1e-10)
+    # soln = isot_flash(t, p, x_i, y_i, z_i, tc_i, pc_i, af_omega_i, alpha_tr, epsilon, sigma, psi, omega, zc, rho_lims)
+    # p_i_sat_ceos(t, 1.0, tc_i, pc_i, af_omega_i, alpha_tr, epsilon, sigma, psi, omega, zc, rho_lims)
+    soln = pt_flash(t, p, z_i, tc_i, pc_i, af_omega_i, alpha_tr, epsilon, sigma, psi, omega, zc, rho_lims, tol=1e-10)
     y_i = soln['y_i']
     x_i = soln['x_i']
     v_f = soln['v_f']
@@ -794,7 +795,7 @@ def pat_ue_03_flash():
 
 
 def isot_flash_seader_4_1():
-    alpha_tr, epsilon, sigma, psi, omega = use_pr_eos()
+    alpha_tr, epsilon, sigma, psi, omega, zc, rho_lims = use_pr_eos()
     n = array([
         10,
         20,
@@ -826,7 +827,7 @@ def isot_flash_seader_4_1():
     p = 6.895
     for i in range(10):
         soln = isot_flash(t, p, x_i, y_i, z_i, tc_i, pc_i, af_omega_i,
-                          alpha_tr, epsilon, sigma, psi, omega)
+                          alpha_tr, epsilon, sigma, psi, omega, zc, rho_lims)
         x_i = soln['x_i']
         y_i = soln['y_i']
         v_f = soln['v_f']
@@ -839,7 +840,7 @@ def isot_flash_seader_4_1():
 
 def pat_ue_03_vollstaendig(rlv, print_output=False):
     # Als Funktion des Rücklaufverhältnises.
-    alpha_tr, epsilon, sigma, psi, omega = use_pr_eos()
+    alpha_tr, epsilon, sigma, psi, omega, zc, rho_lims = use_pr_eos()
 
     # log
     old_stdout = sys.stdout
@@ -991,7 +992,7 @@ def pat_ue_03_vollstaendig(rlv, print_output=False):
         x_i = 1 / len(n2) * ones(len(n2))
         y_i = 1 / len(n2) * ones(len(n2))
         for i in range(10):
-            soln = isot_flash(t_flash, p, x_i, y_i, z_i, tc, pc, omega_af, alpha_tr, epsilon, sigma, psi, omega)
+            soln = isot_flash(t_flash, p, x_i, y_i, z_i, tc, pc, omega_af, alpha_tr, epsilon, sigma, psi, omega, zc, rho_lims)
             y_i = soln['y_i'].squeeze()
             x_i = soln['x_i'].squeeze()
             v_f = soln['v_f'].squeeze()
@@ -1087,7 +1088,7 @@ def pat_ue_03_vollstaendig(rlv, print_output=False):
     x_i = 1 / len(n2) * ones(len(n2))
     y_i = 1 / len(n2) * ones(len(n2))
     for i in range(10):
-        soln = isot_flash(t_flash, p, x_i, y_i, z_i, tc, pc, omega_af, alpha_tr, epsilon, sigma, psi, omega)
+        soln = isot_flash(t_flash, p, x_i, y_i, z_i, tc, pc, omega_af, alpha_tr, epsilon, sigma, psi, omega, zc, rho_lims)
         y_i = soln['y_i']
         x_i = soln['x_i']
         v_f = soln['v_f']
