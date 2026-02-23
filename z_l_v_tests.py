@@ -1,7 +1,7 @@
 import sys
 
 from matplotlib import pyplot as plt
-from numpy import array, zeros, ones, empty, log, append, linspace, sqrt, exp, sum, diagonal
+from numpy import array, zeros, ones, empty, log, append, linspace, sqrt, exp, sum, diagonal, isnan
 from numpy import finfo, nan, concatenate, asarray, empty_like, dot, outer, multiply
 from numpy.random import randint
 from scipy import optimize
@@ -43,9 +43,11 @@ def vdi_atlas():
     secant_ls_3p(lambda x:array([x**2-1]).ravel(),x_0=array([0.01,0.02,0.03]),x_1=array([0.04,0.05,0.06]),tol=1e-6)
     p_new = p_i_sat_ceos(420 , 40, 469.7, 33.75, 0.252, alpha_tr, epsilon, sigma, psi, omega, zc, rho_lims, max_it=100,tol=eps*1000)
     p_new = p_i_sat_ceos(-256.6 + 273.15, 10, 33.19, 13.13, -0.216, alpha_tr, epsilon, sigma, psi, omega, zc, rho_lims, max_it=100,tol=eps*1000)
+    print('p_i_sat_ceos (vec) method: {:.4g} mbar'.format(p_new['pr_i'].item()*13.13*1000))
     p_new = bubl_p(-256.6 + 273.15, 1, 1.0, 33.19, 13.13, -0.216,
                    alpha_tr, epsilon, sigma, psi, omega, zc, rho_lims,
-                   max_it=100, tol=eps*100,print_iterations=False)['p'].item()
+                   max_it=100, tol=eps*100,print_iterations=False)
+    print('bubl_p (vec) method: {:.4g} mbar'.format(p_new['p'].item()*1000))
     soln = secant_ls_3p(lambda p_var:
                  phi(-256.6 + 273.15, p_var, 1, 33.19, 13.13, -0.216,
                      alpha_tr, epsilon, sigma, psi, omega, zc, rho_lims)['phi_i_l'].squeeze()
@@ -56,7 +58,8 @@ def vdi_atlas():
                  restriction=lambda p_val: p_val > 0,
                  print_iterations=False)
     phi_sat = phi(-256.6 + 273.15, soln['x'], 1, 33.19, 13.13, -0.216, alpha_tr, epsilon, sigma, psi, omega, zc, rho_lims)
-
+    print('secant phi_l-phi_v=0 method: {:.4g} mbar with {:g} backtracks. phi_v={:g}; phi_l={:g}'.format(soln['x'].item()*1000,soln['total_backtracks'].item(),phi_sat['phi_i_v'].item(),phi_sat['phi_i_l'].item()))
+    
     n_points=50 # points
     t=concatenate([273.15 + linspace(-260, 400, n_points) for _ in range(pc.shape[0])])
     p=ones(n_points*pc.shape[0])
@@ -65,17 +68,21 @@ def vdi_atlas():
 
     p_min=p_est(t,p,z_i,tc,pc,omega_af,alpha_tr,epsilon,sigma,psi,omega,zc,rho_lims,100,eps)['p_min_l'] # bar
     p_sat_vals=10**(ant_a-ant_b/(tr*tc-273.15+ant_c))*1/760*101325/1e5 # bar
-    p_sat_vals_ceos=p_i_sat_ceos(t,p,tc,pc,omega_af,alpha_tr,epsilon,sigma,psi,omega,zc,rho_lims,max_it=100,tol=1e-10)['pr_i']*pc # bar
+    p_sat_vals[tr>1]=nan # supercritical (no sat.)
+    p_new=p_i_sat_ceos(t,p,tc,pc,omega_af,alpha_tr,epsilon,sigma,psi,omega,zc,rho_lims,max_it=100,tol=1e-10)
+    p_sat_vals_ceos=p_new['pr_i']*pc # bar
 
-    lines = plt.plot(t, p_sat_vals)
-    lines_2 = plt.plot(t, p_sat_vals_ceos, 'x', fillstyle='none')
+    lines = plt.semilogy(t, p_sat_vals)
+    lines_2 = plt.semilogy(t, p_sat_vals_ceos, 'x', fillstyle='none')
+    min_y,max_y=p_sat_vals_ceos[~isnan(p_sat_vals_ceos)].min(), p_sat_vals_ceos[~isnan(p_sat_vals_ceos)].max()
     for i in range(len(lines)):
+        lines[i].set_label(labels[i]+' Ant.')
+        lines_2[i].set_label(labels[i]+' ceos')
         lines_2[i].set_color(lines[i].get_color())
-        lines[i].set_label(labels[i])
     plt.xlabel('T / K')
     plt.ylabel('$p_{i}^{Sat}$ / bar')
-    plt.ylim([0, 75])
-    plt.legend()
+    plt.ylim([min_y,max_y])
+    plt.legend(ncols=2)
 
     t = 273.15 - 256.6
     tc_i = 33.19

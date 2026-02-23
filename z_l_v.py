@@ -444,9 +444,13 @@ def p_i_sat_ceos(t, p, tc_i, pc_i, af_omega_i,
     pr_i[~idx_sc]=soln['c'] # unravel (return to expected format)
     pr_i[idx_sc]=nan
     n_fev=soln['n_fev']
+    # get final values
     soln_out=phi_sat_ceos(tr_i,pr_i,tc_i,pc_i,af_omega_i,alpha_tr,epsilon,sigma,psi,omega,zc,rho_lims)
     success=soln_out['success']
-    return {item:locals().get(item) for item in ['pr_i', 'tr_i','n_fev']}|{
+    z_l,z_v=soln_out['z_l'],soln_out['z_v']
+    v_l,v_v=z_l*r*tr_i*tc_i/(pr_i*pc_i),z_v*r*tr_i*tc_i/(pr_i*pc_i)
+    rho_l,rho_v=1/v_l,1/v_v
+    return {item:locals().get(item) for item in ['pr_i', 'tr_i','n_fev', 'rho_l', 'rho_v', 'v_l', 'v_v']}|{
     item:soln_out.get(item)  for item in ['success', 'zero_fun', 'z_l', 'z_v', 'phi_l', 'phi_v']}
 
 def t_i_sat_ceos(t, p, tc_i, pc_i, af_omega_i,
@@ -1336,7 +1340,7 @@ def p_est(t, p, x_i, tc_i, pc_i, af_omega_i, alpha_tr, epsilon, sigma, psi, omeg
     v=zeros([v_roots.shape[1],2])
     idx=(v_roots.imag==0).T & array([v_roots[j]>b for j in range(v_roots.shape[0])]).T
     v[:,0]=(v_roots.T*idx).real.max(axis=1)
-    v[:,1]=(v_roots.T*idx).real.min(axis=1) # FIXME: case v_roots.T*idx==0 yields min=0, not positive minimum
+    v[:,1]=(v_roots.T*idx).real.min(axis=1) # FIXME: case v_roots.T*idx==0 yields min=0, not positive minimum: see p_sat_ceos, add ~idx*1/eps?
 
     v_l = v.min(axis=1)
     v_v = v.max(axis=1)
