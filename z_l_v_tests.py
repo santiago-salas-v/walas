@@ -1,7 +1,7 @@
 import sys
 
 from matplotlib import pyplot as plt
-from numpy import array, zeros, ones, empty, log, append, linspace, sqrt, exp, sum, diagonal, isnan
+from numpy import array, zeros, ones, empty, log, append, linspace, sqrt, exp, sum, diagonal, isnan, cumsum, gradient
 from numpy import finfo, nan, concatenate, asarray, empty_like, dot, outer, multiply
 from numpy.random import randint
 from scipy import optimize
@@ -290,6 +290,8 @@ def svn_14_2():
 
     p_v0 = 1.0
     p_v_0_dew = 1.0
+    soln_l = phi(310.92*ones(x.shape[0]), p_v0*ones(x.shape[0]), x_i, tc_i, pc_i, af_omega_i, alpha_tr, epsilon, sigma, psi, omega, zc, rho_lims)
+    soln1= bubl_point_step_l_k(310.92*ones(x.shape[0]), p_v0*ones(x.shape[0]), x_i, tc_i, pc_i, af_omega_i, alpha_tr, epsilon, sigma, psi, omega, zc, rho_lims,y_i_est=x_i,max_it=max_it)
     soln = bubl_p(310.92*ones(x.shape[0]), p_v0*ones(x.shape[0]), x_i, tc_i, pc_i, af_omega_i, alpha_tr, epsilon, sigma, psi, omega, zc, rho_lims,
                       max_it=max_it, tol=1e-10, y_i_est=x_i)
     p_v[i] = soln['p']
@@ -1441,6 +1443,35 @@ def hd_calculations():
                 array([sum([(T**(i-j)*T0**j) for j in range(i,0-1,-1)]) for i in range(4+1)]))
         return result # ensure row dimension is T
 
+
+def confirm_svn_eq_13_71_ln_abs():
+    epsilon=1-sqrt(2)
+    sigma=1+sqrt(2)
+    xx=linspace(0,-1/epsilon*2,100)
+    fig,ax=plt.subplots(1,1,constrained_layout=True)
+    twinx0=ax.twinx()
+    ax.plot(xx,1/(1+sigma*xx),'--',label=r'$f(\sigma)=\frac{1}{1+\sigma\cdot \frac{\beta}{Z}}$')
+    twinx0.plot(xx,1/(1+epsilon*xx),'--',label=r'$f(\epsilon)=\frac{1}{1+\epsilon\cdot \frac{\beta}{Z}}$',color='red')
+    twinx0.plot(xx,1/(1+epsilon*xx)*1/(1+sigma*xx),'-.',label=r'$f(\epsilon)\cdot f(\sigma)$',color='indigo')
+    ax.plot(xx,cumsum(gradient(xx)*1/(1+epsilon*xx)*1/(1+sigma*xx)),label=r'$\sum_{i=1}^{100}{\frac{1}{(1+\epsilon\cdot \frac{\beta}{Z})\cdot(1+\sigma\cdot \frac{\beta}{Z})}\Delta\left(\frac{\beta}{Z}\right)_i}$')
+    ax.plot(xx,1/(sigma-epsilon)*log((1+sigma*xx)/abs(1+epsilon*xx)),label=r'$\frac{1}{\sigma-\epsilon}\cdot ln\left(\frac{1+\sigma\cdot \frac{\beta}{Z}}{|1+\epsilon\cdot \frac{\beta}{Z}|}\right)$')
+    ax.set_xlabel(r'$\frac{\beta}{Z}$ / -')
+    ax.set_title(r'$\epsilon=1-\sqrt{2}; \sigma=1+\sqrt{2}\quad; \quad f(\epsilon)=\frac{1}{1+\epsilon\cdot \frac{\beta}{Z}} \quad; \quad f(\sigma)=\frac{1}{1+\sigma\cdot \frac{\beta}{Z}}$')
+    ax.set_ylabel(r'$f(\sigma)$ bzw. $I_1+I_2=\int_0^{\beta/Z}{\frac{1}{(1+\epsilon\cdot \frac{\beta}{Z})\cdot(1+\sigma\cdot \frac{\beta}{Z})}d\left(\frac{\beta}{Z}\right)}=\frac{1}{\sigma-\epsilon}\cdot ln\left(\frac{1+\sigma\cdot \frac{\beta}{Z}}{|1+\epsilon\cdot \frac{\beta}{Z}|}\right)$')
+    twinx0.set_ylabel(r'$f(\epsilon)$ bzw. $f(\sigma)\cdot f(\epsilon)=\frac{1}{(1+\epsilon\cdot \frac{\beta}{Z})\cdot(1+\sigma\cdot \frac{\beta}{Z})}$')
+    ax.axvline(-1/epsilon,color='gray')
+    ax.legend(handles=ax.lines[:-1]+twinx0.lines,loc='best',draggable=True)
+    xlim=ax.get_xlim()
+    xticks=ax.get_xticks().tolist()
+    xticks=array(xticks+[-1/epsilon])
+    xticks.sort()
+    xticklabels=array(xticks,dtype=object)
+    xticklabels[xticks==-1/epsilon]=r'$\epsilon$'
+    xticklabels
+    ax.set_xticks(xticks)
+    ax.set_xticklabels(xticklabels)
+    ax.set_xlim(xlim)
+    fig.show()
 
 vdi_atlas()
 # svn_14_1()
