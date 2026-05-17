@@ -88,72 +88,26 @@ class Eos:
                  sec_j=None, nu_ij=None, unifac_data_dict=None):
         self.eos = eos_name
         if eos_name == 'pr':
-            epsilon = 1 - sqrt(2)
-            sigma = 1 + sqrt(2)
-            omega = 0.07780
-            psi = 0.45724
-            m = 0.37464 + 1.54226 * af_omega_i - 0.26992 * af_omega_i ** 2
-
-            def alpha_tr(tr, af_omega):
-                return (1 + (
-                        0.37464 + 1.54226 * af_omega - 0.26992 * af_omega ** 2
-                        ) * (1 - tr ** (1 / 2.))) ** 2
-
-            def dalpha_dt(tr, af_omega):
-                alpha_i = self.alpha_tr(tr, af_omega)
-                m_i = self.m
-                return - alpha_i ** (1 / 2.) * m_i / sqrt(tr) / tc_i
+            alpha_tr,epsilon,sigma,psi,omega,zc,rho_lims=use_pr_eos()
         elif eos_name == 'srk':
-            epsilon = 0.
-            sigma = 1.
-            omega = 0.08664
-            psi = 0.42748
-            m = 0.480 + 1.574 * af_omega_i - 0.176 * af_omega_i ** 2
-
-            def alpha_tr(tr, af_omega):
-                return (1 + (
-                        0.480 + 1.574 * af_omega - 0.176 * af_omega ** 2
-                        ) * (1 - tr ** (1 / 2.))) ** 2
-
-            def dalpha_dt(tr, af_omega):
-                alpha_i = self.alpha_tr(tr, af_omega)
-                m_i = self.m
-                return - alpha_i ** (1 / 2.) * m_i / sqrt(tr) / tc_i
+            alpha_tr,epsilon,sigma,psi,omega,zc,rho_lims=use_srk_eos()
         elif eos_name == 'rk':
-            epsilon = 0.
-            sigma = 1.
-            omega = 0.08664
-            psi = 0.42748
-            m = 1.0
-
-            def alpha_tr(tr, _):
-                return tr ** (-1 / 2.)
-
-            def dalpha_dt(tr, af_omega):
-                alpha_i = self.alpha_tr(tr, af_omega)
-                m_i = self.m
-                return - 1 / 2 * tr**(-3 / 2) / tc_i
+            alpha_tr,epsilon,sigma,psi,omega,zc,rho_lims=use_srk_eos_simple_alpha()
         else:
-            # vdw
-            epsilon = 0
-            sigma = 0
-            omega = 1 / 8
-            psi = 27 / 64
-            m = 0
+            alpha_tr,epsilon,sigma,psi,omega,zc,rho_lims=use_vdw_eos()
 
-            def alpha_tr(_, __):
-                return 1
-
-            def dalpha_dt(_, __):
-                return 0
         self.epsilon = epsilon
         self.sigma = sigma
         self.omega = omega
         self.psi = psi
-        self.m = m
         self.alpha_tr = alpha_tr
         self.max_it = max_it
         self.tol = tol
+        self.zc = zc
+        self.rho_lims = rho_lims
+        self.max_it = max_it
+        self.tol = tol
+
         self.r = r
         self.sec_j = sec_j
         self.nu_ij = nu_ij
@@ -179,6 +133,7 @@ class Eos:
         soln = bubl_p(
             self.t, self.p, self.z_i, self.tc_i, self.pc_i, self.af_omega_i,
             self.alpha_tr, self.epsilon, self.sigma, self.psi, self.omega,
+            self.zc,self.rho_lims,self.max_it,self.tol,
             self.max_it)
         return soln
 
@@ -197,7 +152,8 @@ class Eos:
             self.dew_p_p = None
             self.v_f = 1
             soln_v = phi(self.t, self.p, self.z_i, self.tc_i, self.pc_i, self.af_omega_i,
-                         self.alpha_tr, self.epsilon, self.sigma, self.psi, self.omega)
+                         self.alpha_tr, self.epsilon, self.sigma, self.psi, self.omega,
+                         self.zc,self.rho_lims)
             self.phi_v = soln_v['phi_i_v']
             self.phi_l = None
             self.v_l = None
@@ -206,6 +162,7 @@ class Eos:
         else:
             soln_p_sat = p_i_sat_ceos(self.t, self.p, self.tc_i, self.pc_i, self.af_omega_i,
                                       self.alpha_tr, self.epsilon, self.sigma, self.psi, self.omega,
+                                      self.zc,self.rho_lims,self.max_it,self.tol,self.max_it,
                                       tol=self.tol)
             pisat = array([soln_p_sat['p'][i] for i in range(
                 len(self.z_i)) if soln_p_sat['success'][i]])
@@ -214,6 +171,7 @@ class Eos:
             p_est_0 = sum(pisat * zisat / sum(zisat))
             soln = pt_flash(self.t, self.p, self.z_i, self.tc_i, self.pc_i, self.af_omega_i,
                             self.alpha_tr, self.epsilon, self.sigma, self.psi, self.omega,
+                            self.zc,self.rho_lims,self.max_it,self.tol,self.max_it,
                             sec_j=self.sec_j, nu_ij=self.nu_ij, unifac_data_dict=self.unifac_data_dict,
                             max_it=self.max_it, tol=self.tol, p_est_0=p_est_0)
             self.bubl_p_p = soln['bubl_p_soln']['p']
@@ -222,7 +180,8 @@ class Eos:
             if self.v_f == 0:
                 # liquid
                 soln_phi_l = phi(self.t, self.p, self.z_i, self.tc_i, self.pc_i, self.af_omega_i,
-                                 self.alpha_tr, self.epsilon, self.sigma, self.psi, self.omega)
+                                 self.alpha_tr, self.epsilon, self.sigma, self.psi, self.omega,
+                                 self.zc,self.rho_lims)
                 self.phi_l = soln_phi_l['phi_i_l']
                 self.phi_v = None
                 self.v_v = soln_phi_l['v']
@@ -230,7 +189,8 @@ class Eos:
             elif self.v_f == 1:
                 # vapor
                 soln_phi_v = phi(self.t, self.p, self.z_i, self.tc_i, self.pc_i, self.af_omega_i,
-                                 self.alpha_tr, self.epsilon, self.sigma, self.psi, self.omega)
+                                 self.alpha_tr, self.epsilon, self.sigma, self.psi, self.omega,
+                                 self.zc,self.rho_lims)
                 self.phi_l = None
                 self.phi_v = soln_phi_v['phi_i_v']
                 self.v_l = None
@@ -261,12 +221,12 @@ def use_pr_eos():
         if not return_deriv:
             return alpha
         else:
-            t_dalpha_dt=-sqrt(alpha_tr(tr,af_omega))*(0.3746+1.54226*w-0.26992*w**2)*tr**(1/2)
+            t_dalpha_dt=-sqrt(alpha_tr(tr,af_omega))*(0.3746+1.54226*af_omega-0.26992*af_omega**2)*tr**(1/2)
             return alpha, t_dalpha_dt
     def rho_lims(tc,pc,r=r_def):
         # absolute boundaries are points of singularity in the EOS p=RT/(v-b)-th/((v-(-d/2+sqrt((d/2)^2-e)))*((v-(-d/2-sqrt((d/2)^2-e)))))
         b=omega*r*tc/pc
-        rho_lo=-1/((1+sqrt(2))*b) # negative root of 1-sqrt(2) and 1+sqrt(2) is the pole of the second term
+        rho_lo=-1/((1+sqrt(2))*b) # most negative root of (-1+sqrt(2))*b and -(1+sqrt(2))*b is the pole of the second term
         rho_hi=1/b # pole of the first term
         return rho_lo,rho_hi
 
@@ -279,11 +239,20 @@ def use_srk_eos():
     sigma = 1.
     omega = 0.08664
     psi = 0.42748
-
-    def alpha_tr(tr, af_omega): return \
-        (1 + (
-            0.480 + 1.574 * af_omega - 0.176 * af_omega ** 2
-        ) * (1 - tr ** (1 / 2.))) ** 2
+    zc = 0.3333
+    def alpha_tr(tr, af_omega,return_deriv=False):
+        alpha=(1+(0.480+1.574*af_omega-0.176*af_omega**2)*(1-tr**(1/2.)))**2
+        if not return_deriv:
+            return alpha
+        else:
+            t_dalpha_dt=-sqrt(alpha_tr(tr,af_omega))*(0.480+1.574*af_omega-0.176*af_omega**2)*tr**(1/2)
+            return alpha, t_dalpha_dt
+    def rho_lims(tc,pc,r=r_def):
+        # absolute boundaries are points of singularity in the EOS p=RT/(v-b)-th/((v-(-d/2+sqrt((d/2)^2-e)))*((v-(-d/2-sqrt((d/2)^2-e)))))
+        b=omega*r*tc/pc
+        rho_lo=-1/b # most negative root of 0 and -b is the pole of the second term
+        rho_hi=1/b # pole of the first term
+        return rho_lo,rho_hi
 
     return alpha_tr, epsilon, sigma, psi, omega, zc, rho_lims
 
@@ -295,9 +264,44 @@ def use_srk_eos_simple_alpha():
     sigma = 1.
     omega = 0.08664
     psi = 0.42748
+    zc = 0.3333
+    def alpha_tr(tr, af_omega,return_deriv=False):
+        alpha=tr**(-1/2)
+        if not return_deriv:
+            return alpha
+        else:
+            t_dalpha_dt=-1/2*alpha_tr(tr,af_omega)
+            return alpha, t_dalpha_dt
+    def rho_lims(tc,pc,r=r_def):
+        # absolute boundaries are points of singularity in the EOS p=RT/(v-b)-th/((v-(-d/2+sqrt((d/2)^2-e)))*((v-(-d/2-sqrt((d/2)^2-e)))))
+        b=omega*r*tc/pc
+        rho_lo=-1/b # most negative root of 0 and -b is the pole of the second term
+        rho_hi=1/b # pole of the first term
+        return rho_lo,rho_hi
 
-    def alpha_tr(tr, _): return \
-        tr ** (-1 / 2.)
+    return alpha_tr, epsilon, sigma, psi, omega, zc, rho_lims
+
+
+def use_vdw_eos():
+    # vdW (1873) params
+    epsilon = 0
+    sigma = 0
+    omega = 1/8
+    psi = 27/64
+    zc = 3/8
+    def alpha_tr(tr, af_omega,return_deriv=False):
+        alpha=1
+        if not return_deriv:
+            return alpha
+        else:
+            t_dalpha_dt=0
+            return alpha, t_dalpha_dt
+    def rho_lims(tc,pc,r=r_def):
+        # absolute boundaries are points of singularity in the EOS p=RT/(v-b)-th/((v-(-d/2+sqrt((d/2)^2-e)))*((v-(-d/2-sqrt((d/2)^2-e)))))
+        b=omega*r*tc/pc
+        rho_lo=0 # most negative root of 0 and 0 is the pole of the second term
+        rho_hi=1/b # pole of the first term
+        return rho_lo,rho_hi
 
     return alpha_tr, epsilon, sigma, psi, omega, zc, rho_lims
 
@@ -322,16 +326,16 @@ def p_sat_func(psat, t, af_omega, tc, pc, alpha_tr, epsilon, sigma, psi, omega, 
         1.0
     ).x.item()
 
-    i_i_l = +1 / (sigma - epsilon) * log(
+    i_i_l = +1 / (sigma - epsilon) * log(abs(
         (z_l + sigma * beta_i) / (z_l + epsilon * beta_i)
-    )
-    i_i_v = +1 / (sigma - epsilon) * log(
+    ))
+    i_i_v = +1 / (sigma - epsilon) * log(abs(
         (z_v + sigma * beta_i) / (z_v + epsilon * beta_i)
-    )
+    ))
     ln_phi_l = + z_l - 1 - \
-        log(z_l - beta_i) - q_i * i_i_l
+        log(abs(z_l - beta_i)) - q_i * i_i_l
     ln_phi_v = + z_v - 1 - \
-        log(z_v - beta_i) - q_i * i_i_v
+        log(abs(z_v - beta_i)) - q_i * i_i_v
     f1 = -ln_phi_v + ln_phi_l
     if full_output:
         opt_func = f1
@@ -599,8 +603,8 @@ def phi_sat_ceos(tr_i, pr_i, tc_i, pc_i, af_omega_i, alpha_tr, epsilon, sigma, p
 
     if epsilon != sigma:
         # vdw: epsilon = sigma
-        i_int_l=1/(sigma-epsilon)*log((z_l+sigma*beta)/(z_l+epsilon*beta))
-        i_int_v=1/(sigma-epsilon)*log((z_v+sigma*beta)/(z_v+epsilon*beta))
+        i_int_l=1/(sigma-epsilon)*log(abs((z_l+sigma*beta)/(z_l+epsilon*beta)))
+        i_int_v=1/(sigma-epsilon)*log(abs((z_v+sigma*beta)/(z_v+epsilon*beta)))
     elif epsilon == sigma:
         # only vdw
         i_int_l=beta/(z_l+epsilon*beta)
@@ -644,7 +648,7 @@ def z_non_sat(t, p, x_i, tc_i, pc_i, af_omega_i,
             (z_val + epsilon * beta) * (z_val + sigma * beta)),
         1.0).x
     i_int = 1 / (sigma - epsilon) * \
-        log((z + sigma * beta) / (z + epsilon * beta))
+        log(abs((z + sigma * beta) / (z + epsilon * beta)))
     ln_phi_i = b_i / b * (z - 1) - log(z - beta) - q_mp_i * i_int
     phi_i = exp(ln_phi_i)
 
@@ -686,30 +690,28 @@ def phi(t, p, z_i, tc_i, pc_i, af_omega_i, alpha_tr, epsilon, sigma, psi, omega,
     i_int = 0  # init
     if epsilon != sigma:
         # vdw: epsilon = sigma
-        i_int_l=1/(sigma-epsilon)*log((z_l+sigma*beta)/(z_l+epsilon*beta))
-        i_int_v=1/(sigma-epsilon)*log((z_v+sigma*beta)/(z_v+epsilon*beta))
+        i_int_l=1/(sigma-epsilon)*log(abs((z_l+sigma*beta)/(z_l+epsilon*beta)))
+        i_int_v=1/(sigma-epsilon)*log(abs((z_v+sigma*beta)/(z_v+epsilon*beta)))
     elif epsilon == sigma:
         # only vdw
         i_int_l=beta/(z_l+epsilon*beta)
         i_int_v=beta/(z_v+epsilon*beta)
     # $G^R/(RT) = Z - 1 - ln(1-\rho b) - ln(Z) - q I$
     # and $\beta = \rho b Z$
-    ln_phi_i_l,ln_phi_i_v=zeros(q_mp_i.shape),zeros(q_mp_i.shape)
-    idx=(z_l-beta>0)
+    ln_phi_i_v=array([
+        b_i[j]/b*(z_v-1)-log(z_v-beta)-q_mp_i[:,j]*i_int_v 
+        for j in range(z_i.shape[1])]).T
+    ln_phi_i_l=zeros(q_mp_i.shape)
+    idx=(z_l-beta!=0)
     ln_phi_i_l[idx,:]=array([
-        b_i[j]/b[idx]*(z_l[idx]-1)-log(z_l[idx]-beta[idx])-q_mp_i[idx,j]*i_int_l[idx] 
+        b_i[j]/b[idx]*(z_l[idx]-1)-log(abs(z_l[idx]-beta[idx]))-q_mp_i[idx,j]*i_int_l[idx] 
         for j in range(z_i.shape[1])]).T
-    ln_phi_i_v[idx,:]=array([
-        b_i[j]/b[idx]*(z_v[idx]-1)-log(z_v[idx]-beta[idx])-q_mp_i[idx,j]*i_int_v[idx] 
-        for j in range(z_i.shape[1])]).T
-    idx=(z_l-beta<=0)
+    idx=(z_l-beta==0)
     ln_phi_i_l[idx,:]=array([
-        b_i[j]/b[idx]*(z_l[idx]-1)-log(beta[idx]/z_l[idx]**2-1/z_l[idx])-q_mp_i[idx,j]*i_int_l[idx]
+        b_i[j]/b[idx]*(z_l[idx]-1)-log(z_l[idx])-q_mp_i[idx,j]*i_int_l[idx] 
         for j in range(z_i.shape[1])]).T
-    ln_phi_i_v[idx,:]=array([
-        b_i[j]/b[idx]*(z_v[idx]-1)-log(beta[idx]/z_v[idx]**2-1/z_v[idx])-q_mp_i[idx,j]*i_int_v[idx]
-        for j in range(z_i.shape[1])]).T
-
+    
+    
     phi_i_calc_l=exp(ln_phi_i_l)
     p_calc_l=r*t/(v_l-b)-a/((v_l+epsilon*b)*(v_l+sigma*b))
     # correction for pseudoproperties phi (Matthias et al. 1984)
@@ -857,13 +859,13 @@ def bubl_point_step_l_k(t, p, x_i, tc_i, pc_i, af_omega_i,
     else:
         phi_v = soln_l['phi_i_v']
     k_i = phi_l / phi_v
-    sum_ki_xi = sum(k_i * x_i)
+    sum_ki_xi = (k_i * x_i).sum()
     y_i = k_i * x_i / sum_ki_xi
     stop = False
     i = 0
     success = True
     while not stop:
-        sum_ki_xi_k_minus_1 = sum_ki_xi
+        sum_ki_xi_k_minus_1 = sum_ki_xi.copy()
         soln_v = phi(t, p, y_i, tc_i, pc_i, af_omega_i, alpha_tr, epsilon, sigma, psi, omega, zc, rho_lims)
         phi_v = soln_v['phi_i_v']
         k_i = phi_l / phi_v

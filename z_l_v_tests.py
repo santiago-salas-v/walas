@@ -247,7 +247,7 @@ def svn_14_2():
     soln = bubl_point_step_l_k(
         310.92, 30, x_i, tc_i, pc_i, af_omega_i, alpha_tr, epsilon, sigma, psi, omega, zc, rho_lims,
         max_it=max_it,full_output=True, y_i_est=y_i)
-    # print(soln)
+    print(soln)
     y_i = bubl_point_step_l_k(
         310.92, 30, x_i, tc_i, pc_i, af_omega_i, alpha_tr, epsilon, sigma, psi, omega, zc, rho_lims,
         max_it=max_it, full_output=True, y_i_est=y_i)['y_i']
@@ -257,25 +257,25 @@ def svn_14_2():
             max_it=max_it, full_output=True, y_i_est=y_i)
         y_i = soln['y_i']
         k_i = soln['k_i']
-        # print(y_i)
-        # print(1 - sum(y_i))
-        # print(sum(k_i * x_i))
+        print(y_i)
+        print(1 - sum(y_i))
+        print(sum(k_i * x_i))
     soln = bubl_p(
         310.92, 1., x_i, tc_i, pc_i, af_omega_i, alpha_tr, epsilon, sigma, psi, omega, zc, rho_lims,
         max_it=max_it, tol=1e-10, y_i_est=y_i)
-    # print(soln)
+    print(soln)
     soln_2 = dew_point_step_l_k(
         310.92, soln['p'], soln['y_i'], tc_i, pc_i, af_omega_i, alpha_tr, epsilon, sigma, psi, omega, zc, rho_lims,
         max_it=max_it)
-    # print(soln_2)
+    print(soln_2)
     soln_2 = dew_p(
         310.92, 30, soln['y_i'], tc_i, pc_i, af_omega_i, alpha_tr, epsilon, sigma, psi, omega, zc, rho_lims,
         max_it=max_it, tol=1e-10, x_i_est=x_i, print_iterations=False)
-    # print(soln_2)
+    print(soln_2)
     soln_2 = bubl_point_step_l_k(
         310.92, soln['p'], x_i, tc_i, pc_i, af_omega_i, alpha_tr, epsilon, sigma, psi, omega, zc, rho_lims,
         max_it=max_it, full_output=True, y_i_est=y_i)
-    # print(soln_2)
+    print(soln_2)
 
     x = linspace(0.0, 0.8, 50)
     y = empty_like(x) * nan
@@ -1448,33 +1448,49 @@ def confirm_svn_eq_13_71_ln_abs():
     epsilon=1-sqrt(2)
     sigma=1+sqrt(2)
     xx=linspace(0,-1/epsilon*2,100)
-    fig,ax=plt.subplots(1,1,constrained_layout=True)
-    twinx0=ax.twinx()
-    ax.plot(xx,1/(1+sigma*xx),'--',label=r'$f(\sigma)=\frac{1}{1+\sigma\cdot \frac{\beta}{Z}}$')
+    fig,ax_list=plt.subplots(1,2,constrained_layout=True,figsize=(12,6))
+    twinx0=ax_list[0].twinx()
+    twinx1=ax_list[1].twinx()
+    ax_list[0].plot(xx,1/(1+sigma*xx),'--',label=r'$f(\sigma)=\frac{1}{1+\sigma\cdot \frac{\beta}{Z}}$')
     twinx0.plot(xx,1/(1+epsilon*xx),'--',label=r'$f(\epsilon)=\frac{1}{1+\epsilon\cdot \frac{\beta}{Z}}$',color='red')
     twinx0.plot(xx,1/(1+epsilon*xx)*1/(1+sigma*xx),'-.',label=r'$f(\epsilon)\cdot f(\sigma)$',color='indigo')
-    ax.plot(xx,cumsum(gradient(xx)*1/(1+epsilon*xx)*1/(1+sigma*xx)),label=r'$\sum_{i=1}^{100}{\frac{1}{(1+\epsilon\cdot \frac{\beta}{Z})\cdot(1+\sigma\cdot \frac{\beta}{Z})}\Delta\left(\frac{\beta}{Z}\right)_i}$')
-    ax.plot(xx,1/(sigma-epsilon)*log((1+sigma*xx)/abs(1+epsilon*xx)),label=r'$\frac{1}{\sigma-\epsilon}\cdot ln\left(\frac{1+\sigma\cdot \frac{\beta}{Z}}{|1+\epsilon\cdot \frac{\beta}{Z}|}\right)$')
-    ax.set_xlabel(r'$\frac{\beta}{Z}$ / -')
-    ax.set_title(r'$\epsilon=1-\sqrt{2}; \sigma=1+\sqrt{2}\quad; \quad f(\epsilon)=\frac{1}{1+\epsilon\cdot \frac{\beta}{Z}} \quad; \quad f(\sigma)=\frac{1}{1+\sigma\cdot \frac{\beta}{Z}}$')
-    ax.set_ylabel(r'$f(\sigma)$ bzw. $I_1+I_2=\int_0^{\beta/Z}{\frac{1}{(1+\epsilon\cdot \frac{\beta}{Z})\cdot(1+\sigma\cdot \frac{\beta}{Z})}d\left(\frac{\beta}{Z}\right)}=\frac{1}{\sigma-\epsilon}\cdot ln\left(\frac{1+\sigma\cdot \frac{\beta}{Z}}{|1+\epsilon\cdot \frac{\beta}{Z}|}\right)$')
+    ax_list[0].plot(xx,cumsum(gradient(xx)*1/(1+epsilon*xx)*1/(1+sigma*xx)),label=r'$\sum_{i=1}^{100}{\frac{1}{(1+\epsilon\cdot \frac{\beta}{Z})\cdot(1+\sigma\cdot \frac{\beta}{Z})}\Delta\left(\frac{\beta}{Z}\right)_i}$')
+    ax_list[0].plot(xx,1/(sigma-epsilon)*log((1+sigma*xx)/abs(1+epsilon*xx)),label=r'$\frac{1}{\sigma-\epsilon}\cdot ln\left(\frac{1+\sigma\cdot \frac{\beta}{Z}}{|1+\epsilon\cdot \frac{\beta}{Z}|}\right)$')
+    ax_list[0].set_xlabel(r'$\frac{\beta}{Z}$ / -')
+    ax_list[0].set_title(r'$\epsilon=1-\sqrt{2}; \sigma=1+\sqrt{2}\quad; \quad f(\epsilon)=\frac{1}{1+\epsilon\cdot \frac{\beta}{Z}} \quad; \quad f(\sigma)=\frac{1}{1+\sigma\cdot \frac{\beta}{Z}}$')
+    ax_list[0].set_ylabel(r'$f(\sigma)$ bzw. $I_1+I_2=\int_0^{\beta/Z}{\frac{1}{(1+\epsilon\cdot \frac{\beta}{Z})\cdot(1+\sigma\cdot \frac{\beta}{Z})}d\left(\frac{\beta}{Z}\right)}=\frac{1}{\sigma-\epsilon}\cdot ln\left(\frac{1+\sigma\cdot \frac{\beta}{Z}}{|1+\epsilon\cdot \frac{\beta}{Z}|}\right)$')
     twinx0.set_ylabel(r'$f(\epsilon)$ bzw. $f(\sigma)\cdot f(\epsilon)=\frac{1}{(1+\epsilon\cdot \frac{\beta}{Z})\cdot(1+\sigma\cdot \frac{\beta}{Z})}$')
-    ax.axvline(-1/epsilon,color='gray')
-    ax.legend(handles=ax.lines[:-1]+twinx0.lines,loc='best',draggable=True)
-    xlim=ax.get_xlim()
-    xticks=ax.get_xticks().tolist()
+    ax_list[0].axvline(-1/epsilon,color='gray')
+    ax_list[0].legend(handles=ax_list[0].lines[:-1]+twinx0.lines,loc='best',draggable=True)
+    xlim=ax_list[0].get_xlim()
+    xticks=ax_list[0].get_xticks().tolist()
     xticks=array(xticks+[-1/epsilon])
     xticks.sort()
     xticklabels=array(xticks,dtype=object)
     xticklabels[xticks==-1/epsilon]=r'$\epsilon$'
-    xticklabels
-    ax.set_xticks(xticks)
-    ax.set_xticklabels(xticklabels)
-    ax.set_xlim(xlim)
+    ax_list[0].set_xticks(xticks)
+    ax_list[0].set_xticklabels(xticklabels)
+    ax_list[0].set_xlim(xlim)
+
+    xx=linspace(0,1.5,100);xx=xx[xx!=1]    
+    ax_list[1].plot(xx,cumsum(1/(1-xx)*gradient(xx)),'-',label=r'$\sum_{i=1}^{100}{\frac{1}{(1-\frac{\beta}{Z})}\cdot\Delta\left(\frac{\beta}{Z}\right)_i}$')
+    ax_list[1].plot(xx,-log(abs(1-xx)),'-',label=r'$-ln|1-\frac{\beta}{Z}|$')
+    twinx1.plot(xx,1/(1-xx),'--',label=r'$\frac{1}{1-\frac{\beta}{Z}}$',color='red')
+    ax_list[1].axvline(1,color='gray')
+    ax_list[1].legend(handles=twinx1.lines+ax_list[1].lines[:-1],loc='best',draggable=True)
+    ax_list[1].set_xlabel(r'$\frac{\beta}{Z}$ / -')
+    ax_list[1].set_ylabel(r'$I=\int_0^{\beta/Z}{\frac{1}{1-\frac{\beta}{Z}}d\left(\frac{\beta}{Z}\right)}=-ln|1-\frac{\beta}{Z}|$')
+    twinx1.set_ylabel(r'$\frac{1}{1-\frac{\beta}{Z}}$')
+    xlim=ax_list[1].get_xlim()
+    xticks=ax_list[1].get_xticks().tolist()
+    xticks=array(xticks+[1])
+    xticks.sort()
+    ax_list[1].set_xticks(xticks)
+    ax_list[1].set_xlim(xlim)
     fig.show()
 
 vdi_atlas()
-# svn_14_1()
+svn_14_1()
 # plt.figure()
 # svn_fig_14_8()
 # plt.figure()
@@ -1500,5 +1516,6 @@ vdi_atlas()
 # 0,70 (400kmol/h), aber in jenem Bereich entsteht ein
 # Stabilitätsproblem
 #pat_ue_03_vollstaendig(0.65, True)
+confirm_svn_eq_13_71_ln_abs()
 svn_14_2()
 plt.show(block=False)
