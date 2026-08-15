@@ -8,7 +8,7 @@ import string
 import sys
 from functools import partial
 from os.path import exists
-import ipdb
+#import ipdb
 
 import lxml.etree as et
 import matplotlib
@@ -308,14 +308,20 @@ class App(QWidget):
             for index in selection:
                 row = index.row() - rows[0]
                 column = index.column() - columns[0]
-                table[row + 1][column] = index.data().replace(chr(34),'') # ensure string can be read as csv by removing quotation mark (ascii character 34)
+                table[row + 1][column] = '' if index.data() is None else index.data().replace(chr(34),'') # ensure string can be read as csv by removing quotation mark (ascii character 34)
             table=table+[['T='+self.temp_text.placeholderText()]+['' for _ in range(colcount-1)]]
             stream = io.StringIO()
             csv.writer(
                 stream,
                 delimiter=';',
                 quoting=csv.QUOTE_NONE).writerows(table)
-            QApplication.clipboard().setText(stream.getvalue())
+            text2='burcat polynomial coefficients\n'
+            for pattern in ['a[0-9]+_low','a[0-9]+_high']:
+                cols=[j for j,x in enumerate(table[0]) if re.match(pattern,x)]
+                text2+=('"""\n'+
+                '\n'.join(['\t'.join([line[j] for j in cols]) for line in table])+'\n'
+                '"""'+'\n\n')
+            QApplication.clipboard().setText(stream.getvalue()+'\n'+text2)
 
     def eventFilter(self, source, event):
         if self.ignore_events:
@@ -807,6 +813,12 @@ if __name__ == '__main__':
     ex.cas_filter.setText('7446-09-5')
     ex.name_filter.setText('')
     ex.formula_filter.setText('SO2')
+    ex.tableView1.selectRow(0)
+
+    ex.phase_filter.setCurrentIndex(ex.phase_filter.findText('S'))
+    ex.cas_filter.setText('7782-42-5')
+    ex.name_filter.setText('')
+    ex.formula_filter.setText('C[GR]')
     ex.tableView1.selectRow(0)
 
     ex.phase_filter.setCurrentIndex(ex.phase_filter.findText(''))
